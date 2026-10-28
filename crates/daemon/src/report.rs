@@ -11,9 +11,8 @@ use chrono::{Datelike, Duration, NaiveDate, Timelike};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use shadowcorp_core::occupation::{self, Table};
-use shadowcorp_core::rank::{standing, xp_from_pd};
-use shadowcorp_core::render::{fmt_int, fmt_short, fmt_usd};
-use shadowcorp_core::scoring::{leverage, ScoringConstants, ACTIVE_GAP_MINUTES, LEVERAGE_MIN_ACTIVE};
+use shadowcorp_core::render::{fmt_short, fmt_usd};
+use shadowcorp_core::scoring::{leverage, ACTIVE_GAP_MINUTES, LEVERAGE_MIN_ACTIVE};
 
 use crate::config::Config;
 use crate::ingest::{day_key, week_key, Result, Tz};
@@ -239,19 +238,10 @@ impl Tally {
     }
 }
 
-/// XP and rank as they stood at `ts`.
-fn rank_at(conn: &Connection, ts: i64) -> Result<Value> {
-    let pd: f64 = conn.query_row("SELECT COALESCE(SUM(credited_pd), 0) FROM turns WHERE ended_at < ?1", [ts], |r| r.get(0))?;
-    let s = standing(xp_from_pd(pd, ScoringConstants::builtin().caps.minutes_per_day));
-    Ok(json!({ "label": s.label(), "xp": s.xp, "color": s.rank().color, "index": s.index, "level": s.level() }))
-}
-
-fn rank_now(conn: &Connection, tz: Tz, now: i64) -> Value {
-    let o = snapshot::output(conn, tz, now);
-    json!({
-        "label": o.rank.label(), "xp": o.rank.xp, "progress": o.rank.progress, "color": o.rank.rank().color,
-        "xp_to_next": o.rank.xp_to_next(), "next_label": o.rank.next_label(),
-    })
+/// What the previous period came to, for "比上周 +$600".
+fn prev(conn: &Connection, tz: Tz, label: &str, start: i64, end: i64, tool: Option<&str>) -> Result<Value> {
+    let t = tally(conn, tz, start, end, tool)?;
+    Ok(json!({ "label": label, "usd": t.usd, "hours": hours(t.human) }))
 }
 
 /// "今天这些活" for everything, "Codex 今天干的活" for one agent.
@@ -292,7 +282,7 @@ fn character(name: &str, mood: &str, headline: &str, number: String, sub: String
 // ---- day ---------------------------------------------------------------
 
 /// The report for one local day.
-pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
+pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, _now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
     let start = midnight(tz, date);
     let end = midnight(tz, date.succ_opt().unwrap());
     let t = tally(conn, tz, start, end, tool)?;
@@ -341,7 +331,8 @@ pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Nai
     r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
     r.insert("sessions".into(), json!(sessions));
     r.insert("blocks".into(), json!(blocks));
-    r.insert("rank".into(), rank_now(conn, tz, now));
+    r.insert("prev".into(), prev(conn, tz, "昨天", midnight(tz, date.pred_opt().unwrap()), start, tool)?);
+    r.insert("record_day_usd".into(), json!(snapshot::best_day_usd(conn)));
     r.insert("streak".into(), streak.get("current").cloned().unwrap_or(json!(0)));
     Ok(Value::Object(r))
 }
@@ -400,15 +391,14 @@ pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Na
     let best = days_v.iter().enumerate().max_by(|a, b| a.1.usd.total_cmp(&b.1.usd)).filter(|(_, d)| d.minutes > 0.0).map(|(i, _)| i);
 
     let h = t.human / 60.0;
-    let rank_start = rank_at(conn, start)?;
-    let rank_end = rank_at(conn, end.min(now + 1))?;
-    let rose = rank_end["level"].as_u64() > rank_start["level"].as_u64();
+    let last_week = prev(conn, tz, "上周", midnight(tz, monday - Duration::days(7)), start, tool)?;
+    let prev_usd = last_week["usd"].as_f64().unwrap_or(0.0);
     let (mood, signoff) = if t.turns.is_empty() {
         ("waiting", "这周没开工，我等你。".to_string())
     } else if h >= 40.0 {
         ("proud", "这周顶一个人干了一整周。".to_string())
-    } else if rose {
-        ("proud", format!("这周升到了{}。", rank_end["label"].as_str().unwrap_or("")))
+    } else if prev_usd > 0.0 && t.usd > prev_usd * 1.2 {
+        ("proud", format!("这周比上周多 {}。", fmt_usd(t.usd - prev_usd)))
     } else if t.night * 3 >= t.turns.len() {
         ("sleepy", "这周有三分之一是夜班。".to_string())
     } else if t.by_job.len() >= 4 {
@@ -432,9 +422,8 @@ pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Na
     r.insert("days".into(), json!(days));
     r.insert("best_day".into(), json!(best));
     r.insert("active_days".into(), json!(active_days));
-    r.insert("rank_start".into(), rank_start);
-    r.insert("rank_end".into(), rank_end);
-    r.insert("rank".into(), rank_now(conn, tz, now));
+    r.insert("prev".into(), last_week);
+    r.insert("record_day_usd".into(), json!(snapshot::best_day_usd(conn)));
     Ok(Value::Object(r))
 }
 
@@ -481,8 +470,8 @@ pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: N
     let window = peak.filter(|_| t.human > 0.0).map(|h| format!("{}–{} 点", h, (h + 3) % 24));
 
     let h = t.human / 60.0;
-    let rank_start = rank_at(conn, start)?;
-    let rank_end = rank_at(conn, end.min(now + 1))?;
+    let prev_first = if first.month() == 1 { NaiveDate::from_ymd_opt(first.year() - 1, 12, 1).unwrap() } else { NaiveDate::from_ymd_opt(first.year(), first.month() - 1, 1).unwrap() };
+    let last_month = prev(conn, tz, "上个月", midnight(tz, prev_first), start, tool)?;
     let (mood, signoff) = if t.turns.is_empty() {
         ("waiting", "这个月没开工，我等你。".to_string())
     } else if h >= 160.0 {
@@ -511,9 +500,8 @@ pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: N
     r.insert("longest_run".into(), json!(longest));
     r.insert("by_hour".into(), json!(by_hour.iter().map(|m| hours(*m)).collect::<Vec<_>>()));
     r.insert("peak_window".into(), json!(window));
-    r.insert("rank_start".into(), rank_start);
-    r.insert("rank_end".into(), rank_end);
-    r.insert("rank".into(), rank_now(conn, tz, now));
+    r.insert("prev".into(), last_month);
+    r.insert("record_day_usd".into(), json!(snapshot::best_day_usd(conn)));
     Ok(Value::Object(r))
 }
 
@@ -573,16 +561,16 @@ pub fn text(r: &Value) -> String {
         "  回合 {} · 文件 {} · 测试 {}/{} · 一次过 {}/{}",
         r["turns"], r["files"], r["tests_passed"], r["tests_run"], r["clean_turns"], r["turns"]
     ));
-    if r["rank_start"].is_object() {
-        out.push(format!(
-            "  {} → {} · +{} XP",
-            r["rank_start"]["label"].as_str().unwrap_or(""),
-            r["rank_end"]["label"].as_str().unwrap_or(""),
-            fmt_int(r["rank_end"]["xp"].as_i64().unwrap_or(0) - r["rank_start"]["xp"].as_i64().unwrap_or(0))
-        ));
-    } else {
-        out.push(format!("  {} · {} XP", r["rank"]["label"].as_str().unwrap_or(""), fmt_int(r["rank"]["xp"].as_i64().unwrap_or(0))));
-    }
+    let (now_usd, prev_usd) = (r["usd"].as_f64().unwrap_or(0.0), r["prev"]["usd"].as_f64().unwrap_or(0.0));
+    let diff = now_usd - prev_usd;
+    out.push(format!(
+        "  {} {} · {}{} · 单日纪录 {}",
+        r["prev"]["label"].as_str().unwrap_or("上次"),
+        fmt_usd(prev_usd),
+        if diff >= 0.0 { "+" } else { "−" },
+        fmt_usd(diff.abs()),
+        fmt_usd(r["record_day_usd"].as_f64().unwrap_or(0.0))
+    ));
     out.push(format!("「{}」", c["signoff"].as_str().unwrap_or("")));
     out.join("\n")
 }

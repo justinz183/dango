@@ -131,7 +131,8 @@ impl Streak {
 }
 
 /// Personal records (SPEC 6.5).
-pub const RECORD_KEYS: [(&str, &str); 4] = [
+pub const RECORD_KEYS: [(&str, &str); 5] = [
+    ("max_day_usd", "单日最高产出"),
     ("max_day", "单日最高人日"),
     ("max_session", "单会话最高人日"),
     ("max_leverage", "单会话最高杠杆率"),

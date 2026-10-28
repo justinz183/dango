@@ -10,7 +10,6 @@ use chrono::{Datelike, Duration, Timelike};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
 use shadowcorp_core::occupation::{self, Table};
-use shadowcorp_core::rank::RANKS;
 use shadowcorp_core::render::{fmt_hours, fmt_usd};
 use shadowcorp_core::scoring::ScoringConstants;
 
@@ -96,17 +95,46 @@ pub fn jobs(conn: &Connection, from: i64, to: i64, tool: Option<&str>) -> Result
         .collect())
 }
 
-/// The character's mood and line right now (DESIGN.md §2), from what the
-/// agent is doing, how long it has been quiet and what just happened.
-pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, working: i64, subagents: i64, last_event: Option<i64>) -> Result<Value> {
-    let since = last_event.map(|t| now - t).unwrap_or(i64::MAX);
-    let rank_up: Option<String> = conn
-        .query_row(
-            "SELECT ref FROM ceremonies WHERE kind = 'rank_up' AND created_at >= ?1 ORDER BY created_at DESC LIMIT 1",
-            [now - 10 * MIN_MS],
-            |r| r.get(0),
-        )
+/// The occupation the agent is "being" right now: the main one of the
+/// turns in progress, else of the last finished turn.
+pub fn current_job(conn: &Connection, now: i64) -> Result<Option<String>> {
+    const WORKING_WINDOW_MS: i64 = 20 * MIN_MS;
+    let mut st = conn.prepare(
+        "SELECT json_extract(t.agg, '$.work'), json_extract(t.agg, '$.last_activity')
+         FROM sessions s JOIN turns t ON t.id = json_extract(s.state, '$.open_turn') WHERE t.ended_at IS NULL",
+    )?;
+    let mut work: BTreeMap<String, f64> = BTreeMap::new();
+    for (w, last) in st.query_map([], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<i64>>(1)?)))?.flatten() {
+        if last.is_some_and(|l| now - l < WORKING_WINDOW_MS) {
+            for (o, m) in work_of(&w.unwrap_or_default()) {
+                *work.entry(o).or_default() += m;
+            }
+        }
+    }
+    if let Some(j) = occupation::main(&work) {
+        return Ok(Some(j));
+    }
+    let last: Option<String> = conn
+        .query_row("SELECT work FROM turns WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1", [], |r| r.get(0))
         .optional()?;
+    Ok(last.and_then(|w| occupation::main(&work_of(&w))))
+}
+
+/// Days since the first active day, today included.
+fn days_together(conn: &Connection, tz: Tz, now: i64) -> i64 {
+    crate::db::get_meta(conn, "first_active_day")
+        .ok()
+        .flatten()
+        .and_then(|d| crate::ingest::parse_day(&d))
+        .map(|first| (tz.date(now) - first).num_days() + 1)
+        .unwrap_or(0)
+}
+
+/// The character's mood and line right now (DESIGN.md §2), from what the
+/// agent is doing, how long it has been quiet, what just happened and what
+/// it remembers: the best day, last week, how long you have worked together.
+pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, working: i64, subagents: i64, last_event: Option<i64>, job: Option<&str>) -> Result<Value> {
+    let since = last_event.map(|t| now - t).unwrap_or(i64::MAX);
     let last: Option<(String, f64, i64, i64, Option<i64>, f64)> = conn
         .query_row(
             "SELECT work, credited_pd, ended_at, test_run, test_passed, usd FROM turns WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1",
@@ -115,36 +143,54 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
         )
         .optional()?;
     let k = ScoringConstants::builtin();
-    let hour = tz.local(now).hour();
-    let (mood, line) = if let Some(label) = rank_up {
-        ("proud", format!("晋级了，{label}。"))
-    } else if working > 0 && since < 20 * MIN_MS {
+    let t = Table::builtin();
+    let local = tz.local(now);
+    let hour = local.hour();
+    let today = tz.date(now);
+    let prev_week = snapshot::counter(conn, "usd", &format!("week:{}", week_key(today - Duration::days(7))));
+    let days = days_together(conn, tz, now);
+    let job_name = job.map(|j| t.name(j).to_string());
+    let (mood, line) = if working > 0 && since < 20 * MIN_MS {
         if hour < 5 {
             ("sleepy", "这么晚了，还在干。".to_string())
         } else if subagents > 0 {
             ("focused", format!("带着 {subagents} 个帮手在干。"))
+        } else if let Some(j) = &job_name {
+            ("focused", format!("在当{j}，别催。"))
         } else {
             ("focused", "在做了，别催。".to_string())
         }
     } else if since > 14 * DAY_MS && last_event.is_some() {
         ("missing", "欢迎回来，灯一直亮着。".to_string())
     } else if since > 60 * MIN_MS {
-        ("waiting", "我在，随时开工。".to_string())
+        if hour < 11 {
+            ("waiting", "早。我在，随时开工。".to_string())
+        } else if hour >= 22 {
+            ("waiting", "不早了，要干就快。".to_string())
+        } else {
+            ("waiting", "我在，随时开工。".to_string())
+        }
+    } else if o.today_usd >= 20.0 && o.today_usd + 1e-9 >= o.record_day_usd {
+        ("proud", "今天破了单日纪录。".to_string())
     } else if o.today_hours >= 16.0 {
         ("proud", "今天顶一个人干两天。".to_string())
     } else if let Some((work, pd, _, test_run, passed, usd)) = last.filter(|l| now - l.2 < 30 * MIN_MS) {
         if test_run == 1 && passed == Some(1) {
             ("happy", "这把测试全绿。".to_string())
         } else {
-            let job = occupation::main(&work_of(&work)).map(|o| Table::builtin().name(&o).to_string()).unwrap_or_default();
+            let job = occupation::main(&work_of(&work)).map(|o| t.name(&o).to_string()).unwrap_or_default();
             ("happy", format!("刚干了 {} 的{}活，值 {}。", fmt_hours(pd * k.caps.minutes_per_day / 60.0), job, fmt_usd(usd)))
         }
+    } else if prev_week > 0.0 && o.week_usd > prev_week * 1.2 && local.weekday().num_days_from_monday() >= 3 {
+        ("happy", format!("这周比上周多 {}。", fmt_usd(o.week_usd - prev_week)))
+    } else if o.today_usd > 0.0 && (days == 7 || days % 30 == 0 || days % 100 == 0) {
+        ("happy", format!("一起干活的第 {days} 天。"))
     } else if o.today_usd > 0.0 {
         ("happy", format!("今天干了 {} 的活。", fmt_usd(o.today_usd)))
     } else {
         ("waiting", "我在，随时开工。".to_string())
     };
-    Ok(json!({ "name": cfg.character.name, "mood": mood, "line": line }))
+    Ok(json!({ "name": cfg.character.name, "mood": mood, "line": line, "days_together": days }))
 }
 
 /// The last ten turns, newest first, for all agents or one.
@@ -230,6 +276,8 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
     let o = snapshot::output(conn, tz, now);
     let (working, subagents, last_event) = snapshot::activity(conn, now)?;
     let t = Table::builtin();
+    let job = current_job(conn, now)?;
+    let job_json = job.as_deref().map(|j| json!({ "id": j, "name": t.name(j), "color": t.get(j).map(|x| x.color.as_str()) }));
     let all = view(conn, tz, now, None)?;
     let mut views = serde_json::Map::new();
     let mut st = conn.prepare("SELECT DISTINCT source FROM sessions ORDER BY source")?;
@@ -237,35 +285,23 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         views.insert(src.clone(), view(conn, tz, now, Some(&src))?);
     }
 
-    let r = &o.rank;
     Ok(json!({
         "generated_at": now,
         "rates": { "source": t.source, "label": t.label, "as_of": t.as_of },
-        "character": character(conn, tz, cfg, &o, now, working, subagents, last_event)?,
-        "total": { "hours": o.total_hours, "usd": o.total_usd, "person_days": o.total_pd, "xp": r.xp },
+        "occupations": t.occupation.iter().map(|o| json!({ "id": o.id, "name": o.name, "color": o.color })).collect::<Vec<_>>(),
+        "character": character(conn, tz, cfg, &o, now, working, subagents, last_event, job.as_deref())?,
+        "record": { "day_usd": o.record_day_usd },
+        "total": { "hours": o.total_hours, "usd": o.total_usd, "person_days": o.total_pd },
         "today": { "hours": o.today_hours, "usd": o.today_usd, "person_days": o.today_pd },
         "week": { "hours": o.week_hours, "usd": o.week_usd, "person_days": o.week_pd, "leverage": o.week_leverage },
         "month": all["month"],
-        "rank": {
-            "index": r.index,
-            "name": r.rank().name,
-            "name_en": r.rank().name_en,
-            "division": r.division,
-            "label": r.label(),
-            "label_en": r.label_en(),
-            "color": r.rank().color,
-            "progress": r.progress,
-            "xp_to_next": r.xp_to_next(),
-            "next_label": r.next_label(),
-        },
-        "ranks": RANKS.iter().map(|x| json!({ "name": x.name, "name_en": x.name_en, "xp": x.xp, "color": x.color })).collect::<Vec<_>>(),
         "days": all["days"],
         "jobs": all["jobs"],
         "tools": tools(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX)?,
         "tools_all": tools(conn, 0, i64::MAX)?,
         "turns": all["turns"],
         "views": views,
-        "activity": { "working": working, "subagents": subagents, "last_event": last_event },
+        "activity": { "working": working, "subagents": subagents, "last_event": last_event, "job": job_json },
     }))
 }
 

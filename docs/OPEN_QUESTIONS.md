@@ -2,6 +2,14 @@
 
 每条写明：SPEC 怎么说、实现怎么做、需要谁定。标 **待定** 的需要产品决定。
 
+## 2026-10-29 v4：删段位，桌面宠物（用户决定）
+
+00000. 用户："不要顶一个人干了 6.1 周，就是按照钱来……在干的时候有人一直在干，然后会换装……UI 做得非常精美。" 实现：core/rank.rs 删除，所有界面的段位 / XP 换成单日纪录（`records.max_day_usd`）和同比（报告 `prev`）；桌面宠物 `PetView`（透明面板、点穿、拖动带卡片）、12 套职业装扮、小票 + 提示音、记忆台词。**待定 / 未验证**：
+   - 透明面板的"点穿"靠全局 mouseMoved 监听切换 `ignoresMouseEvents`，在本机没有真实点过（只有离屏截图）；如果点穿不灵，备选是把面板缩到角色大小。
+   - 宠物和卡片是两个窗口，切换 Space / 全屏时是否总一起出现，要用一段时间看。
+   - 提示音用系统音 Tink / Glass；要不要自己的音效。
+   - 角色台词仍是模板；"让 Claude 写一句"未做。
+
 ## 2026-10-29 Codex 接入（用户要求，分开显示 Claude Code 和 Codex）
 
 0000. **实现**：Codex hooks（`~/.codex/hooks.json`，`shadowcorp hook --codex`）把 Codex 的字段换成 Claude Code 的形状后走同一套规则；回填读 `~/.codex/sessions` 里的 `item_completed` 记录。每个工具单独的分界点：Claude Code 仍用 `live_since`，Codex 用 `live_since:codex`。新增计数器 `usd:<工具>`、`minutes:<工具>`。本机：Codex 108 个回合 ≈ $3,649，Claude Code ≈ $7,933（2026-10-29）。**待定 / 未验证**：

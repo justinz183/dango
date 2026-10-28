@@ -175,7 +175,6 @@ fn widget_data_carries_history_without_paths() {
     let now = 1_793_200_000_000; // 2026-10-28, local
     let d = daemon::widget::data(&p.conn, tz, &Config::default(), now).unwrap();
     assert_eq!(d["days"].as_array().unwrap().len(), 30);
-    assert_eq!(d["ranks"].as_array().unwrap().len(), 7);
     assert_eq!(d["days"][29]["day"], "2026-10-28");
     assert!(d["today"]["hours"].as_f64().unwrap() > 0.0, "{}", d["today"]);
     assert!(d["month"]["hours"].as_f64().unwrap() >= d["today"]["hours"].as_f64().unwrap());
@@ -194,7 +193,10 @@ fn widget_data_carries_history_without_paths() {
     assert_eq!(ch["name"], "Claude");
     assert!(["waiting", "focused", "happy", "proud", "sleepy", "missing"].contains(&ch["mood"].as_str().unwrap()), "{ch}");
     assert!(ch["line"].as_str().unwrap().chars().count() <= 18, "{ch}");
-    assert_eq!(d["rank"]["label"], "青铜 IV", "{}", d["total"]);
+    assert!(d["rank"].is_null() && d["total"]["xp"].is_null(), "ranks are gone");
+    assert!(d["record"]["day_usd"].as_f64().unwrap() > 0.0, "{}", d["record"]);
+    assert!(d["activity"]["job"]["name"].is_string(), "{}", d["activity"]);
+    assert!(d["character"]["days_together"].as_i64().unwrap() >= 1);
     let js = d.to_string();
     assert!(!js.contains("/Users") && !js.contains("/w/repo") && !js.contains("acme"), "no paths or repo names");
 }
@@ -256,7 +258,8 @@ fn week_and_month_reports_from_fixtures() {
     assert!((sum - w["human_hours"].as_f64().unwrap()).abs() < 0.3, "days add up: {sum} vs {}", w["human_hours"]);
     let usd: f64 = days.iter().map(|d| d["usd"].as_f64().unwrap()).sum();
     assert!((usd - w["usd"].as_f64().unwrap()).abs() < 1e-6, "dollars add up");
-    assert!(w["rank_end"]["xp"].as_u64().unwrap() >= w["rank_start"]["xp"].as_u64().unwrap());
+    assert_eq!(w["prev"]["label"], "上周");
+    assert!(w["prev"]["usd"].as_f64().unwrap() >= 0.0 && w["record_day_usd"].as_f64().unwrap() > 0.0);
     assert!(w["sessions"].as_array().unwrap().len() <= 3);
 
     let m = daemon::report::month(&p.conn, tz, &Config::default(), &claude, any, now, false, None).unwrap();

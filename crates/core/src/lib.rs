@@ -7,6 +7,5 @@ pub mod event;
 pub mod expr;
 pub mod occupation;
 pub mod progress;
-pub mod rank;
 pub mod render;
 pub mod scoring;

@@ -96,8 +96,8 @@ fn cols(left: &str, right: &str) -> String {
 pub const HIGHLIGHT_WIDTH: usize = INNER - 4;
 
 /// What the end-of-turn box shows: what this turn would have cost to hire
-/// out and to whom, the rank, the running totals, and one optional line for
-/// whatever just moved.
+/// out and to whom, the running totals, how today stands against the best
+/// day so far, and one optional line for whatever just moved.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TurnSummary {
     pub usd: f64,
@@ -107,14 +107,11 @@ pub struct TurnSummary {
     pub files: u32,
     pub test_passed: Option<bool>,
     pub committed: bool,
-    pub rank_label: String,
-    pub xp: u64,
-    /// 0‥1 through the current division.
-    pub rank_progress: f64,
-    /// None in the top rank.
-    pub xp_to_next: Option<u64>,
     pub today_usd: f64,
     pub week_usd: f64,
+    pub total_usd: f64,
+    /// The best day so far, today included.
+    pub record_usd: f64,
     pub leverage: Option<f64>,
     pub highlight: Option<String>,
 }
@@ -166,18 +163,20 @@ pub fn settlement_box(s: &TurnSummary) -> String {
         tags.remove(lowest);
     }
     let what = join(&tags);
-    let rank_right = match s.xp_to_next {
-        Some(n) => format!("{} XP {} 还差 {}", fmt_int(s.xp as i64), ring_bar(s.rank_progress, 1.0, 5), fmt_int(n as i64)),
-        None => format!("{} XP · 已是最高段位", fmt_int(s.xp as i64)),
+    // Today against the best day: a full bar and "单日新高" once it is beaten.
+    let record = if s.record_usd > 0.0 && s.today_usd + 1e-9 >= s.record_usd && s.today_usd > 0.0 {
+        format!("{} 单日新高", ring_bar(1.0, 1.0, 5))
+    } else {
+        format!("{} 单日纪录 {}", ring_bar(s.today_usd, s.record_usd, 5), fmt_usd(s.record_usd))
     };
     let mut lines = vec![
         top,
         row(&cols(&format!("+{}", fmt_usd(s.usd)), &what)),
-        row(&cols(&s.rank_label, &rank_right)),
         row(&cols(
             &format!("今日 {}", fmt_usd(s.today_usd)),
             &format!("本周 {} · 杠杆 {}", fmt_usd(s.week_usd), fmt_leverage(s.leverage)),
         )),
+        row(&cols(&format!("累计 {}", fmt_usd(s.total_usd)), &record)),
     ];
     if let Some(h) = &s.highlight {
         lines.push(row(&format!("✦ {h}")));
@@ -205,9 +204,7 @@ pub fn grand_badge(heading: &str, name: &str, line: &str, reward: &str) -> Strin
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StatusInfo {
-    pub rank_label: String,
-    pub xp: u64,
-    pub rank_progress: f64,
+    pub total_usd: f64,
     pub today_usd: f64,
     pub week_usd: f64,
     pub leverage: Option<f64>,
@@ -215,7 +212,7 @@ pub struct StatusInfo {
 
 pub fn status_line(s: &StatusInfo) -> String {
     let mut parts = vec![
-        format!("▮ {} · {} XP {}", s.rank_label, fmt_int(s.xp as i64), ring_bar(s.rank_progress, 1.0, 5)),
+        format!("▮ {}", fmt_usd(s.total_usd)),
         format!("今日 {}", fmt_usd(s.today_usd)),
         format!("本周 {}", fmt_usd(s.week_usd)),
     ];
@@ -238,12 +235,10 @@ mod tests {
             files: 6,
             test_passed: Some(true),
             committed: false,
-            rank_label: "黄金 II".into(),
-            xp: 8_920,
-            rank_progress: 0.57,
-            xp_to_next: Some(1_080),
             today_usd: 327.0,
             week_usd: 1_240.0,
+            total_usd: 11_724.0,
+            record_usd: 1_742.0,
             leverage: Some(7.1),
             highlight: Some("晋级 黄金 II".into()),
         };
@@ -252,8 +247,8 @@ mod tests {
             assert_eq!(width(line), BOX_WIDTH, "{line}");
         }
         assert!(b.contains("+$212        3.4h · 程序员 · 测试通过  "), "files give way first: {b}");
-        assert!(b.contains("黄金 II      8,920 XP ▓▓▓░░ 还差 1,080"), "{b}");
         assert!(b.contains("今日 $327    本周 $1,240 · 杠杆 7.1x"), "{b}");
+        assert!(b.contains("累计 $11,724 ▓░░░░ 单日纪录 $1,742"), "{b}");
         assert!(b.contains("✦ 晋级 黄金 II"));
         assert_eq!(b.lines().count(), 6);
         let without = settlement_box(&TurnSummary { highlight: None, ..s.clone() });
@@ -263,8 +258,8 @@ mod tests {
         assert!(!two.contains("已提交"), "extras give way: {two}");
         let short = settlement_box(&TurnSummary { usd: 6.3, hours: 0.17, jobs: vec!["研究员".into()], ..s.clone() });
         assert!(short.contains("+$6.3        10 分钟 · 研究员"), "{short}");
-        let top = settlement_box(&TurnSummary { xp_to_next: None, rank_label: "王者".into(), ..s });
-        assert!(top.contains("已是最高段位"));
+        let best = settlement_box(&TurnSummary { today_usd: 1_800.0, ..s });
+        assert!(best.contains("▓▓▓▓▓ 单日新高"), "{best}");
     }
 
     #[test]
@@ -282,14 +277,12 @@ mod tests {
     #[test]
     fn status() {
         let s = StatusInfo {
-            rank_label: "黄金 II".into(),
-            xp: 8_920,
-            rank_progress: 0.57,
+            total_usd: 11_724.0,
             today_usd: 327.0,
             week_usd: 1_240.0,
             leverage: Some(6.8),
         };
-        assert_eq!(status_line(&s), "▮ 黄金 II · 8,920 XP ▓▓▓░░ · 今日 $327 · 本周 $1,240 · 杠杆 6.8x");
+        assert_eq!(status_line(&s), "▮ $11,724 · 今日 $327 · 本周 $1,240 · 杠杆 6.8x");
         assert_eq!(fmt_hours(0.5), "30 分钟");
         assert_eq!(fmt_hours(16.53), "16.5h");
         assert_eq!(fmt_hours(1234.0), "1,234h");

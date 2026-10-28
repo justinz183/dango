@@ -8,7 +8,8 @@
 //
 // Build: apps/widget/build.sh (binary) or apps/widget/bundle.sh (ShadowCorp.app)
 // Snapshots (no window): --snapshot out.png, --snapshot-dashboard out.png
-// [--board claude_code|codex] [--open-jobs]
+// [--board claude_code|codex] [--open-jobs], --snapshot-pet out.png [--state S]
+// [--job ID] [--helpers N] [--receipt] [--backdrop] (transparent unless --backdrop)
 
 import AppKit
 import Foundation
@@ -29,8 +30,9 @@ let barColor = NSColor(red: 0.47, green: 0.72, blue: 0.65, alpha: 1)
 let barToday = NSColor(red: 0.65, green: 0.88, blue: 0.81, alpha: 1)
 
 struct DayPoint { var day = ""; var hours = 0.0; var usd = 0.0; var turns = 0 }
-struct RankStep { var name = ""; var xp = 0; var color = NSColor.gray }
-struct JobShare { var name = ""; var hours = 0.0; var usd = 0.0; var rate = 0.0; var share = 0.0; var color = NSColor.gray }
+/// The occupation the agent is "being" right now, from activity.job.
+struct Job { var id = ""; var name = ""; var color = NSColor.gray }
+struct JobShare { var id = ""; var name = ""; var hours = 0.0; var usd = 0.0; var rate = 0.0; var share = 0.0; var color = NSColor.gray }
 struct TurnRow { var at = 0.0; var tool = ""; var name = ""; var hours = 0.0; var usd = 0.0; var color = NSColor.gray; var files = 0; var testPassed: Bool? }
 /// Claude Code or Codex: what each agent's work would have cost.
 struct ToolShare { var name = ""; var usd = 0.0; var hours = 0.0; var share = 0.0; var color = NSColor.gray }
@@ -56,19 +58,16 @@ struct Model {
     var line = ""
     var weekLeverage: Double?
     var ratesLabel = ""
-    var xp = 0
-    var rankIndex = 0
-    var rankLabel = "—"
-    var nextLabel: String?
-    var rankColor = NSColor.gray
-    var progress = 0.0
-    var xpToNext: Int?
-    var level = 0
+    /// The best day so far, in dollars.
+    var recordUSD = 0.0
+    var daysTogether = 0
+    var job: Job?
+    /// Every occupation, for outfits by id.
+    var occupations: [Job] = []
     var working = 0
     var subagents = 0
     var generatedAt = 0.0
     var days: [DayPoint] = []
-    var ranks: [RankStep] = []
     var jobs: [JobShare] = []
     var tools: [ToolShare] = []
     var turns: [TurnRow] = []
@@ -98,7 +97,7 @@ func applyBoard(_ m: inout Model, _ j: [String: Any]) {
         DayPoint(day: $0["day"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0, turns: $0["turns"] as? Int ?? 0)
     }
     m.jobs = list("jobs").map {
-        JobShare(name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
+        JobShare(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
                  rate: $0["rate"] as? Double ?? 0, share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
     }
     m.turns = list("turns").map {
@@ -120,7 +119,7 @@ func loadModel() -> Model? {
     func obj(_ k: String) -> [String: Any] { j[k] as? [String: Any] ?? [:] }
     func list(_ k: String) -> [[String: Any]] { j[k] as? [[String: Any]] ?? [] }
     var m = Model()
-    let total = obj("total"), rank = obj("rank"), act = obj("activity")
+    let act = obj("activity")
     applyBoard(&m, j)
     m.weekLeverage = obj("week")["leverage"] as? Double
     let ch = obj("character")
@@ -128,19 +127,15 @@ func loadModel() -> Model? {
     m.mood = ch["mood"] as? String ?? "happy"
     m.line = ch["line"] as? String ?? ""
     m.ratesLabel = obj("rates")["label"] as? String ?? ""
-    m.xp = total["xp"] as? Int ?? 0
-    m.rankIndex = rank["index"] as? Int ?? 0
-    m.rankLabel = rank["label"] as? String ?? "—"
-    m.nextLabel = rank["next_label"] as? String
-    m.rankColor = color(hex: rank["color"] as? String ?? "")
-    m.progress = rank["progress"] as? Double ?? 0
-    m.xpToNext = rank["xp_to_next"] as? Int
-    let division = rank["division"] as? Int ?? 0
-    m.level = m.rankIndex * 4 + (division == 0 ? 4 : 4 - division)
+    m.recordUSD = obj("record")["day_usd"] as? Double ?? 0
+    m.occupations = list("occupations").map { Job(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "", color: color(hex: $0["color"] as? String ?? "")) }
+    m.daysTogether = ch["days_together"] as? Int ?? 0
+    if let jb = act["job"] as? [String: Any] {
+        m.job = Job(id: jb["id"] as? String ?? "", name: jb["name"] as? String ?? "", color: color(hex: jb["color"] as? String ?? ""))
+    }
     m.working = act["working"] as? Int ?? 0
     m.subagents = act["subagents"] as? Int ?? 0
     m.generatedAt = j["generated_at"] as? Double ?? 0
-    m.ranks = list("ranks").map { RankStep(name: $0["name"] as? String ?? "", xp: $0["xp"] as? Int ?? 0, color: color(hex: $0["color"] as? String ?? "")) }
     m.tools = toolShares(list("tools"))
     for (id, view) in obj("views") {
         guard let view = view as? [String: Any] else { continue }
@@ -172,7 +167,7 @@ func fmtHours(_ h: Double) -> String {
 
 /// The character sitting on a paper disc ringed in the rank colour, so the
 /// dark body reads on the dark widget.
-func characterBadge(_ r: NSRect, mood: String, ring: NSColor, glow: Bool = false) {
+func characterBadge(_ r: NSRect, mood: String, ring: NSColor, glow: Bool = false, job: Job? = nil) {
     if glow {
         ring.withAlphaComponent(0.35).setFill()
         NSBezierPath(ovalIn: r.insetBy(dx: -5, dy: -5)).fill()
@@ -182,20 +177,16 @@ func characterBadge(_ r: NSRect, mood: String, ring: NSColor, glow: Bool = false
     NSColor(calibratedRed: 0.96, green: 0.93, blue: 0.89, alpha: 1).setFill()
     NSBezierPath(ovalIn: r.insetBy(dx: 2.5, dy: 2.5)).fill()
     let inset = r.width * 0.2
-    drawCharacter(r.insetBy(dx: inset, dy: inset).offsetBy(dx: 0, dy: 0), mood: mood)
+    drawCharacter(r.insetBy(dx: inset, dy: inset), mood: mood, job: job?.id, jobColor: job?.color)
 }
+
+/// The accent for "this moment": the current job's colour, else the teal.
+func accent(_ m: Model) -> NSColor { m.job?.color ?? barColor }
 
 func fmtInt(_ n: Int) -> String {
     intFormatter.string(from: NSNumber(value: n)) ?? "\(n)"
 }
 
-func fmtK(_ n: Int) -> String {
-    n >= 1000 ? "\(n / 1000)k" : "\(n)"
-}
-
-func roman(_ label: String) -> String {
-    label.split(separator: " ").last.map(String.init).flatMap { ["I", "II", "III", "IV"].contains($0) ? $0 : nil } ?? "★"
-}
 
 let primary = NSColor.white
 let secondary = NSColor.white.withAlphaComponent(0.62)
@@ -211,22 +202,6 @@ func text(_ s: String, size: CGFloat, weight: NSFont.Weight = .regular, color: N
 func put(_ s: NSAttributedString, _ x: CGFloat, _ y: CGFloat, align: Int = 0) {
     let w = s.size().width
     s.draw(at: NSPoint(x: align == 0 ? x : align == 1 ? x - w / 2 : x - w, y: y))
-}
-
-func medal(_ r: NSRect, _ c: NSColor, _ numeral: String, size: CGFloat, glow: Bool = false) {
-    if glow {
-        c.withAlphaComponent(0.35).setFill()
-        NSBezierPath(ovalIn: r.insetBy(dx: -5, dy: -5)).fill()
-    }
-    c.setFill()
-    NSBezierPath(ovalIn: r).fill()
-    NSColor.black.withAlphaComponent(0.18).setStroke()
-    let ring = NSBezierPath(ovalIn: r.insetBy(dx: 0.5, dy: 0.5))
-    ring.lineWidth = 1
-    ring.stroke()
-    let n = text(numeral, size: size, weight: .bold, color: NSColor.black.withAlphaComponent(0.75))
-    let ns = n.size()
-    n.draw(at: NSPoint(x: r.midX - ns.width / 2, y: r.midY - ns.height / 2 + 0.5))
 }
 
 func bar(_ r: NSRect, _ progress: Double, _ c: NSColor) {
@@ -276,21 +251,30 @@ final class WidgetView: NSView {
             return
         }
         let flashing = Date() < flashUntil
-        characterBadge(NSRect(x: 12, y: (b.height - 44) / 2, width: 44, height: 44), mood: flashing ? "proud" : m.mood, ring: m.rankColor, glow: flashing)
-        let x0: CGFloat = 66
-        let right = b.width - 14
-        put(text(fmtUSD(m.totalUSD), size: 20, weight: .bold, mono: true), x0, 44)
-        put(text("今日 " + fmtUSD(m.todayUSD), size: 11, color: secondary, mono: true), right, 48, align: 2)
+        let x0: CGFloat = 18
+        let right = b.width - 16
+        let tone = accent(m)
+        // Line 1: everything so far, and today.
+        put(text(fmtUSD(m.totalUSD), size: 22, weight: .bold, mono: true), x0, 42)
+        put(text("今日 " + fmtUSD(m.todayUSD), size: 11, color: secondary, mono: true), right, 47, align: 2)
+        // Line 2: what it is being right now (or what it has to say).
         if flashing {
-            put(text(flashText, size: 12, weight: .semibold, color: m.rankColor), x0, 25)
+            put(text(flashText, size: 12, weight: .semibold, color: tone), x0, 24)
         } else if hovering && !m.line.isEmpty {
-            put(text("\(m.name)：\(m.line)", size: 11, weight: .medium, color: primary), x0, 25)
+            put(text("\(m.name)：\(m.line)", size: 11, weight: .medium, color: primary), x0, 24)
         } else {
-            put(text(m.rankLabel, size: 12, weight: .semibold, color: m.rankColor), x0, 25)
-            let xpText = m.xpToNext.map { "\(fmtInt(m.xp)) XP · 还差 \(fmtInt($0))" } ?? "\(fmtInt(m.xp)) XP"
-            put(text(xpText, size: 10, color: secondary, mono: true), right, 26, align: 2)
+            if let j = m.job {
+                j.color.setFill()
+                NSBezierPath(ovalIn: NSRect(x: x0, y: 27, width: 7, height: 7)).fill()
+                put(text(j.name, size: 12, weight: .semibold, color: primary), x0 + 12, 24)
+            } else {
+                put(text(m.name, size: 12, weight: .semibold, color: primary), x0, 24)
+            }
+            let beating = m.recordUSD > 0 && m.todayUSD + 1e-9 >= m.recordUSD && m.todayUSD > 0
+            put(text(beating ? "单日新高 ✦" : "单日纪录 " + fmtUSD(m.recordUSD), size: 10, color: beating ? tone : secondary, mono: true), right, 26, align: 2)
         }
-        bar(NSRect(x: x0, y: 14, width: right - x0, height: 4), m.progress, m.rankColor)
+        // Line 3: today against the best day so far.
+        bar(NSRect(x: x0, y: 14, width: right - x0, height: 4), m.recordUSD > 0 ? m.todayUSD / m.recordUSD : 0, tone)
         // Working indicator: a pulsing dot while an agent is on a turn.
         if m.working > 0 {
             let pulse = 0.55 + 0.45 * sin(Double(tick) / 4.0)
@@ -391,21 +375,26 @@ final class DashboardView: NSView {
 
         // Header: the character, what it says, rank and XP, progress to the
         // next division. Clicking it collapses.
+        let tone = accent(base)
         if draw {
-            characterBadge(NSRect(x: pad, y: y, width: 48, height: 48), mood: m.mood, ring: m.rankColor)
-            let label = text(m.rankLabel, size: 16, weight: .semibold, color: m.rankColor)
-            put(label, pad + 60, y + 2)
-            put(text("\(fmtInt(m.xp)) XP", size: 12, color: secondary, mono: true), pad + 68 + label.size().width, y + 5)
-            put(text("\(m.name)：\(m.line)", size: 12, color: primary), pad + 60, y + 26)
+            characterBadge(NSRect(x: pad, y: y, width: 48, height: 48), mood: base.mood, ring: tone, job: base.job)
+            let total = text(fmtUSD(base.totalUSD), size: 20, weight: .bold, mono: true)
+            put(total, pad + 60, y)
+            put(text("累计", size: 11, color: secondary), pad + 66 + total.size().width, y + 6)
+            if let j = base.job {
+                put(text("· 在当\(j.name)", size: 11, color: j.color), pad + 66 + total.size().width + 30, y + 6)
+            }
+            put(text("\(base.name)：\(base.line)", size: 12, color: primary), pad + 60, y + 27)
             put(text("收起 ⌄", size: 11, color: secondary), W - pad, y + 5, align: 2)
         }
         y += 58
-        if draw { bar(NSRect(x: pad, y: y, width: inner, height: 6), m.progress, m.rankColor) }
+        let beating = base.recordUSD > 0 && base.todayUSD + 1e-9 >= base.recordUSD && base.todayUSD > 0
+        if draw { bar(NSRect(x: pad, y: y, width: inner, height: 6), base.recordUSD > 0 ? base.todayUSD / base.recordUSD : 0, tone) }
         y += 12
         if draw {
-            var next = "已是最高段位"
-            if let n = m.xpToNext, let l = m.nextLabel { next = "还差 \(fmtInt(n)) XP 升 \(l)" }
-            put(text(next, size: 11, color: secondary), pad, y)
+            let s = beating ? "今天就是单日纪录 ✦ \(fmtUSD(base.todayUSD))" : "今日 \(fmtUSD(base.todayUSD)) · 单日纪录 \(fmtUSD(base.recordUSD))"
+            put(text(s, size: 11, color: beating ? tone : secondary, mono: true), pad, y)
+            if base.daysTogether > 0 { put(text("一起干活第 \(base.daysTogether) 天", size: 11, color: secondary), W - pad, y, align: 2) }
         }
         y += 22
         headerBottom = y
@@ -484,12 +473,6 @@ final class DashboardView: NSView {
         chartRect = NSRect(x: pad, y: y, width: inner, height: chartH)
         if draw { drawChart(m, chartRect) }
         y += chartH + 20
-
-        // Rank road.
-        section("段位之路", y, draw: draw)
-        y += 24
-        if draw { drawRoad(m, NSRect(x: pad, y: y, width: inner, height: 44)) }
-        y += 48 + 14
 
         // Who the same window's work would have needed.
         let jobs = m.jobs.filter { $0.usd > 0 }
@@ -632,49 +615,6 @@ final class DashboardView: NSView {
         return "\(mo)/\(da)"
     }
 
-    private func drawRoad(_ m: Model, _ r: NSRect) {
-        let n = m.ranks.count
-        guard n > 1 else { return }
-        let lineY = r.minY + 8
-        let xs = (0..<n).map { r.minX + 8 + CGFloat($0) * (r.width - 16) / CGFloat(n - 1) }
-        faint.setFill()
-        NSBezierPath(rect: NSRect(x: xs[0], y: lineY - 1.5, width: xs[n - 1] - xs[0], height: 3)).fill()
-        let i = min(m.rankIndex, n - 1)
-        var here = xs[i]
-        if i < n - 1 {
-            let span = Double(m.ranks[i + 1].xp - m.ranks[i].xp)
-            let f = span > 0 ? min(1, max(0, Double(m.xp - m.ranks[i].xp) / span)) : 0
-            here = xs[i] + CGFloat(f) * (xs[i + 1] - xs[i])
-        }
-        m.rankColor.setFill()
-        NSBezierPath(rect: NSRect(x: xs[0], y: lineY - 1.5, width: here - xs[0], height: 3)).fill()
-        for (k, step) in m.ranks.enumerated() {
-            let dot = NSRect(x: xs[k] - 6, y: lineY - 6, width: 12, height: 12)
-            if k <= i {
-                step.color.setFill()
-                NSBezierPath(ovalIn: dot).fill()
-            } else {
-                NSColor(calibratedWhite: 0.11, alpha: 1).setFill()
-                NSBezierPath(ovalIn: dot).fill()
-                step.color.withAlphaComponent(0.7).setStroke()
-                let p = NSBezierPath(ovalIn: dot.insetBy(dx: 1, dy: 1))
-                p.lineWidth = 1.5
-                p.stroke()
-            }
-            put(text(step.name, size: 10, weight: k == i ? .semibold : .regular, color: k <= i ? primary : secondary), xs[k], lineY + 10, align: 1)
-            put(text(fmtK(step.xp), size: 9, color: secondary, mono: true), xs[k], lineY + 24, align: 1)
-        }
-        // "You are here" marker between ranks.
-        if i < n - 1 {
-            NSColor.white.setFill()
-            NSBezierPath(ovalIn: NSRect(x: here - 4, y: lineY - 4, width: 8, height: 8)).fill()
-            m.rankColor.setStroke()
-            let ring = NSBezierPath(ovalIn: NSRect(x: here - 4, y: lineY - 4, width: 8, height: 8))
-            ring.lineWidth = 2
-            ring.stroke()
-        }
-    }
-
     // MARK: interaction
 
     override func updateTrackingAreas() {
@@ -726,6 +666,174 @@ final class DashboardView: NSView {
     }
 }
 
+
+// MARK: - Desktop pet
+
+/// Sounds for moments: a receipt, a record. Off in the quiet hours and
+/// when turned off in the menu.
+enum Sounds {
+    static var enabled: Bool {
+        get { UserDefaults.standard.object(forKey: "sound") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "sound") }
+    }
+    static func play(_ name: String) {
+        let hour = Calendar.current.component(.hour, from: Date())
+        guard enabled, hour >= 8, hour < 23 else { return }
+        NSSound(named: NSSound.Name(name))?.play()
+    }
+}
+
+struct Receipt { var usd: Double; var name: String; var color: NSColor; var born: Double }
+
+/// The desktop pet: the character at its desk, typing whenever an agent is
+/// on a turn, dressed for the job it is doing, with a helper per sub-agent
+/// and a receipt for every finished turn. Lives in a transparent panel that
+/// sits on the top edge of the widget card.
+final class PetView: NSView {
+    static let size = NSSize(width: 176, height: 150)
+    var model: Model?
+    var drawBackground = false
+    /// Seconds since launch, advanced by the app's frame timer.
+    var t = 0.0
+    var receipts: [Receipt] = []
+    var sparkleUntil = -1.0
+    var onClick: (() -> Void)?
+    var onDrag: ((CGFloat, CGFloat) -> Void)?
+    var onDragEnd: (() -> Void)?
+    private var blinkAt = 3.0
+    private var blinking = false
+    private var lastTurnAt = 0.0
+    private var lastMouse: NSPoint?
+    private var dragged = false
+
+    override var isFlipped: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// The character's box; only this part takes clicks.
+    var characterRect: NSRect { NSRect(x: 48, y: 36, width: 80, height: 80) }
+
+    var animating: Bool {
+        guard let m = model else { return false }
+        return m.working > 0 || !receipts.isEmpty || t < sparkleUntil
+    }
+
+    /// New data: a newer last turn means a receipt.
+    func take(_ m: Model) {
+        if let first = m.turns.first {
+            if lastTurnAt > 0, first.at > lastTurnAt {
+                receipts.append(Receipt(usd: first.usd, name: first.name, color: first.color, born: t))
+                Sounds.play("Tink")
+            }
+            lastTurnAt = max(lastTurnAt, first.at)
+        }
+        model = m
+        needsDisplay = true
+    }
+
+    func celebrate() {
+        sparkleUntil = t + 4
+        Sounds.play("Glass")
+    }
+
+    func tick(_ dt: Double) {
+        t += dt
+        if !blinking, t >= blinkAt { blinking = true }
+        if blinking, t >= blinkAt + 0.13 {
+            blinking = false
+            blinkAt = t + Double.random(in: 2.5...5.5)
+        }
+        receipts.removeAll { t - $0.born > 2.8 }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if drawBackground {
+            NSColor(calibratedWhite: 0.11, alpha: 1).setFill()
+            bounds.fill()
+        }
+        guard let m = model else { return }
+        let working = m.working > 0
+        let mood = t < sparkleUntil ? "proud" : (working ? "focused" : m.mood)
+        let c = characterRect
+        let breathe = CGFloat(sin(t * (working ? 3.0 : 1.6))) * (working ? 1.3 : 0.9)
+        // Shadow on the floor.
+        NSColor.black.withAlphaComponent(0.25).setFill()
+        NSBezierPath(ovalIn: NSRect(x: c.midX - 36, y: 26, width: 72, height: 10)).fill()
+        // Helpers: one small blob per sub-agent, behind and to the left.
+        for i in 0..<min(m.subagents, 3) {
+            let bob = CGFloat(sin(t * 3.2 + Double(i) * 1.7)) * 1.5
+            drawCharacter(NSRect(x: 6 + CGFloat(i) * 15, y: 38 + bob, width: 34, height: 34), mood: "focused", ink: ink.withAlphaComponent(0.9))
+        }
+        drawCharacter(c.offsetBy(dx: 0, dy: breathe), mood: mood, ink: ink, job: m.job?.id, jobColor: m.job?.color, blink: blinking)
+        if working {
+            // Desk and laptop in front of the body; hands typing.
+            NSColor(calibratedRed: 0.55, green: 0.47, blue: 0.4, alpha: 1).setFill()
+            NSBezierPath(roundedRect: NSRect(x: c.minX - 10, y: 28, width: c.width + 20, height: 9), xRadius: 3, yRadius: 3).fill()
+            NSColor(calibratedWhite: 0.22, alpha: 1).setFill()
+            NSBezierPath(roundedRect: NSRect(x: c.midX - 24, y: 36, width: 48, height: 5), xRadius: 2, yRadius: 2).fill()
+            NSBezierPath(roundedRect: NSRect(x: c.midX - 20, y: 40, width: 40, height: 27), xRadius: 3, yRadius: 3).fill()
+            (m.job?.color ?? barColor).withAlphaComponent(0.55).setFill()
+            NSBezierPath(roundedRect: NSRect(x: c.midX - 17, y: 43, width: 34, height: 21), xRadius: 2, yRadius: 2).fill()
+            // Lines scrolling up the screen, and a blinking cursor.
+            NSColor.white.withAlphaComponent(0.7).setFill()
+            for k in 0..<4 {
+                let yy = 46 + CGFloat(k) * 5 + CGFloat(fmod(t * 6, 5))
+                guard yy < 61 else { continue }
+                NSBezierPath(rect: NSRect(x: c.midX - 14, y: yy, width: CGFloat([14, 22, 10, 18][k]), height: 1.5)).fill()
+            }
+            if fmod(t, 1.0) < 0.5 { NSBezierPath(rect: NSRect(x: c.midX - 14, y: 44, width: 2, height: 3)).fill() }
+            ink.setFill()
+            for (k, dx) in [(0, CGFloat(-16)), (1, CGFloat(6))] {
+                let up: CGFloat = sin(t * 11 + Double(k) * .pi) > 0 ? 2.5 : 0
+                NSBezierPath(ovalIn: NSRect(x: c.midX + dx, y: 35 + up, width: 11, height: 7)).fill()
+            }
+        }
+        // Receipts rising from the desk and fading out.
+        for rc in receipts {
+            let p = min(1, (t - rc.born) / 2.8)
+            let ease = 1 - pow(1 - p, 2)
+            let alpha = p < 0.65 ? 1 : max(0, 1 - (p - 0.65) / 0.35)
+            let card = NSRect(x: c.midX - 44, y: 86 + CGFloat(ease) * 32, width: 88, height: 30)
+            NSColor.black.withAlphaComponent(0.18 * alpha).setFill()
+            NSBezierPath(roundedRect: card.offsetBy(dx: 0, dy: -2), xRadius: 7, yRadius: 7).fill()
+            paper.withAlphaComponent(alpha).setFill()
+            NSBezierPath(roundedRect: card, xRadius: 7, yRadius: 7).fill()
+            rc.color.withAlphaComponent(alpha).setFill()
+            NSBezierPath(roundedRect: NSRect(x: card.minX + 6, y: card.minY + 7, width: 5, height: 16), xRadius: 2.5, yRadius: 2.5).fill()
+            put(text("+" + fmtUSD(rc.usd), size: 13, weight: .bold, color: ink.withAlphaComponent(alpha), mono: true), card.minX + 17, card.minY + 12)
+            put(text(rc.name, size: 9, weight: .medium, color: ink2.withAlphaComponent(alpha)), card.minX + 17, card.minY + 3)
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let q = convert(point, from: superview)
+        return characterRect.insetBy(dx: -8, dy: -8).contains(q) ? self : nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        lastMouse = NSEvent.mouseLocation
+        dragged = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let l = lastMouse else { return }
+        let p = NSEvent.mouseLocation
+        if dragged || abs(p.x - l.x) + abs(p.y - l.y) > 2 {
+            dragged = true
+            onDrag?(p.x - l.x, p.y - l.y)
+            lastMouse = p
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if dragged { onDragEnd?() } else { onClick?() }
+        lastMouse = nil
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        (NSApp.delegate as? App)?.popMenu(event, in: self)
+    }
+}
+
 // MARK: - App
 
 final class App: NSObject, NSApplicationDelegate {
@@ -738,6 +846,13 @@ final class App: NSObject, NSApplicationDelegate {
     var last: Model?
     var isExpanded = false
     var outsideClick: Any?
+    var petPanel: NSPanel!
+    var pet: PetView?
+    private var frame = 0
+    var petEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: "pet") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "pet") }
+    }
 
     private func glass(_ size: NSSize, radius: CGFloat) -> NSVisualEffectView {
         let e = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
@@ -767,7 +882,10 @@ final class App: NSObject, NSApplicationDelegate {
         widget = WidgetView(frame: compact.bounds)
         widget.autoresizingMask = [.width, .height]
         widget.onClick = { [weak self] in self?.expand() }
-        widget.onMoved = { [weak self] in self?.saveOrigin() }
+        widget.onMoved = { [weak self] in
+            self?.saveOrigin()
+            self?.placePet()
+        }
         compact.addSubview(widget)
 
         expanded = glass(NSSize(width: dashboardWidth, height: 600), radius: 16)
@@ -787,15 +905,75 @@ final class App: NSObject, NSApplicationDelegate {
         panel.setFrame(NSRect(origin: savedOrigin() ?? defaultOrigin(), size: widgetSize), display: true)
         panel.orderFrontRegardless()
 
+        // The pet: its own transparent panel, clicks only on the character.
+        petPanel = NSPanel(contentRect: NSRect(origin: .zero, size: PetView.size),
+                           styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        petPanel.level = .floating
+        petPanel.isOpaque = false
+        petPanel.backgroundColor = .clear
+        petPanel.hasShadow = false
+        petPanel.hidesOnDeactivate = false
+        petPanel.isFloatingPanel = true
+        petPanel.becomesKeyOnlyIfNeeded = true
+        petPanel.ignoresMouseEvents = true
+        petPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        let v = PetView(frame: NSRect(origin: .zero, size: PetView.size))
+        v.onClick = { [weak self] in self?.toggle() }
+        v.onDrag = { [weak self] dx, dy in
+            guard let self else { return }
+            self.panel.setFrameOrigin(NSPoint(x: self.panel.frame.minX + dx, y: self.panel.frame.minY + dy))
+            self.placePet()
+        }
+        v.onDragEnd = { [weak self] in self?.saveOrigin() }
+        petPanel.contentView = v
+        pet = v
+        showPet()
+        watchPointer()
+
         reload()
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reload() }
-        Timer.scheduledTimer(withTimeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
-            guard let self, !self.isExpanded, let m = self.widget.model else { return }
-            if m.working > 0 || Date() < self.widget.flashUntil {
+        Timer.scheduledTimer(withTimeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.frame += 1
+            if !self.isExpanded, let m = self.widget.model, m.working > 0 || Date() < self.widget.flashUntil {
                 self.widget.tick += 1
                 self.widget.needsDisplay = true
             }
+            if let pet = self.pet, self.petPanel.isVisible {
+                pet.tick(1.0 / 24.0)
+                // Full frame rate only while something moves; otherwise just blinks.
+                if pet.animating || self.frame % 6 == 0 { pet.needsDisplay = true }
+            }
         }
+    }
+
+    /// The pet sits on the top edge of the widget card.
+    func placePet() {
+        guard let petPanel, !isExpanded else { return }
+        let f = panel.frame
+        petPanel.setFrameOrigin(NSPoint(x: f.minX + 6, y: f.maxY - 16))
+    }
+
+    func showPet() {
+        guard petEnabled, !isExpanded else { return }
+        placePet()
+        petPanel.orderFrontRegardless()
+    }
+
+    private func watchPointer() {
+        let update: (NSEvent) -> Void = { [weak self] _ in self?.updatePetHit() }
+        NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved], handler: update)
+        NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { e in
+            update(e)
+            return e
+        }
+    }
+
+    /// Clicks pass through the transparent panel except on the character.
+    private func updatePetHit() {
+        guard let pet, petPanel.isVisible else { return }
+        let r = pet.characterRect.insetBy(dx: -8, dy: -8).offsetBy(dx: petPanel.frame.minX, dy: petPanel.frame.minY)
+        petPanel.ignoresMouseEvents = !r.contains(NSEvent.mouseLocation)
     }
 
     // Position of the compact widget, remembered across launches.
@@ -819,6 +997,7 @@ final class App: NSObject, NSApplicationDelegate {
     @objc func resetPosition() {
         if isExpanded { collapse() }
         panel.setFrameOrigin(defaultOrigin())
+        placePet()
         saveOrigin()
     }
 
@@ -841,6 +1020,7 @@ final class App: NSObject, NSApplicationDelegate {
         panel.contentView = expanded
         dashboard.scroll(NSPoint.zero)
         panel.setFrame(f, display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        petPanel?.orderOut(nil)
         outsideClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             self?.collapse()
         }
@@ -854,6 +1034,7 @@ final class App: NSObject, NSApplicationDelegate {
         panel.contentView = compact
         let o = savedOrigin() ?? defaultOrigin()
         panel.setFrame(NSRect(origin: o, size: widgetSize), display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        showPet()
     }
 
     @objc func toggle() { isExpanded ? collapse() : expand() }
@@ -898,6 +1079,12 @@ final class App: NSObject, NSApplicationDelegate {
         let auto = NSMenuItem(title: "登录时自动启动", action: #selector(toggleAutostart), keyEquivalent: "")
         auto.state = FileManager.default.fileExists(atPath: agentPlist) ? .on : .off
         menu.addItem(auto)
+        let petItem = NSMenuItem(title: "显示桌面宠物", action: #selector(togglePet), keyEquivalent: "")
+        petItem.state = petEnabled ? .on : .off
+        menu.addItem(petItem)
+        let snd = NSMenuItem(title: "结算提示音", action: #selector(toggleSound), keyEquivalent: "")
+        snd.state = Sounds.enabled ? .on : .off
+        menu.addItem(snd)
         menu.addItem(NSMenuItem(title: "回到右下角", action: #selector(resetPosition), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: ""))
@@ -906,6 +1093,13 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     @objc func quit() { NSApp.terminate(nil) }
+
+    @objc func togglePet() {
+        petEnabled.toggle()
+        if petEnabled { showPet() } else { petPanel.orderOut(nil) }
+    }
+
+    @objc func toggleSound() { Sounds.enabled.toggle() }
 
     @objc func toggleAutostart() {
         let uid = getuid()
@@ -943,13 +1137,15 @@ final class App: NSObject, NSApplicationDelegate {
 
     func reload() {
         guard let m = loadModel() else { return }
-        if let old = last, m.level > old.level {
-            widget.flashText = "晋级 → \(m.rankLabel)"
-            widget.flashUntil = Date().addingTimeInterval(5)
+        if let old = last, old.recordUSD > 0, old.todayUSD < old.recordUSD, m.todayUSD >= m.recordUSD, m.recordUSD > 0 {
+            widget.flashText = "单日新高 ✦ \(fmtUSD(m.todayUSD))"
+            widget.flashUntil = Date().addingTimeInterval(6)
+            pet?.celebrate()
         }
         if last.map({ $0.generatedAt != m.generatedAt }) ?? true {
             widget.model = m
             widget.needsDisplay = true
+            pet?.take(m)
             dashboard.model = m
             dashboard.frame.size.height = dashboard.contentHeight()
             dashboard.needsDisplay = true
@@ -964,9 +1160,37 @@ final class App: NSObject, NSApplicationDelegate {
 /// is one of waiting / focused / happy / proud / sleepy / missing. Works in
 /// flipped and unflipped views: positions are given as fractions from the
 /// top of `r`.
-func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedRed: 0.17, green: 0.16, blue: 0.16, alpha: 1)) {
+func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedRed: 0.17, green: 0.16, blue: 0.16, alpha: 1),
+                   job: String? = nil, jobColor: NSColor? = nil, blink: Bool = false) {
     let flipped = NSGraphicsContext.current?.isFlipped ?? false
     let w = r.width, h = r.height
+    let cream = NSColor(calibratedRed: 0.96, green: 0.93, blue: 0.89, alpha: 1)
+    /// A point `fromTop` of the way down and `fx` across `r`.
+    func pt(_ fx: CGFloat, _ fromTop: CGFloat) -> NSPoint {
+        NSPoint(x: r.minX + w * fx, y: flipped ? r.minY + h * fromTop : r.maxY - h * fromTop)
+    }
+    /// A rectangle of `rw` × `rh` turned `deg` degrees (clockwise on screen) around `c`.
+    func turned(_ c: NSPoint, _ rw: CGFloat, _ rh: CGFloat, _ deg: CGFloat) -> NSBezierPath {
+        let a = deg * .pi / 180 * (flipped ? 1 : -1)
+        let (ca, sa) = (cos(a), sin(a))
+        let p = NSBezierPath()
+        for (i, (dx, dy)) in [(-rw / 2, -rh / 2), (rw / 2, -rh / 2), (rw / 2, rh / 2), (-rw / 2, rh / 2)].enumerated() {
+            let q = NSPoint(x: c.x + dx * ca - dy * sa, y: c.y + dx * sa + dy * ca)
+            i == 0 ? p.move(to: q) : p.line(to: q)
+        }
+        p.close()
+        return p
+    }
+    /// An arc over the top of the head (∩) in either coordinate system.
+    func arch(_ c: NSPoint, _ radius: CGFloat, _ from: CGFloat, _ to: CGFloat, width: CGFloat, _ color: NSColor) {
+        color.setStroke()
+        let p = NSBezierPath()
+        p.lineWidth = width
+        p.lineCapStyle = .round
+        let (a0, a1): (CGFloat, CGFloat) = flipped ? (180 + from, 180 + to) : (from, to)
+        p.appendArc(withCenter: c, radius: radius, startAngle: a0, endAngle: a1, clockwise: false)
+        p.stroke()
+    }
     /// Rect whose top edge sits `fromTop` of the way down `r`.
     func box(_ fx: CGFloat, _ fromTop: CGFloat, _ fw: CGFloat, _ fh: CGFloat) -> NSRect {
         let y = flipped ? r.minY + h * fromTop : r.maxY - h * fromTop - h * fh
@@ -990,6 +1214,17 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
     let pupil = NSColor(calibratedWhite: 0.08, alpha: 1)
     for fx in [CGFloat(0.28), CGFloat(0.55)] {
         let e = box(fx, 0.32, 0.17, 0.22)
+        if blink && mood != "sleepy" {
+            // A closed eye: a short soft line where the eye was.
+            white.setStroke()
+            let l = NSBezierPath()
+            l.lineWidth = max(2, w * 0.04)
+            l.lineCapStyle = .round
+            l.move(to: NSPoint(x: e.minX + e.width * 0.15, y: e.midY))
+            l.line(to: NSPoint(x: e.maxX - e.width * 0.15, y: e.midY))
+            l.stroke()
+            continue
+        }
         switch mood {
         case "happy":
             white.setStroke()
@@ -1033,6 +1268,112 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
             NSBezierPath(ovalIn: box(fx + 0.085 + dx, 0.385, 0.03, 0.035)).fill()
         }
     }
+    // Outfit: what the job it is doing right now would wear or hold.
+    if let job, let c = jobColor {
+        let head = pt(0.5, 0.47)
+        switch job {
+        case "swe":
+            // A hoodie: a thick hood around the head with a drawstring.
+            arch(head, w * 0.47, 5, 175, width: w * 0.14, c)
+        case "web":
+            // A "</>" pin on the chest.
+            c.setFill()
+            NSBezierPath(roundedRect: box(0.31, 0.74, 0.38, 0.15), xRadius: h * 0.075, yRadius: h * 0.075).fill()
+            put(text("</>", size: h * 0.1, weight: .bold, color: .white, mono: true), r.minX + w * 0.5, ty(0.755, size: h * 0.1), align: 1)
+        case "qa":
+            // A magnifying glass, held up on the right.
+            let lens = box(0.74, 0.4, 0.3, 0.3)
+            NSColor.white.withAlphaComponent(0.25).setFill()
+            NSBezierPath(ovalIn: lens).fill()
+            c.setStroke()
+            let ring = NSBezierPath(ovalIn: lens)
+            ring.lineWidth = w * 0.05
+            ring.stroke()
+            let handle = NSBezierPath()
+            handle.lineWidth = w * 0.07
+            handle.lineCapStyle = .round
+            handle.move(to: pt(0.98, 0.67))
+            handle.line(to: pt(1.1, 0.84))
+            handle.stroke()
+        case "ops":
+            // A hard hat.
+            c.setFill()
+            NSBezierPath(ovalIn: box(0.17, -0.03, 0.66, 0.3)).fill()
+            NSBezierPath(roundedRect: box(0.09, 0.2, 0.82, 0.065), xRadius: h * 0.03, yRadius: h * 0.03).fill()
+            NSColor.white.withAlphaComponent(0.35).setFill()
+            NSBezierPath(roundedRect: box(0.44, 0.0, 0.12, 0.2), xRadius: w * 0.04, yRadius: w * 0.04).fill()
+        case "data":
+            // A little bar chart held at the right.
+            cream.setFill()
+            NSBezierPath(roundedRect: box(0.7, 0.6, 0.38, 0.36), xRadius: w * 0.04, yRadius: w * 0.04).fill()
+            c.setFill()
+            for (i, bh) in [0.1, 0.2, 0.15].enumerated() {
+                NSBezierPath(rect: box(0.75 + CGFloat(i) * 0.1, 0.9 - CGFloat(bh), 0.07, CGFloat(bh))).fill()
+            }
+        case "fin":
+            // A necktie.
+            c.setFill()
+            let tie = NSBezierPath()
+            tie.move(to: pt(0.45, 0.66)); tie.line(to: pt(0.55, 0.66)); tie.line(to: pt(0.58, 0.9)); tie.line(to: pt(0.5, 0.97)); tie.line(to: pt(0.42, 0.9))
+            tie.close()
+            tie.fill()
+            cream.setFill()
+            NSBezierPath(rect: box(0.455, 0.69, 0.09, 0.03)).fill()
+        case "research":
+            // Round glasses.
+            c.setStroke()
+            for fx in [CGFloat(0.28), CGFloat(0.55)] {
+                let g = NSBezierPath(ovalIn: box(fx - 0.03, 0.29, 0.23, 0.28))
+                g.lineWidth = w * 0.035
+                g.stroke()
+            }
+            let bridge = NSBezierPath()
+            bridge.lineWidth = w * 0.035
+            bridge.move(to: pt(0.48, 0.43)); bridge.line(to: pt(0.52, 0.43))
+            bridge.stroke()
+        case "writer":
+            // A pencil tucked at the side of the head.
+            let c0 = pt(0.84, 0.12)
+            c.setFill()
+            turned(c0, w * 0.34, w * 0.075, 35).fill()
+            cream.setFill()
+            let a: CGFloat = 35 * .pi / 180 * (flipped ? 1 : -1)
+            turned(NSPoint(x: c0.x + cos(a) * w * 0.13, y: c0.y + sin(a) * w * 0.13), w * 0.07, w * 0.075, 35).fill()
+        case "translator":
+            // A speech bubble saying 译.
+            let b = box(0.72, -0.08, 0.36, 0.26)
+            cream.setFill()
+            NSBezierPath(roundedRect: b, xRadius: w * 0.07, yRadius: w * 0.07).fill()
+            let tail = NSBezierPath()
+            tail.move(to: pt(0.8, 0.16)); tail.line(to: pt(0.74, 0.26)); tail.line(to: pt(0.88, 0.18))
+            tail.close()
+            tail.fill()
+            put(text("译", size: h * 0.15, weight: .bold, color: c), r.minX + w * 0.9, ty(-0.045, size: h * 0.15), align: 1)
+        case "designer":
+            // A beret, worn to one side.
+            c.setFill()
+            NSBezierPath(ovalIn: box(0.08, 0.0, 0.62, 0.2)).fill()
+            NSBezierPath(ovalIn: box(0.37, -0.06, 0.06, 0.09)).fill()
+        case "video":
+            // Headphones.
+            arch(head, w * 0.49, 15, 165, width: w * 0.06, c)
+            c.setFill()
+            NSBezierPath(roundedRect: box(-0.04, 0.35, 0.16, 0.24), xRadius: w * 0.04, yRadius: w * 0.04).fill()
+            NSBezierPath(roundedRect: box(0.88, 0.35, 0.16, 0.24), xRadius: w * 0.04, yRadius: w * 0.04).fill()
+        case "entry":
+            // A stack of forms at the left.
+            for i in 0..<3 {
+                cream.setFill()
+                NSBezierPath(roundedRect: box(-0.06 + CGFloat(i) * 0.03, 0.72 - CGFloat(i) * 0.035, 0.3, 0.3), xRadius: w * 0.02, yRadius: w * 0.02).fill()
+            }
+            c.setFill()
+            for k in 0..<3 {
+                NSBezierPath(rect: box(0.04, 0.74 + CGFloat(k) * 0.06, 0.16, 0.025)).fill()
+            }
+        default:
+            break
+        }
+    }
     // Mood extras
     switch mood {
     case "sleepy":
@@ -1050,7 +1391,7 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
             sp.line(to: NSPoint(x: c.x - rad, y: c.y)); sp.line(to: NSPoint(x: c.x - rad * 0.3, y: c.y - rad * 0.3))
             sp.close(); sp.fill()
         }
-    case "waiting":
+    case "waiting" where !["qa", "data", "entry"].contains(job ?? ""):
         let mug = NSColor(calibratedRed: 0.79, green: 0.71, blue: 0.54, alpha: 1)
         mug.setFill()
         NSBezierPath(roundedRect: box(0.98, 0.64, 0.16, 0.18), xRadius: 3, yRadius: 3).fill()
@@ -1100,6 +1441,7 @@ let paper = NSColor(calibratedRed: 0.96, green: 0.93, blue: 0.89, alpha: 1)
 let paper2 = NSColor(calibratedRed: 0.91, green: 0.88, blue: 0.82, alpha: 1)
 let ink = NSColor(calibratedRed: 0.17, green: 0.16, blue: 0.16, alpha: 1)
 let ink2 = NSColor(calibratedRed: 0.42, green: 0.40, blue: 0.36, alpha: 1)
+let gold = NSColor(calibratedRed: 0.83, green: 0.69, blue: 0.22, alpha: 1)
 
 func truncate(_ s: String, size: CGFloat, weight: NSFont.Weight, width: CGFloat) -> String {
     var t = s
@@ -1130,7 +1472,9 @@ class CardView: NSView {
         let ch = Report(j: r.o("character"))
         put(text(r.s("label"), size: 30, weight: .medium, color: ink2), pad, 64)
         put(text("ShadowCorp", size: 22, weight: .semibold, color: ink2.withAlphaComponent(0.6)), W - pad, 68, align: 2)
-        drawCharacter(NSRect(x: pad, y: 130, width: 150, height: 150), mood: ch.s("mood"), ink: ink)
+        let top = r.l("jobs").first
+        drawCharacter(NSRect(x: pad, y: 130, width: 150, height: 150), mood: ch.s("mood"), ink: ink,
+                      job: top?["id"] as? String, jobColor: (top?["color"] as? String).map { color(hex: $0) })
         let tx = pad + 200
         put(text(ch.s("headline"), size: 36, color: ink2), tx, 128)
         if !ch.s("number").isEmpty {
@@ -1223,37 +1567,42 @@ class CardView: NSView {
         return y + 124 + 40
     }
 
-    /// Current rank with progress to the next division.
-    func rankProgress(_ r: Report, _ y: CGFloat) -> CGFloat {
-        let rk = Report(j: r.o("rank"))
-        let rc = color(hex: rk.s("color"))
-        medal(NSRect(x: pad, y: y, width: 56, height: 56), rc, roman(rk.s("label")), size: 20)
-        put(text(rk.s("label"), size: 30, weight: .bold, color: rc), pad + 76, y - 2)
-        var xpLine = "\(fmtInt(rk.i("xp"))) XP"
-        if let n = rk.j["xp_to_next"] as? Int, let nl = rk.j["next_label"] as? String { xpLine += " · 还差 \(fmtInt(n)) 升 \(nl)" }
-        if r.i("streak") > 0 { xpLine += " · 连续 \(r.i("streak")) 天" }
-        put(text(xpLine, size: 24, color: ink2, mono: true), pad + 76, y + 34)
+    /// "+$724" / "−$120".
+    func delta(_ d: Double) -> String { (d >= 0 ? "+" : "−") + fmtUSD(abs(d)) }
+
+    /// Today against the best day so far, and against yesterday.
+    func dayRecord(_ r: Report, _ y: CGFloat) -> CGFloat {
+        let today = r.d("usd"), best = r.d("record_day_usd")
+        let beating = today > 0 && best > 0 && today + 1e-9 >= best
+        let tone = beating ? gold : (r.l("jobs").first?["color"] as? String).map { color(hex: $0) } ?? ink
+        put(text(beating ? "今天就是单日纪录 ✦" : "单日纪录 \(fmtUSD(best))", size: 26, weight: .semibold, color: tone), pad, y)
+        var right = "比昨天 " + delta(today - Report(j: r.o("prev")).d("usd"))
+        if r.i("streak") > 1 { right += " · 连续 \(r.i("streak")) 天" }
+        put(text(right, size: 24, color: ink2, mono: true), W - pad, y + 2, align: 2)
+        let track = NSRect(x: pad, y: y + 46, width: inner, height: 12)
         paper2.setFill()
-        NSBezierPath(roundedRect: NSRect(x: pad + 76, y: y + 70, width: inner - 76, height: 10), xRadius: 5, yRadius: 5).fill()
-        rc.setFill()
-        NSBezierPath(roundedRect: NSRect(x: pad + 76, y: y + 70, width: max(10, (inner - 76) * CGFloat(rk.d("progress"))), height: 10), xRadius: 5, yRadius: 5).fill()
-        return y + 120
+        NSBezierPath(roundedRect: track, xRadius: 6, yRadius: 6).fill()
+        tone.setFill()
+        let f = best > 0 ? min(1, today / best) : 0
+        NSBezierPath(roundedRect: NSRect(x: pad, y: y + 46, width: max(12, inner * CGFloat(f)), height: 12), xRadius: 6, yRadius: 6).fill()
+        return y + 90
     }
 
-    /// Rank at the start of the period → at its end, and the XP gained.
-    func rankChange(_ r: Report, _ y: CGFloat) -> CGFloat {
-        let a = Report(j: r.o("rank_start")), b = Report(j: r.o("rank_end"))
-        let ca = color(hex: a.s("color")), cb = color(hex: b.s("color"))
-        medal(NSRect(x: pad, y: y, width: 56, height: 56), ca, roman(a.s("label")), size: 20)
-        let la = text(a.s("label"), size: 28, weight: .semibold, color: ink2)
-        put(la, pad + 72, y + 12)
-        var x = pad + 72 + la.size().width + 20
-        put(text("→", size: 28, color: ink2), x, y + 12)
+    /// This period against the previous one, and the best day so far.
+    func compare(_ r: Report, _ y: CGFloat) -> CGFloat {
+        let p = Report(j: r.o("prev"))
+        let now = r.d("usd"), before = p.d("usd")
+        let a = text("\(p.s("label")) \(fmtUSD(before))", size: 28, weight: .semibold, color: ink2)
+        put(a, pad, y + 8)
+        var x = pad + a.size().width + 20
+        put(text("→", size: 28, color: ink2), x, y + 8)
         x += 44
-        medal(NSRect(x: x, y: y, width: 56, height: 56), cb, roman(b.s("label")), size: 20)
-        put(text(b.s("label"), size: 28, weight: .bold, color: ink), x + 72, y + 12)
-        let gained = max(0, b.i("xp") - a.i("xp"))
-        put(text("+\(fmtInt(gained)) XP", size: 28, weight: .semibold, color: ink, mono: true), W - pad, y + 12, align: 2)
+        put(text("\(r.s("kind") == "week" ? "本周" : "本月") \(fmtUSD(now))", size: 28, weight: .bold, color: ink), x, y + 8)
+        let d = now - before
+        var s = delta(d)
+        if before > 0 { s += String(format: " · %@%.0f%%", d >= 0 ? "+" : "−", abs(d / before * 100)) }
+        put(text(s, size: 28, weight: .semibold, color: d >= 0 ? ink : ink2, mono: true), W - pad, y + 8, align: 2)
+        put(text("单日纪录 \(fmtUSD(r.d("record_day_usd")))", size: 22, color: ink2, mono: true), pad, y + 52)
         return y + 96
     }
 
@@ -1303,7 +1652,7 @@ final class DayCardView: CardView {
         y = jobs(r, y)
         y = tiles([("回合", "\(r.i("turns"))"), ("改动文件", "\(r.i("files"))"),
                    ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"), ("一次过", "\(r.i("clean_turns"))/\(r.i("turns"))")], y)
-        y = rankProgress(r, y)
+        y = dayRecord(r, y)
         _ = signoff(r, y)
         footer(r)
     }
@@ -1353,7 +1702,7 @@ final class WeekCardView: CardView {
         y = sessions(r, y, empty: "这周没有回合")
         y = tiles([("活跃天数", "\(r.i("active_days"))/7"), ("回合", "\(r.i("turns"))"),
                    ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"), ("杠杆", leverageText(r))], y)
-        y = rankChange(r, y)
+        y = compare(r, y)
         _ = signoff(r, y + 20)
         footer(r)
     }
@@ -1433,7 +1782,7 @@ final class MonthCardView: CardView {
         title("花时间最多的事", y)
         y += 42
         y = sessions(r, y, empty: "这个月没有回合")
-        y = rankChange(r, y)
+        y = compare(r, y)
         _ = signoff(r, y + 10)
         footer(r)
     }
@@ -1497,6 +1846,25 @@ if let i = args.firstIndex(of: "--moods"), args.count > i + 1 {
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: args[i + 1].replacingOccurrences(of: ".png", with: "-\(suffix).png")))
         }
     }
+    exit(0)
+}
+if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
+    // --state working|waiting|happy|proud|sleepy|missing, --job ID, --helpers N, --receipt
+    _ = NSApplication.shared
+    var m = loadModel() ?? Model()
+    let flagv = { (f: String) -> String? in args.firstIndex(of: f).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
+    if let state = flagv("--state") {
+        m.working = state == "working" ? 1 : 0
+        if state != "working" { m.mood = state }
+    }
+    if let id = flagv("--job"), let j = m.occupations.first(where: { $0.id == id }) { m.job = j }
+    if let n = flagv("--helpers").flatMap({ Int($0) }) { m.subagents = n }
+    let v = PetView(frame: NSRect(origin: .zero, size: PetView.size))
+    v.drawBackground = args.contains("--backdrop")
+    v.model = m
+    v.t = 0.9
+    if args.contains("--receipt") { v.receipts = [Receipt(usd: 78.4, name: m.job?.name ?? "程序员", color: m.job?.color ?? barColor, born: 0)] }
+    snapshot(v, PetView.size, args[i + 1])
     exit(0)
 }
 if let i = args.firstIndex(of: "--card"), args.count > i + 2 {

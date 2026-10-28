@@ -12,6 +12,7 @@ use shadowcorp_core::scoring::fmt_leverage;
 fn fmt_record(key: &str, v: f64) -> String {
     match key {
         "max_leverage" => fmt_leverage(Some(v)),
+        "max_day_usd" => fmt_usd(v),
         "max_streak" => format!("{v} 天"),
         _ => fmt_pd(v),
     }
@@ -22,7 +23,7 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
     let o = snapshot::output(conn, tz, now);
     let cat = Catalog::builtin();
     let row = |k: &str, v: String| format!("  {}{v}", pad(k, 10));
-    let mut out = vec![format!("产出 · {}", o.rank.label()), "─".repeat(44)];
+    let mut out = vec!["产出".to_string(), "─".repeat(44)];
     out.push(row("总产出", format!("{} · {} 的活 · {} 人日", fmt_usd(o.total_usd), fmt_hours(o.total_hours), fmt_pd(o.total_pd))));
     let tools: Vec<String> = daemon::widget::tools(conn, 0, i64::MAX)?
         .iter()
@@ -51,11 +52,6 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
             .collect();
         out.push(row(if id == "codex" { "└ Codex" } else { "└ Claude" }, top.join(" · ")));
     }
-    let next = match (o.rank.xp_to_next(), o.rank.next_label()) {
-        (Some(n), Some(l)) => format!(" · 还差 {} XP 升 {l}", fmt_int(n as i64)),
-        _ => " · 已是最高段位".to_string(),
-    };
-    out.push(row("段位", format!("{} · {} XP{next}", o.rank.label(), fmt_int(o.rank.xp as i64))));
     out.push(row("今日", format!("{} · 本周 {}", fmt_usd(o.today_usd), fmt_usd(o.week_usd))));
     let mut stage = format!("Lv.{} {} · {} 位员工", c.stage.level, c.stage.name, c.stage.employees);
     if let Some(n) = c.next {

@@ -6,7 +6,6 @@ use rusqlite::{params, Connection, OptionalExtension};
 use shadowcorp_core::achievements::{self, display_name, Catalog, Category, Rarity, Store};
 use shadowcorp_core::progress::{self, stage_for, Stage, Streak};
 use shadowcorp_core::render::{fmt_int, fmt_short, grand_badge, StatusInfo};
-use shadowcorp_core::rank::{standing, xp_from_pd, Standing};
 use shadowcorp_core::scoring::{leverage, ScoringConstants};
 
 use crate::db::{get_meta, set_meta};
@@ -159,7 +158,22 @@ pub struct Output {
     pub today_usd: f64,
     pub week_usd: f64,
     pub week_leverage: Option<f64>,
-    pub rank: Standing,
+    /// The best day so far, in dollars.
+    pub record_day_usd: f64,
+}
+
+/// A record's value (records table), 0 when none.
+pub fn record(conn: &Connection, key: &str) -> f64 {
+    conn.query_row("SELECT value FROM records WHERE key = ?1", [key], |r| r.get::<_, f64>(0)).unwrap_or(0.0)
+}
+
+/// The best day in dollars: the record, or the day counters for data
+/// scored before the record existed.
+pub fn best_day_usd(conn: &Connection) -> f64 {
+    let days: f64 = conn
+        .query_row("SELECT COALESCE(MAX(value), 0) FROM counters WHERE metric = 'usd' AND scope LIKE 'day:%'", [], |r| r.get(0))
+        .unwrap_or(0.0);
+    record(conn, "max_day_usd").max(days)
 }
 
 pub fn output(conn: &Connection, tz: Tz, now_ms: i64) -> Output {
@@ -179,7 +193,7 @@ pub fn output(conn: &Connection, tz: Tz, now_ms: i64) -> Output {
         today_usd: counter(conn, "usd", &dk),
         week_usd: counter(conn, "usd", &wk),
         week_leverage: leverage(counter(conn, "human_minutes", &wk), counter(conn, "active_minutes", &wk)),
-        rank: standing(xp_from_pd(total_pd, k.caps.minutes_per_day)),
+        record_day_usd: best_day_usd(conn),
     }
 }
 
@@ -219,9 +233,7 @@ pub fn status(conn: &Connection, tz: Tz, now_ms: i64, session: Option<&str>) -> 
         .unwrap_or(None)
         .or(o.week_leverage);
     Ok(shadowcorp_core::render::status_line(&StatusInfo {
-        rank_label: o.rank.label(),
-        xp: o.rank.xp,
-        rank_progress: o.rank.progress,
+        total_usd: o.total_usd,
         today_usd: o.today_usd,
         week_usd: o.week_usd,
         leverage: lev,

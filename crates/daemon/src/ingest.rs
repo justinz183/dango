@@ -15,7 +15,6 @@ use shadowcorp_core::event::{Event, Kind, Role, Source, TaskClass};
 use shadowcorp_core::expr::Val;
 use shadowcorp_core::occupation::{self, Table};
 use shadowcorp_core::progress::{self, coins_for_pd, stage_for, Streak, ACTIVE_DAY_PD, DEFAULT_WEEKLY_TARGET};
-use shadowcorp_core::rank::{standing, xp_from_pd, Standing};
 use shadowcorp_core::render::{fmt_pd, fmt_short, width, TurnSummary, HIGHLIGHT_WIDTH};
 use shadowcorp_core::scoring::{self, credit, leverage, ScoringConstants, TurnSignals};
 
@@ -175,7 +174,6 @@ struct TurnRow {
 
 #[derive(Debug, Clone)]
 enum Highlight {
-    Rank(Standing),
     Unlock { id: String, tier: u32 },
     Ring { pd: f64, target: f64 },
     Record { key: String, new: f64, old: f64 },
@@ -949,6 +947,8 @@ impl Processor {
         self.add_in("turns", 1.0, &sc, &all4);
         let tool = self.session_tool(sid)?;
         self.add_paid(&paid, usd, &sc, &tool);
+        let day_usd = self.ctr("usd", &dkey);
+        self.record("max_day_usd", day_usd)?;
         self.add_in("clean_streak", 1.0, &sc, &["all", "session"]);
         self.add_ctr("files_touched", &skey, sig.files as f64);
         self.add_ctr("lines_added", &skey, agg.lines_added as f64);
@@ -972,12 +972,6 @@ impl Processor {
         let (old_stage, new_stage) = (stage_for(old_total), stage_for(new_total));
         if new_stage.level > old_stage.level && self.live() {
             self.ceremony("grand", "stage_up", &new_stage.level.to_string())?;
-        }
-        let (old_rank, new_rank) = (standing(xp_from_pd(old_total, mpd)), standing(xp_from_pd(new_total, mpd)));
-        if new_rank.level() > old_rank.level() && self.live() {
-            let level = if new_rank.index > old_rank.index { "grand" } else { "mid" };
-            self.ceremony(level, "rank_up", &new_rank.label())?;
-            self.pending.push(Highlight::Rank(new_rank.clone()));
         }
         let day = self.tz.date(end_ts);
         if day_pd + 1e-9 < ACTIVE_DAY_PD && day_pd + credited + 1e-9 >= ACTIVE_DAY_PD {
@@ -1032,12 +1026,10 @@ impl Processor {
                 files: sig.files,
                 test_passed: agg.test_run.then_some(agg.test_last == Some(true)),
                 committed: sig.merged,
-                rank_label: new_rank.label(),
-                xp: new_rank.xp,
-                rank_progress: new_rank.progress,
-                xp_to_next: new_rank.xp_to_next(),
                 today_usd: self.ctr("usd", &dkey),
                 week_usd: self.ctr("usd", &wkey),
+                total_usd: self.ctr("usd", "all"),
+                record_usd: self.record_value("max_day_usd")?,
                 leverage: leverage(self.ctr("human_minutes", &skey), self.ctr("active_minutes", &skey)),
                 highlight: self.take_highlight(),
             };
@@ -1082,6 +1074,8 @@ impl Processor {
         self.add_in("human_minutes", dh, &sc, &all4);
         let tool = self.session_tool(&row.session_id)?;
         self.add_paid(&add, dusd, &sc, &tool);
+        let day_usd = self.ctr("usd", &sc.key("day").unwrap());
+        self.record("max_day_usd", day_usd)?;
         self.upsert_daily(&sc)?;
         self.give_coins(coins_for_pd(old_total, old_total + dpd))
     }
@@ -1110,6 +1104,10 @@ impl Processor {
         Ok(())
     }
 
+    fn record_value(&self, key: &str) -> Result<f64> {
+        Ok(self.conn.query_row("SELECT value FROM records WHERE key = ?1", [key], |r| r.get(0)).optional()?.unwrap_or(0.0))
+    }
+
     fn record(&mut self, key: &str, value: f64) -> Result<()> {
         let old: Option<f64> = self.conn.query_row("SELECT value FROM records WHERE key = ?1", [key], |r| r.get(0)).optional()?;
         if old.is_some_and(|o| value <= o + 1e-9) {
@@ -1123,12 +1121,17 @@ impl Processor {
         // Celebrate a broken record once per key per day, live only, once the
         // old record is worth beating and the gain shows at display precision.
         let floor = match key {
+            "max_day_usd" => 20.0,
             "max_day" => 0.5,
             "max_session" => 0.25,
             "max_leverage" => 3.0,
             _ => 5.0,
         };
-        let shown = |x: f64| if key == "max_leverage" { (x * 10.0).round() } else { (x * 100.0).round() };
+        let shown = |x: f64| match key {
+            "max_leverage" => (x * 10.0).round(),
+            "max_day_usd" => x.round(),
+            _ => (x * 100.0).round(),
+        };
         if let Some(o) = old.filter(|o| *o >= floor && shown(value) > shown(*o) && self.live()) {
             let today = day_key(self.tz.date(self.now));
             let mk = format!("record_day:{key}");
@@ -1291,7 +1294,6 @@ impl Processor {
 
     fn highlight_rank(&self, h: &Highlight) -> u32 {
         match h {
-            Highlight::Rank(_) => 110,
             Highlight::Unlock { id, tier } => {
                 let r = self.cat.get(id).and_then(|a| a.tier(*tier)).map(|t| t.rarity).unwrap_or(Rarity::Common);
                 40 + 15 * r as u32
@@ -1308,7 +1310,6 @@ impl Processor {
         all.sort_by_key(|h| std::cmp::Reverse(self.highlight_rank(h)));
         let best = all.first()?.clone();
         let mut text = match best {
-            Highlight::Rank(st) => format!("晋级 {}", st.label()),
             Highlight::Unlock { id, tier } => {
                 let a = self.cat.get(&id)?;
                 let mut t = format!("{} 解锁", display_name(a, tier));
@@ -1324,7 +1325,12 @@ impl Processor {
             }
             Highlight::Ring { pd, target } => format!("本周合环 {} / {} 人日", fmt_short(pd), fmt_short(target)),
             Highlight::Record { key, new, old } => {
-                let fmt = |x: f64| if key == "max_leverage" { format!("{x:.1}x") } else if key == "max_streak" { format!("{x} 天") } else { fmt_pd(x) };
+                let fmt = |x: f64| match key.as_str() {
+                    "max_leverage" => format!("{x:.1}x"),
+                    "max_streak" => format!("{x} 天"),
+                    "max_day_usd" => shadowcorp_core::render::fmt_usd(x),
+                    _ => fmt_pd(x),
+                };
                 format!("新纪录：{} {}（之前 {}）", progress::record_label(&key), fmt(new), fmt(old))
             }
         };
