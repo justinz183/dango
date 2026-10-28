@@ -9,6 +9,7 @@
    - 宠物和卡片是两个窗口，切换 Space / 全屏时是否总一起出现，要用一段时间看。
    - 提示音用系统音 Tink / Glass；要不要自己的音效。
    - 角色台词仍是模板；"让 Claude 写一句"未做。
+   - 办公室桌牌上的项目名来自 session_meta（本机 transcript 的 cwd 文件夹名），只进 widget.json（0600，本机）。Codex 会话没有这个来源，桌牌显示 "Codex"。
 
 ## 2026-10-29 Codex 接入（用户要求，分开显示 Claude Code 和 Codex）
 

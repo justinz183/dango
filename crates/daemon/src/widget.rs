@@ -120,6 +120,69 @@ pub fn current_job(conn: &Connection, now: i64) -> Result<Option<String>> {
     Ok(last.and_then(|w| occupation::main(&work_of(&w))))
 }
 
+/// Who is in the office right now: every session with a turn in progress
+/// (at its desk, typing) and every one that finished a turn in the last 12
+/// hours (slacking off, by how long ago: the widget decides how), with its
+/// agent, the job it last did, its helpers, what the session has come to,
+/// and the project folder's name when the transcript says so (local only,
+/// like the reports). At work first, then newest first; six at most.
+pub fn office(conn: &Connection, now: i64) -> Result<Vec<Value>> {
+    const WORKING_MS: i64 = 20 * MIN_MS;
+    const PRESENT_MS: i64 = 12 * 60 * MIN_MS;
+    let t = Table::builtin();
+    let claude_dir = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".claude");
+    let last_job = |sid: &str| -> Result<Option<String>> {
+        let w: Option<String> = conn
+            .query_row("SELECT work FROM turns WHERE session_id = ?1 AND ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1", [sid], |r| r.get(0))
+            .optional()?;
+        Ok(w.and_then(|w| occupation::main(&work_of(&w))))
+    };
+    let mut rows: Vec<(String, String, Option<String>, bool, i64, i64)> = Vec::new(); // sid, source, job, working, helpers, since
+    let mut st = conn.prepare(
+        "SELECT s.id, s.source, json_extract(t.agg, '$.work'), json_extract(t.agg, '$.last_activity'),
+                json_extract(t.agg, '$.agent_calls'), json_extract(t.agg, '$.subagent_stops')
+         FROM sessions s JOIN turns t ON t.id = json_extract(s.state, '$.open_turn') WHERE t.ended_at IS NULL",
+    )?;
+    let open: Vec<(String, String, Option<String>, Option<i64>, Option<i64>, Option<i64>)> =
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?.flatten().collect();
+    for (sid, src, work, last, calls, stops) in open {
+        let last = last.unwrap_or(0);
+        if now - last >= WORKING_MS {
+            continue;
+        }
+        let job = match occupation::main(&work_of(&work.unwrap_or_default())) {
+            Some(j) => Some(j),
+            None => last_job(&sid)?,
+        };
+        rows.push((sid, src, job, true, (calls.unwrap_or(0) - stops.unwrap_or(0)).max(0), last));
+    }
+    let mut st = conn.prepare(
+        "SELECT s.id, s.source, MAX(t.ended_at) FROM sessions s JOIN turns t ON t.session_id = s.id
+         WHERE t.ended_at >= ?1 GROUP BY s.id",
+    )?;
+    let rested: Vec<(String, String, i64)> = st.query_map([now - PRESENT_MS], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.flatten().collect();
+    for (sid, src, ended) in rested {
+        if rows.iter().any(|r| r.0 == sid) {
+            continue;
+        }
+        let job = last_job(&sid)?;
+        rows.push((sid, src, job, false, 0, ended));
+    }
+    rows.sort_by(|a, b| b.3.cmp(&a.3).then(b.5.cmp(&a.5)));
+    let mut out = Vec::new();
+    for (sid, src, job, working, helpers, since) in rows.into_iter().take(6) {
+        let (tool, tool_color) = tool_label(&src);
+        let project = crate::titles::cached(conn, &claude_dir, &sid, !working).ok().and_then(|m| m.project);
+        out.push(json!({
+            "id": crate::paths::short_hash(&sid), "tool_id": src, "tool": tool, "tool_color": tool_color,
+            "job": job.as_deref().map(|j| json!({ "id": j, "name": t.name(j), "color": t.get(j).map(|x| x.color.as_str()) })),
+            "working": working, "helpers": helpers, "since": since, "project": project,
+            "usd": snapshot::counter(conn, "usd", &format!("session:{sid}")),
+        }));
+    }
+    Ok(out)
+}
+
 /// Days since the first active day, today included.
 fn days_together(conn: &Connection, tz: Tz, now: i64) -> i64 {
     crate::db::get_meta(conn, "first_active_day")
@@ -322,6 +385,7 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         "turns": all["turns"],
         "views": views,
         "activity": { "working": working, "subagents": subagents, "last_event": last_event, "job": job_json },
+        "office": office(conn, now)?,
     }))
 }
 

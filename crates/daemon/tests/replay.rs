@@ -197,6 +197,7 @@ fn widget_data_carries_history_without_paths() {
     assert!(d["record"]["day_usd"].as_f64().unwrap() > 0.0, "{}", d["record"]);
     assert!(d["activity"]["job"]["name"].is_string(), "{}", d["activity"]);
     assert!(d["character"]["days_together"].as_i64().unwrap() >= 1);
+    assert!(d["office"].is_array(), "{}", d["office"]);
     let js = d.to_string();
     assert!(!js.contains("/Users") && !js.contains("/w/repo") && !js.contains("acme"), "no paths or repo names");
 }
