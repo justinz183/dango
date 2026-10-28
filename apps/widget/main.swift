@@ -738,6 +738,312 @@ final class App: NSObject, NSApplicationDelegate {
     }
 }
 
+// MARK: - Character
+
+/// The character (DESIGN.md §2): a round ink blob with big eyes. `mood`
+/// is one of waiting / focused / happy / proud / sleepy / missing. Works in
+/// flipped and unflipped views: positions are given as fractions from the
+/// top of `r`.
+func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedRed: 0.17, green: 0.16, blue: 0.16, alpha: 1)) {
+    let flipped = NSGraphicsContext.current?.isFlipped ?? false
+    let w = r.width, h = r.height
+    /// Rect whose top edge sits `fromTop` of the way down `r`.
+    func box(_ fx: CGFloat, _ fromTop: CGFloat, _ fw: CGFloat, _ fh: CGFloat) -> NSRect {
+        let y = flipped ? r.minY + h * fromTop : r.maxY - h * fromTop - h * fh
+        return NSRect(x: r.minX + w * fx, y: y, width: w * fw, height: h * fh)
+    }
+    /// Baseline-ish y for text whose top is `fromTop` down.
+    func ty(_ fromTop: CGFloat, size: CGFloat) -> CGFloat { flipped ? r.minY + h * fromTop : r.maxY - h * fromTop - size * 1.2 }
+
+    // Body: a soft blob, slightly flatter at the bottom.
+    let bodyRect = box(0.04, 0.04, 0.92, 0.94)
+    let body = NSBezierPath(ovalIn: bodyRect)
+    ink.setFill()
+    body.fill()
+    NSBezierPath(roundedRect: box(0.08, flipped ? 0.62 : 0.62, 0.84, 0.36), xRadius: w * 0.2, yRadius: w * 0.2).fill()
+    // Cheeks
+    NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.55, alpha: 0.35).setFill()
+    NSBezierPath(ovalIn: box(0.16, 0.58, 0.14, 0.08)).fill()
+    NSBezierPath(ovalIn: box(0.70, 0.58, 0.14, 0.08)).fill()
+    // Eyes
+    let white = NSColor.white
+    let pupil = NSColor(calibratedWhite: 0.08, alpha: 1)
+    for fx in [CGFloat(0.28), CGFloat(0.55)] {
+        let e = box(fx, 0.32, 0.17, 0.22)
+        switch mood {
+        case "happy":
+            white.setStroke()
+            let arc = NSBezierPath()
+            arc.lineWidth = max(2, w * 0.045)
+            arc.lineCapStyle = .round
+            // An arch (∩) in either coordinate system.
+            let (a0, a1): (CGFloat, CGFloat) = flipped ? (200, 340) : (20, 160)
+            arc.appendArc(withCenter: NSPoint(x: e.midX, y: e.midY + (flipped ? e.height * 0.15 : -e.height * 0.15)),
+                          radius: e.width * 0.5, startAngle: a0, endAngle: a1, clockwise: false)
+            arc.stroke()
+        case "focused", "sleepy":
+            white.setFill()
+            NSBezierPath(ovalIn: e).fill()
+            // Lid over the top part of the eye.
+            let lid = mood == "sleepy" ? 0.5 : 0.4
+            ink.setFill()
+            NSBezierPath(rect: box(fx - 0.01, 0.32 - 0.05, 0.19, 0.05 + 0.22 * lid)).fill()
+            pupil.setFill()
+            NSBezierPath(ovalIn: box(fx + 0.045, 0.32 + 0.22 * lid, 0.08, 0.22 * (1 - lid) * 0.8)).fill()
+        case "proud":
+            white.setFill()
+            let star = NSBezierPath()
+            let c = NSPoint(x: e.midX, y: e.midY)
+            let rOut = e.width * 0.62, rIn = e.width * 0.26
+            for k in 0..<10 {
+                let a = CGFloat(k) * .pi / 5 + .pi / 2
+                let rr = k % 2 == 0 ? rOut : rIn
+                let p = NSPoint(x: c.x + cos(a) * rr, y: c.y + sin(a) * rr)
+                k == 0 ? star.move(to: p) : star.line(to: p)
+            }
+            star.close()
+            star.fill()
+        default:
+            white.setFill()
+            NSBezierPath(ovalIn: e).fill()
+            pupil.setFill()
+            let dx: CGFloat = mood == "waiting" ? 0.03 : 0
+            NSBezierPath(ovalIn: box(fx + 0.045 + dx, 0.37, 0.08, 0.11)).fill()
+            white.setFill()
+            NSBezierPath(ovalIn: box(fx + 0.085 + dx, 0.385, 0.03, 0.035)).fill()
+        }
+    }
+    // Mood extras
+    switch mood {
+    case "sleepy":
+        put(text("z", size: h * 0.18, weight: .bold, color: ink), r.minX + w * 0.86, ty(-0.1, size: h * 0.18), align: 1)
+        put(text("z", size: h * 0.12, weight: .bold, color: ink), r.minX + w * 1.0, ty(-0.18, size: h * 0.12), align: 1)
+    case "proud":
+        NSColor(calibratedRed: 0.83, green: 0.69, blue: 0.22, alpha: 1).setFill()
+        for (sx, sy, ss) in [(0.0, 0.08, 0.08), (0.9, 0.02, 0.06), (0.98, 0.36, 0.05)] {
+            let c = box(CGFloat(sx), CGFloat(sy), 0.001, 0.001).origin
+            let rad = w * CGFloat(ss)
+            let sp = NSBezierPath()
+            sp.move(to: NSPoint(x: c.x, y: c.y - rad)); sp.line(to: NSPoint(x: c.x + rad * 0.3, y: c.y - rad * 0.3))
+            sp.line(to: NSPoint(x: c.x + rad, y: c.y)); sp.line(to: NSPoint(x: c.x + rad * 0.3, y: c.y + rad * 0.3))
+            sp.line(to: NSPoint(x: c.x, y: c.y + rad)); sp.line(to: NSPoint(x: c.x - rad * 0.3, y: c.y + rad * 0.3))
+            sp.line(to: NSPoint(x: c.x - rad, y: c.y)); sp.line(to: NSPoint(x: c.x - rad * 0.3, y: c.y - rad * 0.3))
+            sp.close(); sp.fill()
+        }
+    case "waiting":
+        let mug = NSColor(calibratedRed: 0.79, green: 0.71, blue: 0.54, alpha: 1)
+        mug.setFill()
+        NSBezierPath(roundedRect: box(0.98, 0.64, 0.16, 0.18), xRadius: 3, yRadius: 3).fill()
+        mug.setStroke()
+        let handle = NSBezierPath(ovalIn: box(1.12, 0.68, 0.07, 0.09))
+        handle.lineWidth = 2
+        handle.stroke()
+    case "missing":
+        // A little lamp held up.
+        NSColor(calibratedRed: 0.95, green: 0.78, blue: 0.43, alpha: 1).setFill()
+        NSBezierPath(ovalIn: box(1.0, 0.2, 0.14, 0.14)).fill()
+        ink.setFill()
+        NSBezierPath(rect: box(1.06, 0.34, 0.02, 0.3)).fill()
+    default:
+        break
+    }
+}
+
+/// `--moods out.png`: every mood, drawn in a flipped and an unflipped view.
+final class MoodSheet: NSView {
+    let flip: Bool
+    init(flip: Bool) { self.flip = flip; super.init(frame: NSRect(x: 0, y: 0, width: 6 * 120, height: 130)) }
+    required init?(coder: NSCoder) { nil }
+    override var isFlipped: Bool { flip }
+    override func draw(_ dirtyRect: NSRect) {
+        paper.setFill()
+        bounds.fill()
+        for (i, m) in ["waiting", "focused", "happy", "proud", "sleepy", "missing"].enumerated() {
+            drawCharacter(NSRect(x: CGFloat(i) * 120 + 20, y: 25, width: 80, height: 80), mood: m, ink: ink)
+            put(text(m, size: 10, color: ink2), CGFloat(i) * 120 + 60, flip ? 112 : 8, align: 1)
+        }
+    }
+}
+
+// MARK: - Day card (1080 × 1350)
+
+struct Report {
+    var j: [String: Any]
+    func s(_ k: String) -> String { j[k] as? String ?? "" }
+    func d(_ k: String) -> Double { (j[k] as? Double) ?? Double(j[k] as? Int ?? 0) }
+    func i(_ k: String) -> Int { (j[k] as? Int) ?? Int(j[k] as? Double ?? 0) }
+    func o(_ k: String) -> [String: Any] { j[k] as? [String: Any] ?? [:] }
+    func l(_ k: String) -> [[String: Any]] { j[k] as? [[String: Any]] ?? [] }
+}
+
+let paper = NSColor(calibratedRed: 0.96, green: 0.93, blue: 0.89, alpha: 1)
+let paper2 = NSColor(calibratedRed: 0.91, green: 0.88, blue: 0.82, alpha: 1)
+let ink = NSColor(calibratedRed: 0.17, green: 0.16, blue: 0.16, alpha: 1)
+let ink2 = NSColor(calibratedRed: 0.42, green: 0.40, blue: 0.36, alpha: 1)
+
+func truncate(_ s: String, size: CGFloat, weight: NSFont.Weight, width: CGFloat) -> String {
+    var t = s
+    while !t.isEmpty && text(t + "…", size: size, weight: weight).size().width > width { t.removeLast() }
+    return t == s ? s : t + "…"
+}
+
+final class DayCardView: NSView {
+    var report: Report?
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        paper.setFill()
+        bounds.fill()
+        guard let r = report else { return }
+        let W = bounds.width
+        let pad: CGFloat = 72
+        let inner = W - pad * 2
+        let ch = Report(j: r.o("character"))
+        let mono = true
+
+        // Date and mark
+        put(text(r.s("label"), size: 30, weight: .medium, color: ink2), pad, 64)
+        put(text("ShadowCorp", size: 22, weight: .semibold, color: ink2.withAlphaComponent(0.6)), W - pad, 68, align: 2)
+
+        // Character + headline
+        drawCharacter(NSRect(x: pad, y: 130, width: 150, height: 150), mood: ch.s("mood"), ink: ink)
+        let tx = pad + 200
+        put(text(ch.s("headline"), size: 36, color: ink2), tx, 128)
+        if !ch.s("number").isEmpty {
+            let num = text(ch.s("number"), size: 92, weight: .bold, color: ink, mono: mono)
+            put(num, tx - 4, 166)
+            put(text("的活", size: 36, color: ink2), tx + num.size().width + 8, 212)
+        }
+        put(text(ch.s("sub"), size: 28, color: ink2, mono: mono), tx, 284)
+
+        // Timeline
+        var y: CGFloat = 356
+        put(text("时间线", size: 24, weight: .semibold, color: ink2), pad, y)
+        y += 42
+        let track = NSRect(x: pad, y: y, width: inner, height: 60)
+        paper2.setFill()
+        NSBezierPath(roundedRect: track, xRadius: 8, yRadius: 8).fill()
+        for b in r.l("blocks") {
+            let from = CGFloat((b["from_min"] as? Int) ?? 0), to = CGFloat((b["to_min"] as? Int) ?? 0)
+            let x0 = track.minX + inner * from / 1440, x1 = track.minX + inner * to / 1440
+            color(hex: b["color"] as? String ?? "").setFill()
+            NSBezierPath(roundedRect: NSRect(x: x0, y: track.minY + 8, width: max(3, x1 - x0), height: track.height - 16), xRadius: 3, yRadius: 3).fill()
+        }
+        for h in stride(from: 0, through: 24, by: 6) {
+            let x = track.minX + inner * CGFloat(h) / 24
+            put(text("\(h)", size: 20, color: ink2, mono: mono), x, track.maxY + 8, align: h == 0 ? 0 : h == 24 ? 2 : 1)
+        }
+        y = track.maxY + 48
+
+        // Sessions
+        let sessions = Array(r.l("sessions").prefix(3))
+        for s in sessions {
+            let sr = Report(j: s)
+            color(hex: sr.s("color")).setFill()
+            NSBezierPath(ovalIn: NSRect(x: pad, y: y + 10, width: 14, height: 14)).fill()
+            put(text("\(sr.s("from"))–\(sr.s("to"))", size: 24, color: ink2, mono: mono), pad + 28, y + 2)
+            var title = sr.s("title")
+            if let p = s["project"] as? String, !p.isEmpty { title = "\(p) · \(title)" }
+            let hoursText = text(String(format: "%.1fh", sr.d("hours")), size: 26, weight: .semibold, color: ink, mono: mono)
+            let titleW = W - pad - (pad + 236) - hoursText.size().width - 24
+            put(text(truncate(title, size: 26, weight: .medium, width: titleW), size: 26, weight: .medium, color: ink), pad + 236, y)
+            put(hoursText, W - pad, y, align: 2)
+            y += 46
+        }
+        if sessions.isEmpty {
+            put(text("今天没有回合", size: 24, color: ink2), pad, y)
+            y += 46
+        }
+        y += 22
+
+        // Categories
+        put(text("做了哪些事", size: 24, weight: .semibold, color: ink2), pad, y)
+        y += 42
+        let cats = r.l("categories").filter { (($0["hours"] as? Double) ?? 0) > 0 }
+        let maxH = max(cats.map { ($0["hours"] as? Double) ?? 0 }.max() ?? 1, 0.1)
+        for c in cats {
+            let cr = Report(j: c)
+            put(text(cr.s("name"), size: 26, weight: .semibold, color: ink), pad, y)
+            let br = NSRect(x: pad + 110, y: y + 10, width: inner - 110 - 230, height: 16)
+            paper2.setFill()
+            NSBezierPath(roundedRect: br, xRadius: 8, yRadius: 8).fill()
+            color(hex: cr.s("color")).setFill()
+            let fw = max(16, br.width * CGFloat(cr.d("hours") / maxH))
+            NSBezierPath(roundedRect: NSRect(x: br.minX, y: br.minY, width: fw, height: 16), xRadius: 8, yRadius: 8).fill()
+            put(text(String(format: "%.1fh · %.0f%%", cr.d("hours"), cr.d("share") * 100), size: 24, color: ink2, mono: mono), W - pad, y + 2, align: 2)
+            y += 48
+        }
+        if cats.isEmpty {
+            put(text("—", size: 24, color: ink2), pad, y)
+            y += 48
+        }
+        y += 26
+
+        // Stat tiles
+        let tiles: [(String, String)] = [
+            ("回合", "\(r.i("turns"))"),
+            ("改动文件", "\(r.i("files"))"),
+            ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"),
+            ("一次过", "\(r.i("clean_turns"))/\(r.i("turns"))"),
+        ]
+        let gap: CGFloat = 16
+        let tw = (inner - gap * 3) / 4
+        for (i, t) in tiles.enumerated() {
+            let tr = NSRect(x: pad + CGFloat(i) * (tw + gap), y: y, width: tw, height: 124)
+            NSColor.white.withAlphaComponent(0.55).setFill()
+            NSBezierPath(roundedRect: tr, xRadius: 16, yRadius: 16).fill()
+            put(text(t.0, size: 22, color: ink2), tr.minX + 20, tr.minY + 18)
+            put(text(t.1, size: 44, weight: .bold, color: ink, mono: mono), tr.minX + 20, tr.minY + 52)
+        }
+        y += 124 + 40
+
+        // Rank
+        let rk = Report(j: r.o("rank"))
+        let rc = color(hex: rk.s("color"))
+        medal(NSRect(x: pad, y: y, width: 56, height: 56), rc, roman(rk.s("label")), size: 20)
+        put(text(rk.s("label"), size: 30, weight: .bold, color: rc), pad + 76, y - 2)
+        var xpLine = "\(fmtInt(rk.i("xp"))) XP"
+        if let n = rk.j["xp_to_next"] as? Int, let nl = rk.j["next_label"] as? String { xpLine += " · 还差 \(fmtInt(n)) 升 \(nl)" }
+        if r.i("streak") > 0 { xpLine += " · 连续 \(r.i("streak")) 天" }
+        put(text(xpLine, size: 24, color: ink2, mono: mono), pad + 76, y + 34)
+        paper2.setFill()
+        NSBezierPath(roundedRect: NSRect(x: pad + 76, y: y + 70, width: inner - 76, height: 10), xRadius: 5, yRadius: 5).fill()
+        rc.setFill()
+        NSBezierPath(roundedRect: NSRect(x: pad + 76, y: y + 70, width: max(10, (inner - 76) * CGFloat(rk.d("progress"))), height: 10), xRadius: 5, yRadius: 5).fill()
+        y += 120
+
+        // Sign-off bubble
+        let bubble = NSRect(x: pad, y: y, width: inner, height: 96)
+        NSColor.white.withAlphaComponent(0.7).setFill()
+        NSBezierPath(roundedRect: bubble, xRadius: 20, yRadius: 20).fill()
+        put(text("「\(ch.s("signoff"))」", size: 30, weight: .medium, color: ink), pad + 28, y + 20)
+        put(text("— \(ch.s("name"))", size: 22, color: ink2), W - pad - 28, y + 58, align: 2)
+
+        // Footer
+        var foot = "按人类等价工时估算 · 参考 Anthropic Economic Index"
+        if let usd = r.j["usd"] as? Double { foot = "≈ \(fmtUSD(usd)) · " + foot }
+        put(text(foot, size: 20, color: ink2.withAlphaComponent(0.7)), pad, bounds.height - 58)
+    }
+}
+
+func renderCard(_ jsonPath: String, _ outPath: String, copy: Bool) -> Bool {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: jsonPath)),
+          let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+    let size = NSSize(width: 1080, height: 1350)
+    let v = DayCardView(frame: NSRect(origin: .zero, size: size))
+    v.report = Report(j: j)
+    guard let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return false }
+    v.cacheDisplay(in: v.bounds, to: rep)
+    guard let png = rep.representation(using: .png, properties: [:]) else { return false }
+    do { try png.write(to: URL(fileURLWithPath: outPath)) } catch { return false }
+    if copy, let img = NSImage(data: png) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.writeObjects([img])
+    }
+    return true
+}
+
 // MARK: - Entry
 
 /// Renders a view offscreen at 2× to a PNG (for checks without a window).
@@ -760,6 +1066,21 @@ if let i = args.firstIndex(of: "--snapshot"), args.count > i + 1 {
     v.model = loadModel()
     snapshot(v, widgetSize, args[i + 1])
     exit(0)
+}
+if let i = args.firstIndex(of: "--moods"), args.count > i + 1 {
+    _ = NSApplication.shared
+    for (flip, suffix) in [(true, "flipped"), (false, "plain")] {
+        let v = MoodSheet(flip: flip)
+        if let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
+            v.cacheDisplay(in: v.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: args[i + 1].replacingOccurrences(of: ".png", with: "-\(suffix).png")))
+        }
+    }
+    exit(0)
+}
+if let i = args.firstIndex(of: "--card"), args.count > i + 2 {
+    _ = NSApplication.shared
+    exit(renderCard(args[i + 1], args[i + 2], copy: args.contains("--copy")) ? 0 : 1)
 }
 if let i = args.firstIndex(of: "--snapshot-dashboard"), args.count > i + 1 {
     _ = NSApplication.shared

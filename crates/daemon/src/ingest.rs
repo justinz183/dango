@@ -65,6 +65,19 @@ impl Tz {
     pub fn date(&self, ms: i64) -> NaiveDate {
         self.local(ms).date()
     }
+
+    /// Unix ms of a local wall-clock time (the earlier instant when the
+    /// clock is ambiguous, the next valid one when it is skipped).
+    pub fn ms(&self, local: NaiveDateTime) -> i64 {
+        match self {
+            Tz::Local => chrono::TimeZone::from_local_datetime(&chrono::Local, &local)
+                .earliest()
+                .or_else(|| chrono::TimeZone::from_local_datetime(&chrono::Local, &(local + Duration::hours(1))).earliest())
+                .map(|d| d.timestamp_millis())
+                .unwrap_or(0),
+            Tz::Fixed(o) => local.and_local_timezone(*o).unwrap().timestamp_millis(),
+        }
+    }
 }
 
 pub fn day_key(d: NaiveDate) -> String {

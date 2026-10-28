@@ -1,6 +1,6 @@
 # ShadowCorp — 衡量 AI 编码产出
 
-把 Claude Code 的回合折算成 $ 产出、XP 和段位（青铜 → 王者），桌面右下角小部件常驻显示。原规格书 docs/SPEC.md 的"影子公司 / 办公室 / 徽章"设定已于 2026-10-28 收起（见 docs/OPEN_QUESTIONS.md 第 0 条）：计分引擎沿用 SPEC §5，展示层只讲产出。成就目录 assets/achievements.json 仍在，但不是主界面。
+"你的 Claude"住在屏幕角落：按人类等价工时记产出、攒 XP、升段位（青铜 → 王者），每天出一张日报卡。当前设计：docs/DESIGN.md（2026-10-29）；计分引擎沿用 docs/SPEC.md §5；"影子公司 / 办公室 / 徽章"设定已收起，成就目录 assets/achievements.json 仍在但不是主界面。金额默认不显示。
 
 ## 命令
 - 构建：`cargo build --workspace`（发布：`cargo build --release`，二进制 `target/release/shadowcorp`）
@@ -8,6 +8,7 @@
 - 安装到本机：`install -m 0755 target/release/shadowcorp target/release/shadowcorp-widget ~/.local/bin/`，然后 `launchctl kickstart -k gui/$(id -u)/com.shadowcorp.daemon`
 - 测试：`cargo test --workspace`（黄金用例 fixtures/scoring/golden.toml；成就用例 crates/daemon/tests/achievements.rs）
 - 回放：`SHADOWCORP_HOME=/tmp/sc SHADOWCORP_TZ=+08:00 cargo run -p cli -- replay fixtures/hooks/claude_code`
+- 日报：`shadowcorp report --day yesterday --names`；卡片：`shadowcorp card --day yesterday --names --out /tmp/x.png --no-open`（渲染走 /Applications/ShadowCorp.app，改了 Swift 要先 bundle.sh + 重装）
 - 隐私扫描：`cargo run -p cli -- privacy-scan`（提交前必跑）
 - 本地试验一律设 `SHADOWCORP_HOME` 指向临时目录，不要碰 ~/.shadowcorp 或 ~/.claude/settings.json。
 

@@ -165,8 +165,9 @@ fn widget_data_carries_history_without_paths() {
     assert_eq!(d["days"].as_array().unwrap().len(), 30);
     assert_eq!(d["ranks"].as_array().unwrap().len(), 7);
     assert_eq!(d["days"][29]["day"], "2026-10-28");
-    assert!(d["today"]["usd"].as_f64().unwrap() > 0.0, "{}", d["today"]);
-    assert!(d["month"]["usd"].as_f64().unwrap() >= d["today"]["usd"].as_f64().unwrap());
+    assert!(d["today"]["person_days"].as_f64().unwrap() > 0.0, "{}", d["today"]);
+    assert!(d["month"]["person_days"].as_f64().unwrap() >= d["today"]["person_days"].as_f64().unwrap());
+    assert_eq!(d["today"]["usd"], 0.0, "no rate configured, no dollars");
     assert!(!d["classes"].as_array().unwrap().is_empty());
     let turns = d["turns"].as_array().unwrap();
     assert!(turns.len() <= 10 && !turns.is_empty());
@@ -174,4 +175,33 @@ fn widget_data_carries_history_without_paths() {
     assert_eq!(d["rank"]["label"], "青铜 III");
     let js = d.to_string();
     assert!(!js.contains("/Users") && !js.contains("/w/repo") && !js.contains("acme"), "no paths or repo names");
+}
+
+#[test]
+fn day_report_from_fixtures() {
+    let paths = home("report");
+    for e in &events(&paths) {
+        spool::append(&paths, e).unwrap();
+    }
+    let mut p = processor(&paths);
+    p.ingest_spool(&paths).unwrap();
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let claude = paths.home.join("no-claude-dir");
+    let date = chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+    let r = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date, 1_793_200_000_000, true).unwrap();
+    assert_eq!(r["turns"], 3, "{r}");
+    assert_eq!(r["sessions"].as_array().unwrap().len(), 1);
+    let s = &r["sessions"][0];
+    assert_eq!((s["from"].as_str(), s["to"].as_str()), (Some("10:01"), Some("10:22")));
+    assert_eq!(s["title"], "会话 1", "no transcript → numbered");
+    assert!(r["human_hours"].as_f64().unwrap() > 0.0);
+    let cats: f64 = r["categories"].as_array().unwrap().iter().map(|c| c["share"].as_f64().unwrap()).sum();
+    assert!((cats - 1.0).abs() < 1e-6);
+    assert_eq!(r["blocks"].as_array().unwrap().len(), 3);
+    assert!(r["usd"].is_null());
+    assert_eq!(r["character"]["mood"], "happy");
+    let empty = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date.succ_opt().unwrap().succ_opt().unwrap(), 1_793_200_000_000, false).unwrap();
+    assert_eq!(empty["turns"], 0);
+    assert_eq!(empty["character"]["mood"], "waiting");
+    assert!(daemon::report::day_text(&r).contains("会话 1"));
 }

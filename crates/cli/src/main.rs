@@ -31,7 +31,11 @@ const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
   shadowcorp status [--claude]     一行状态；--claude 供 statusLine 使用
   shadowcorp stats                 公司页
   shadowcorp badges                成就与职业图鉴
-  shadowcorp widget                启动桌面小部件（屏幕右下角：产出 $、段位、XP）
+  shadowcorp widget                启动桌面小部件（屏幕右下角）
+  shadowcorp report [--day DATE] [--names] [--json]
+                                   某天的工作日报（DATE = YYYY-MM-DD | today | yesterday）
+  shadowcorp card [--day DATE] [--names] [--out PNG] [--no-open]
+                                   渲染日报分享卡到 ~/Pictures/ShadowCorp/ 并复制到剪贴板
   shadowcorp panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   shadowcorp backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
@@ -70,6 +74,8 @@ fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
         "backfill" => run_backfill(paths, args),
         "panel" => panel(paths, args.iter().any(|a| a == "--no-open")),
         "widget" => widget(paths),
+        "report" => report(paths, args),
+        "card" => card(paths, args),
         "daemon" => server::run(paths).map(|_| 0),
         "replay" => replay(paths, args),
         "rebuild" => rebuild(paths),
@@ -105,6 +111,76 @@ fn fresh_db<T>(paths: &Paths, f: impl FnOnce(&Connection, &Config) -> Result<T>)
 
 fn with_fresh_db(paths: &Paths, f: impl FnOnce(&Connection, &Config) -> Result<String>) -> Result<i32> {
     println!("{}", fresh_db(paths, f)?);
+    Ok(0)
+}
+
+fn flag(args: &[String], name: &str) -> Option<String> {
+    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
+}
+
+fn claude_dir() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".claude")
+}
+
+fn parse_day(args: &[String]) -> Result<chrono::NaiveDate> {
+    let today = Tz::from_env().date(now_ms());
+    Ok(match flag(args, "--day").as_deref() {
+        None | Some("today") | Some("今天") => today,
+        Some("yesterday") | Some("昨天") => today.pred_opt().unwrap(),
+        Some(d) => chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| format!("日期格式应为 YYYY-MM-DD，收到 {d:?}"))?,
+    })
+}
+
+fn day_report(paths: &Paths, args: &[String]) -> Result<Value> {
+    let date = parse_day(args)?;
+    let names = args.iter().any(|a| a == "--names");
+    fresh_db(paths, |c, cfg| daemon::report::day(c, Tz::from_env(), cfg, &claude_dir(), date, now_ms(), names))
+}
+
+fn report(paths: &Paths, args: &[String]) -> Result<i32> {
+    let r = day_report(paths, args)?;
+    if args.iter().any(|a| a == "--json") {
+        println!("{}", serde_json::to_string_pretty(&r)?);
+    } else {
+        println!("{}", daemon::report::day_text(&r));
+    }
+    Ok(0)
+}
+
+/// The card renderer: ShadowCorp.app when installed, else the widget binary.
+fn renderer() -> Result<PathBuf> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let candidates = [
+        PathBuf::from("/Applications/ShadowCorp.app/Contents/MacOS/ShadowCorp"),
+        PathBuf::from(format!("{home}/Applications/ShadowCorp.app/Contents/MacOS/ShadowCorp")),
+        std::env::current_exe()?.with_file_name("shadowcorp-widget"),
+    ];
+    candidates.into_iter().find(|p| p.exists()).ok_or_else(|| "没有找到 ShadowCorp.app，先运行 apps/widget/bundle.sh".into())
+}
+
+fn card(paths: &Paths, args: &[String]) -> Result<i32> {
+    let r = day_report(paths, args)?;
+    let date = r["date"].as_str().unwrap_or("day").to_string();
+    let cards = paths.home.join("cards");
+    fs::create_dir_all(&cards)?;
+    let json_path = cards.join(format!("day-{date}.json"));
+    daemon::paths::write_private(&json_path, serde_json::to_string(&r)?.as_bytes())?;
+    let out = match flag(args, "--out") {
+        Some(o) => PathBuf::from(o),
+        None => {
+            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("ShadowCorp");
+            fs::create_dir_all(&dir)?;
+            dir.join(format!("day-{date}.png"))
+        }
+    };
+    let status = std::process::Command::new(renderer()?).arg("--card").arg(&json_path).arg(&out).arg("--copy").status()?;
+    if !status.success() {
+        return Err("渲染失败".into());
+    }
+    println!("日报卡：{}（已复制到剪贴板）", out.display());
+    if !args.iter().any(|a| a == "--no-open") {
+        std::process::Command::new("open").arg(&out).status()?;
+    }
     Ok(0)
 }
 

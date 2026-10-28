@@ -9,3 +9,4 @@ pub mod progress;
 pub mod rank;
 pub mod render;
 pub mod scoring;
+pub mod value;

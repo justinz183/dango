@@ -127,6 +127,15 @@ CREATE TABLE IF NOT EXISTS agent_files (
   lines      INTEGER NOT NULL
 );
 
+-- Session title and project folder name, read from the session's own
+-- transcript (DESIGN.md §4). Local only; off share cards unless asked.
+CREATE TABLE IF NOT EXISTS session_meta (
+  session_id   TEXT PRIMARY KEY,
+  project      TEXT,
+  title        TEXT,
+  looked_up_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 "#;
 

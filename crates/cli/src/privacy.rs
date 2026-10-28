@@ -79,6 +79,15 @@ fn scan_db(conn: &Connection, out: &mut Vec<String>) -> Result<usize> {
             out.push(format!("meta.{k}: unexpected value"));
         }
     }
+    // session_meta holds a session's title and project folder name on
+    // purpose (DESIGN.md §4): local only, so only its size is checked here.
+    let mut st = conn.prepare("SELECT project, title FROM session_meta")?;
+    for (p, t) in st.query_map([], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)))?.flatten() {
+        rows += 1;
+        if p.is_some_and(|p| p.chars().count() > 40) || t.is_some_and(|t| t.chars().count() > 60) {
+            out.push("session_meta: name longer than allowed".into());
+        }
+    }
     let mut st = conn.prepare("SELECT item_id, source FROM inventory")?;
     for (item, src) in st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.flatten() {
         rows += 1;

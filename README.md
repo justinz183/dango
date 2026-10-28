@@ -1,13 +1,21 @@
-# ShadowCorp — 衡量 AI 编码产出
+# ShadowCorp — 你的 Claude，和它的工作日报
 
-把 Claude Code 每个回合完成的工作折算成**产出价值（$）**和 **XP**，段位从青铜一路升到王者；屏幕右下角一个小部件常驻显示，回合结束时终端里打印一个结算框。不统计 token，不存 prompt、代码或路径。
+住在屏幕角落的"你的 Claude"：记得自己替你干了多少活（按人类等价工时算）、什么时候干的、干的是哪一类事，攒 XP、升段位（青铜 → 王者），每天给你一张好看到能发出去的日报卡。不统计 token，不存 prompt、代码或路径。
 
-> 2026-10-28 方向调整：原规格书（[docs/SPEC.md](docs/SPEC.md)）的"影子公司 / 像素办公室 / 徽章"设定收起，产品只回答一个问题——你产出了多少。公司阶段、成就、网页面板的代码仍在仓库里，但不再是主界面。取舍与待定见 [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)。
+设计稿：[docs/DESIGN.md](docs/DESIGN.md)（2026-10-29，替代原规格书 [docs/SPEC.md](docs/SPEC.md) 的"影子公司"设定；计分引擎沿用）。取舍与待定：[docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)。
+
+## 日报卡
+
+```bash
+shadowcorp card --day yesterday --names
+```
+
+生成 1080×1350 的 PNG 到 `~/Pictures/ShadowCorp/`，复制到剪贴板，并打开。内容：角色当天的表情和一句话、人类等价工时与杠杆、24 小时时间线、做得最多的三个会话、四类工作（建造 / 修缮 / 守护 / 沉淀）的工时占比、回合 / 文件 / 测试 / 一次过、段位进度。`--names` 才会带上会话标题和项目名（它们只存本机，默认不上卡）；`--day` 接 `YYYY-MM-DD`、`today`、`yesterday`。文字版：`shadowcorp report --day …`。
 
 ## 产出怎么算
 
-1. 每个回合估一个"人类工程师做同样的事要多少分钟"H（规格书 §5.3 的公式：任务类型基础分钟 + 文件数 + 改动行数 + 跑了测试 + 子 agent 数 + 提交/合并，单回合封顶 360 分钟，每日 6 人日、每周 30 人日封顶）。
-2. **$ = H ÷ 60 × 时薪**。时薪在 `~/.shadowcorp/config.toml` 的 `[value] hourly_rate_usd` 里，默认 80（按美国软件工程师全包成本粗估，请改成你所在市场的数字）。
+1. 每个回合估一个"人类工程师做同样的事要多少分钟"H（规格书 §5.3 的公式：任务类型基础分钟 + 文件数 + 改动行数 + 跑了测试 + 子 agent 数 + 提交/合并，单回合封顶 360 分钟，每日 6 人日、每周 30 人日封顶）。头条就是这个数：「我替你干了 16.5 小时的活」。
+2. **金额默认不显示**。想看的话在 `~/.shadowcorp/config.toml` 填 `[value] hourly_rate_usd = <你的时薪>`，报告里会多一行 ≈ $。
 3. **XP = 封顶后的人类等价分钟数**，只增不减，不受时薪影响。
 4. **段位**按累计 XP：青铜 0 · 白银 1,000 · 黄金 5,000 · 铂金 15,000 · 钻石 40,000 · 大师 100,000 · 王者 250,000。每个段位分 IV → I 四个小段，王者不分段。一周重度使用约 4,000–10,000 XP，所以黄金在第一两周、铂金在第一个月、王者大约一年。
 
@@ -97,6 +105,8 @@ shadowcorp panel
 | `shadowcorp hook` | 所有 hook 的入口：读 stdin，写 spool，永远 exit 0 |
 | `shadowcorp status [--claude]` | 一行状态 |
 | `shadowcorp widget` | 启动桌面小部件（右下角） |
+| `shadowcorp report --day DATE [--names] [--json]` | 某天的文字日报 |
+| `shadowcorp card --day DATE [--names] [--out PNG]` | 日报分享卡（PNG + 剪贴板） |
 | `shadowcorp stats` / `badges` | 产出总览 / 旧的成就图鉴 |
 | `shadowcorp panel` | 旧的网页面板 |
 | `shadowcorp backfill` | 导入安装前的历史（可重复运行，不会重复计） |
