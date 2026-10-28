@@ -13,13 +13,17 @@
 
 ## 桌面小部件
 
+打开方式：双击 **/Applications/ShadowCorp.app**（Launchpad 里也有），或者在终端运行：
+
 ```bash
 shadowcorp widget
 ```
 
+打包：`apps/widget/bundle.sh` 生成 `target/release/ShadowCorp.app`（含图标，ad-hoc 签名），复制到 /Applications 即可。重复打开不会出现第二个面板。
+
 一个 256×78 的悬浮面板停在屏幕右下角，置顶、不占 Dock、不抢焦点：总产出 $、今日 $、段位徽章、XP 和距下一小段的差距、进度条；agent 干活时右上角有绿点在闪；晋级时徽章发光并显示"晋级 → 黄金 IV"。可以拖到任何位置，右键菜单：登录时自动启动 / 回到右下角 / 退出。纯本地：读 `~/.shadowcorp/widget.json`（守护进程有新活动就重写），每 2 秒刷新。
 
-原生 Swift（AppKit），150 KB，构建：`apps/widget/build.sh`。
+原生 Swift（AppKit），150 KB。`apps/widget/build.sh` 只出裸二进制；`apps/widget/bundle.sh` 出 .app。
 
 ## 当前进度
 

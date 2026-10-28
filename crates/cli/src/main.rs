@@ -108,19 +108,22 @@ fn with_fresh_db(paths: &Paths, f: impl FnOnce(&Connection, &Config) -> Result<S
     Ok(0)
 }
 
-/// Starts the native desktop widget (built by apps/widget/build.sh and
-/// installed next to this binary) with fresh data to show.
+/// Starts the desktop widget with fresh data to show: ShadowCorp.app when
+/// it is installed (apps/widget/bundle.sh), else the bare binary next to
+/// this one. The widget itself refuses to run twice.
 fn widget(paths: &Paths) -> Result<i32> {
-    let exe = std::env::current_exe()?.with_file_name("shadowcorp-widget");
-    if !exe.exists() {
-        return Err(format!("没有找到 {}，先运行 apps/widget/build.sh", exe.display()).into());
-    }
-    let running = std::process::Command::new("pgrep").args(["-x", "shadowcorp-widget"]).output().map(|o| o.status.success()).unwrap_or(false);
-    if running {
-        println!("小部件已经在运行。");
+    fresh_db(paths, |c, cfg| daemon::widget::write(paths, c, Tz::from_env(), cfg, now_ms()))?;
+    let home = std::env::var("HOME").unwrap_or_default();
+    let apps = [PathBuf::from("/Applications/ShadowCorp.app"), PathBuf::from(format!("{home}/Applications/ShadowCorp.app"))];
+    if let Some(app) = apps.iter().find(|a| a.exists()) {
+        std::process::Command::new("open").arg("-a").arg(app).status()?;
+        println!("ShadowCorp 已打开，小部件在屏幕右下角。右键可退出或设置登录时自动启动。");
         return Ok(0);
     }
-    fresh_db(paths, |c, cfg| daemon::widget::write(paths, c, Tz::from_env(), cfg, now_ms()))?;
+    let exe = std::env::current_exe()?.with_file_name("shadowcorp-widget");
+    if !exe.exists() {
+        return Err(format!("没有找到 ShadowCorp.app 或 {}，先运行 apps/widget/bundle.sh", exe.display()).into());
+    }
     std::process::Command::new(exe)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

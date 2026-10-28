@@ -4,7 +4,7 @@
 
 ## 命令
 - 构建：`cargo build --workspace`（发布：`cargo build --release`，二进制 `target/release/shadowcorp`）
-- 小部件：`apps/widget/build.sh`（Swift/AppKit → `target/release/shadowcorp-widget`；`--snapshot out.png` 离屏渲染用于验证）
+- 小部件：`apps/widget/bundle.sh`（Swift/AppKit → `target/release/ShadowCorp.app`，装到 /Applications；`build.sh` 只出裸二进制；`--snapshot out.png` 离屏渲染用于验证）
 - 安装到本机：`install -m 0755 target/release/shadowcorp target/release/shadowcorp-widget ~/.local/bin/`，然后 `launchctl kickstart -k gui/$(id -u)/com.shadowcorp.daemon`
 - 测试：`cargo test --workspace`（黄金用例 fixtures/scoring/golden.toml；成就用例 crates/daemon/tests/achievements.rs）
 - 回放：`SHADOWCORP_HOME=/tmp/sc SHADOWCORP_TZ=+08:00 cargo run -p cli -- replay fixtures/hooks/claude_code`

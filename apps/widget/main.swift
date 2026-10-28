@@ -3,7 +3,8 @@
 // ~/.shadowcorp/widget.json (written by the daemon) every 2 seconds.
 // No dock icon, no menu bar item; right-click for the menu.
 //
-// Build: apps/widget/build.sh   Snapshot (no window): --snapshot out.png
+// Build: apps/widget/build.sh (binary) or apps/widget/bundle.sh (ShadowCorp.app)
+// Snapshot (no window): --snapshot out.png
 
 import AppKit
 import Foundation
@@ -305,6 +306,13 @@ if let i = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.argum
             try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
         }
     }
+    exit(0)
+}
+
+// One instance at a time: a second launch (double-clicking the app again,
+// `shadowcorp widget`) just exits while the first keeps the lock.
+let lockFD = open(home + "/widget.lock", O_CREAT | O_RDWR, 0o600)
+if lockFD < 0 || flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
     exit(0)
 }
 
