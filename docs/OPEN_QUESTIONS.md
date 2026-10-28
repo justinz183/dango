@@ -2,6 +2,15 @@
 
 每条写明：SPEC 怎么说、实现怎么做、需要谁定。标 **待定** 的需要产品决定。
 
+## 2026-10-29 Codex 接入（用户要求，分开显示 Claude Code 和 Codex）
+
+0000. **实现**：Codex hooks（`~/.codex/hooks.json`，`shadowcorp hook --codex`）把 Codex 的字段换成 Claude Code 的形状后走同一套规则；回填读 `~/.codex/sessions` 里的 `item_completed` 记录。每个工具单独的分界点：Claude Code 仍用 `live_since`，Codex 用 `live_since:codex`。新增计数器 `usd:<工具>`、`minutes:<工具>`。本机：Codex 108 个回合 ≈ $3,649，Claude Code ≈ $7,933（2026-10-29）。**待定 / 未验证**：
+   - Codex 的电脑操作（`cua_repl` / `js`，本机历史 1,137 次点击、滚动、截图）目前不计钱。要不要按"资料录入"或"运维"每次计 1 分钟，需要用户定。
+   - Codex 的"code mode"把工具调用包在脚本里执行，嵌套的调用会不会触发 hook 没有文档说明，需要信任 hook 后实测；回填不受影响。
+   - Codex 内置网页搜索不触发 PostToolUse（官方文档），实时漏记，回填能补。
+   - 结算框在 Codex 里显示成 warning 样式；如果嫌吵，可以把 Stop hook 去掉，只保留其他 hook。
+   - 命令按关键词归类会误判：一条只是提到 "ocr" 的命令被算成了 15 分钟资料录入（2026-10-29，$14）。要不要只认命令名（第一个词）。
+
 ## 2026-10-29 第三次调整（用户决定，见 docs/DESIGN.md v3）
 
 000. **$ 回来了，按"请谁来做"算。** 用户要的是"折算成请人要花多少钱"、不只算写代码、去掉建造 / 守护 / 其他。实现：每一步归一种职业并估分钟（core/occupation.rs），按 BLS 2025 年 5 月时薪中位数折算；替换了 SPEC §5.3 的任务类公式（`scoring::human_minutes` 和 scoring.toml 的 `[base]` / `[weights]` 已删）和 core/value.rs；`[value] hourly_rate_usd` 已删。历史用新算法从 transcript 重建（旧库：`~/.shadowcorp/backup/20261029-011029/`）；累计从 10.33 人日涨到 20.28 人日，没有变少。**待定**（都是估算口径，需要用户拍板或拿反馈校准）：

@@ -1,13 +1,14 @@
-//! Turns a Claude Code hook's stdin JSON into spool events (SPEC 4.1).
-//! Field names follow https://code.claude.com/docs/en/hooks (checked
-//! 2026-10-28). Prompt text, commands, code and paths are read here and
+//! Turns a Claude Code or Codex hook's stdin JSON into spool events (SPEC
+//! 4.1). Field names follow https://code.claude.com/docs/en/hooks (checked
+//! 2026-10-28) and https://learn.chatgpt.com/docs/hooks (checked
+//! 2026-10-29). Prompt text, commands, code and paths are read here and
 //! reduced to derived values; none of them leaves this module.
 
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use shadowcorp_core::{classify, occupation};
 use shadowcorp_core::event::{Event, Kind, Payload, Source};
 
@@ -156,6 +157,110 @@ fn prompt_repeat(paths: &Paths, session: &str, prompt: &str) -> u32 {
     };
     let _ = paths.ensure().and_then(|_| write_private(&file, format!("{fp} {n}").as_bytes()));
     n
+}
+
+/// A shell command as text: Codex sometimes gives argv (["zsh", "-lc", "…"]).
+pub fn command_text(v: &Value) -> String {
+    match v {
+        Value::Array(a) => {
+            let parts: Vec<&str> = a.iter().filter_map(Value::as_str).collect();
+            match parts.as_slice() {
+                [_, flag, cmd] if flag.starts_with('-') && flag.ends_with('c') => cmd.to_string(),
+                _ => parts.join(" "),
+            }
+        }
+        v => v.as_str().unwrap_or("").to_string(),
+    }
+}
+
+/// The exit code a shell tool's response reports, if it says.
+fn exit_code(resp: Option<&Value>) -> Option<i64> {
+    let r = resp?;
+    if let Some(n) = r.get("exit_code").or_else(|| r.get("exitCode")).and_then(Value::as_i64) {
+        return Some(n);
+    }
+    let text = r.as_str().or_else(|| r.get("output").and_then(Value::as_str))?;
+    ["exited with code ", "Exit code: ", "exit_code: "].iter().find_map(|pat| {
+        let rest = &text[text.find(pat)? + pat.len()..];
+        rest.chars().take_while(|c| c.is_ascii_digit() || *c == '-').collect::<String>().parse().ok()
+    })
+}
+
+/// One file of a Codex patch: its path, whether it is new, its "+"/"-" lines.
+pub struct FilePatch {
+    pub path: String,
+    pub new: bool,
+    pub lines: Vec<String>,
+}
+
+/// Splits a Codex apply_patch ("*** Begin Patch … *** End Patch") by file.
+pub fn parse_patch(patch: &str) -> Vec<FilePatch> {
+    let mut out: Vec<FilePatch> = Vec::new();
+    for line in patch.lines() {
+        let header = |p: &str| line.strip_prefix(p).map(|x| x.trim().to_string());
+        if let Some(path) = header("*** Add File: ") {
+            out.push(FilePatch { path, new: true, lines: Vec::new() });
+        } else if let Some(path) = header("*** Update File: ").or_else(|| header("*** Delete File: ")) {
+            out.push(FilePatch { path, new: false, lines: Vec::new() });
+        } else if !line.starts_with("***") && (line.starts_with('+') || line.starts_with('-')) {
+            if let Some(f) = out.last_mut() {
+                f.lines.push(line.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// A Claude Code-shaped PostToolUse for one edited file, so edits made by
+/// Codex go through the same rules.
+pub fn edit_hook(cwd: &str, path: &str, new: bool, lines: Vec<String>) -> Value {
+    let abs = if path.starts_with('/') || cwd.is_empty() { path.to_string() } else { format!("{}/{path}", cwd.trim_end_matches('/')) };
+    let content: Vec<&str> = lines.iter().filter_map(|l| l.strip_prefix('+')).collect();
+    json!({
+        "hook_event_name": "PostToolUse", "cwd": cwd, "tool_name": if new { "Write" } else { "Edit" },
+        "tool_input": { "file_path": abs, "content": content.join("\n") },
+        "tool_response": { "structuredPatch": [{ "lines": lines }] },
+    })
+}
+
+/// Maps one Codex hook invocation to events (a patch gives one per file).
+/// Codex uses Claude Code's field names plus `turn_id`; shell and unified
+/// exec arrive as `Bash`, edits as `apply_patch` with the patch in
+/// `tool_input.command`, and a failed command has no event of its own.
+pub fn from_codex_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Vec<Event> {
+    let name = s(input, "hook_event_name").unwrap_or("");
+    let tool = s(input, "tool_name").unwrap_or("");
+    let mut hooks: Vec<Value> = Vec::new();
+    match (name, tool) {
+        ("PostToolUse", "apply_patch") => {
+            let patch = input.get("tool_input").and_then(|t| t.get("command")).map(command_text).unwrap_or_default();
+            for f in parse_patch(&patch) {
+                hooks.push(edit_hook(s(input, "cwd").unwrap_or(""), &f.path, f.new, f.lines));
+            }
+        }
+        ("PostToolUse", "Bash") => {
+            let mut h = input.clone();
+            h["tool_input"] = json!({ "command": input.get("tool_input").and_then(|t| t.get("command")).map(command_text).unwrap_or_default() });
+            if exit_code(input.get("tool_response")).is_some_and(|c| c != 0) {
+                h["hook_event_name"] = json!("PostToolUseFailure");
+            }
+            hooks.push(h);
+        }
+        ("SubagentStart", _) => hooks.push(json!({ "hook_event_name": "PostToolUse", "tool_name": "Agent" })),
+        _ => hooks.push(input.clone()),
+    }
+    hooks
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, mut h)| {
+            h["session_id"] = input.get("session_id").cloned().unwrap_or(Value::Null);
+            let env = CaptureEnv { paths: env.paths, now_ms: env.now_ms, nonce: format!("{}#{i}", env.nonce), git_lookup: env.git_lookup };
+            let mut ev = from_claude_hook(&h, raw, &env)?;
+            ev.source = Source::Codex;
+            ev.turn_id = s(input, "turn_id").map(str::to_string);
+            Some(ev)
+        })
+        .collect()
 }
 
 /// Maps one hook invocation to zero or one events.
@@ -341,6 +446,35 @@ mod tests {
             "hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_input": { "command": "git commit -m x" }
         });
         assert!(from_claude_hook(&failed_commit, b"", &env(&paths)).is_none());
+    }
+
+    #[test]
+    fn codex_hooks() {
+        let paths = tmp();
+        let e = |v: Value| from_codex_hook(&v, b"", &env(&paths));
+        let patch = "*** Begin Patch\n*** Add File: docs/plan.md\n+第一段计划写在这里\n*** Update File: src/main.rs\n@@ fn main\n-old\n+new\n+more\n*** End Patch";
+        let evs = e(json!({ "hook_event_name": "PostToolUse", "session_id": "cx", "turn_id": "t9", "cwd": "/w",
+                            "tool_name": "apply_patch", "tool_input": { "command": patch } }));
+        assert_eq!(evs.len(), 2, "one event per file");
+        assert!(evs.iter().all(|ev| ev.source == Source::Codex && ev.turn_id.as_deref() == Some("t9") && ev.session_id.as_deref() == Some("cx")));
+        assert_eq!(evs[0].id == evs[1].id, false);
+        assert_eq!((evs[0].payload.occupation.as_deref(), evs[0].payload.words), (Some("writer"), Some(9)));
+        assert_eq!((evs[1].payload.occupation.as_deref(), evs[1].payload.lines_added, evs[1].payload.lines_removed), (Some("swe"), Some(2), Some(1)));
+        let line = serde_json::to_string(&evs).unwrap();
+        assert!(!line.contains("计划") && !line.contains("main.rs"), "nothing of the patch is kept");
+
+        let test = |resp: Value| e(json!({ "hook_event_name": "PostToolUse", "session_id": "cx", "turn_id": "t9",
+                                         "tool_name": "Bash", "tool_input": { "command": "cargo test" }, "tool_response": resp }));
+        assert_eq!(test(json!("Process exited with code 101\nOutput:\nfailed"))[0].payload.test_passed, Some(false));
+        assert_eq!(test(json!({ "exit_code": 0 }))[0].payload.test_passed, Some(true));
+        assert_eq!(test(json!("ok"))[0].payload.test_passed, Some(true), "no exit code means it ran");
+
+        let sub = e(json!({ "hook_event_name": "SubagentStart", "session_id": "cx", "turn_id": "t9", "agent_id": "a" }));
+        assert_eq!(sub[0].payload.subagents, Some(1));
+        let prompt = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "cx", "turn_id": "t10", "prompt": "做个海报" }));
+        assert_eq!((prompt[0].kind, prompt[0].turn_id.as_deref()), (Kind::Prompt, Some("t10")));
+        assert_eq!(command_text(&json!(["/bin/zsh", "-lc", "ls -la"])), "ls -la");
+        assert_eq!(command_text(&json!(["git", "status"])), "git status");
     }
 
     #[test]

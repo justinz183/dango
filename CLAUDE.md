@@ -15,8 +15,9 @@
 ## 结构
 - crates/core：事件 schema、分类器、职业归类与时薪（occupation.rs + assets/occupations.toml）、计分封顶、进度、成就引擎、终端文案。纯逻辑，无 IO。
 - crates/daemon：capture（hook JSON → 事件）、spool、SQLite、ingest、backfill、socket、snapshot。
-- crates/cli：单二进制 `shadowcorp`（hook / status / stats / badges / backfill / daemon / replay / rebuild / privacy-scan）。
-- plugins/claude-code + .claude-plugin/marketplace.json：Claude Code 插件。
+- crates/cli：单二进制 `shadowcorp`（hook [--codex] / status / stats / badges / backfill / daemon / replay / rebuild / privacy-scan）。
+- plugins/claude-code + .claude-plugin/marketplace.json：Claude Code 插件。plugins/codex/hooks.json：Codex hooks 模板（装到 ~/.codex/hooks.json，命令用绝对路径；改了要在 Codex 里重新信任）。
+- fixtures/codex/sessions：Codex 回填用例（主线程、子 agent、Codex 自己的 guardian 线程）。
 
 ## 规则
 - crates/core 不做任何 IO；所有计分、进度、成就逻辑只在这里。

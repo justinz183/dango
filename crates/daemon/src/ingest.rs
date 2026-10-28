@@ -386,8 +386,14 @@ impl Processor {
         }
         self.now = ts;
         self.source = ev.origin();
-        if ev.source != Source::Backfill && self.mode != Mode::Rebuild && self.meta("live_since")?.is_none() {
-            self.set_meta("live_since", &ts.to_string())?;
+        // Each tool's first live event: its history before that comes from
+        // backfill ("live_since" is Claude Code's, from before Codex).
+        let live_key = match ev.source {
+            Source::ClaudeCode => "live_since".to_string(),
+            s => format!("live_since:{}", s.as_str()),
+        };
+        if ev.source != Source::Backfill && self.mode != Mode::Rebuild && self.meta(&live_key)?.is_none() {
+            self.set_meta(&live_key, &ts.to_string())?;
             if self.meta("installed_at")?.is_none() {
                 self.set_meta("installed_at", &ts.to_string())?;
             }
@@ -941,7 +947,8 @@ impl Processor {
         self.add_in("human_minutes", h, &sc, &all4);
         self.add_in("active_minutes", active, &sc, &all4);
         self.add_in("turns", 1.0, &sc, &all4);
-        self.add_paid(&paid, usd, &sc);
+        let tool = self.session_tool(sid)?;
+        self.add_paid(&paid, usd, &sc, &tool);
         self.add_in("clean_streak", 1.0, &sc, &["all", "session"]);
         self.add_ctr("files_touched", &skey, sig.files as f64);
         self.add_ctr("lines_added", &skey, agg.lines_added as f64);
@@ -1073,14 +1080,22 @@ impl Processor {
         let all4 = ["all", "day", "week", "session"];
         self.add_in("person_days", dpd, &sc, &all4);
         self.add_in("human_minutes", dh, &sc, &all4);
-        self.add_paid(&add, dusd, &sc);
+        let tool = self.session_tool(&row.session_id)?;
+        self.add_paid(&add, dusd, &sc, &tool);
         self.upsert_daily(&sc)?;
         self.give_coins(coins_for_pd(old_total, old_total + dpd))
     }
 
-    /// Moves the money and per-occupation counters by credited work.
-    fn add_paid(&mut self, paid: &BTreeMap<String, f64>, usd: f64, sc: &Scopes) {
+    /// Which agent a session belongs to (claude_code, codex).
+    fn session_tool(&self, sid: &str) -> Result<String> {
+        Ok(self.conn.query_row("SELECT source FROM sessions WHERE id = ?1", [sid], |r| r.get(0)).optional()?.unwrap_or_else(|| "claude_code".into()))
+    }
+
+    /// Moves the money, per-agent and per-occupation counters by credited work.
+    fn add_paid(&mut self, paid: &BTreeMap<String, f64>, usd: f64, sc: &Scopes, tool: &str) {
         self.add_in("usd", usd, sc, &["all", "day", "week", "session"]);
+        self.add_in(&format!("usd:{tool}"), usd, sc, &["all", "day", "week"]);
+        self.add_in(&format!("minutes:{tool}"), paid.values().sum(), sc, &["all", "day", "week"]);
         for (o, m) in paid {
             self.add_in(&format!("work:{o}"), *m, sc, &["all", "day", "week"]);
         }

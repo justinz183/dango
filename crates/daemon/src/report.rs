@@ -36,6 +36,8 @@ struct Turn {
     work: BTreeMap<String, f64>,
     human_minutes: f64,
     usd: f64,
+    /// sessions.source: claude_code or codex.
+    tool: String,
 }
 
 impl Turn {
@@ -58,6 +60,7 @@ struct Sess {
     active: f64,
     last_end: Option<i64>,
     by_job: BTreeMap<String, f64>,
+    tool: String,
 }
 
 /// Everything a period's turns add up to.
@@ -66,6 +69,8 @@ struct Tally {
     turns: Vec<Turn>,
     sessions: HashMap<String, Sess>,
     by_job: BTreeMap<String, f64>,
+    /// Per agent: minutes, dollars, turns.
+    by_tool: BTreeMap<String, (f64, f64, usize)>,
     human: f64,
     usd: f64,
     active: f64,
@@ -95,8 +100,8 @@ fn midnight(tz: Tz, d: NaiveDate) -> i64 {
 
 fn tally(conn: &Connection, tz: Tz, start: i64, end: i64) -> Result<Tally> {
     let mut st = conn.prepare(
-        "SELECT session_id, started_at, ended_at, files_touched, test_run, test_passed, is_correction, work, usd
-         FROM turns WHERE ended_at >= ?1 AND ended_at < ?2 ORDER BY started_at",
+        "SELECT t.session_id, t.started_at, t.ended_at, t.files_touched, t.test_run, t.test_passed, t.is_correction, t.work, t.usd, s.source
+         FROM turns t JOIN sessions s ON s.id = t.session_id WHERE t.ended_at >= ?1 AND t.ended_at < ?2 ORDER BY t.started_at",
     )?;
     let turns: Vec<Turn> = st
         .query_map([start, end], |r| {
@@ -112,13 +117,14 @@ fn tally(conn: &Connection, tz: Tz, start: i64, end: i64) -> Result<Tally> {
                 human_minutes: work.values().sum(),
                 work,
                 usd: r.get(8)?,
+                tool: r.get(9)?,
             })
         })?
         .flatten()
         .collect();
     let mut t = Tally::default();
     for x in &turns {
-        let s = t.sessions.entry(x.session.clone()).or_insert_with(|| Sess { start: x.start, end: x.end, ..Default::default() });
+        let s = t.sessions.entry(x.session.clone()).or_insert_with(|| Sess { start: x.start, end: x.end, tool: x.tool.clone(), ..Default::default() });
         s.start = s.start.min(x.start);
         s.end = s.end.max(x.end);
         s.turns += 1;
@@ -133,6 +139,10 @@ fn tally(conn: &Connection, tz: Tz, start: i64, end: i64) -> Result<Tally> {
         s.last_end = Some(x.end);
         t.human += x.human_minutes;
         t.usd += x.usd;
+        let e = t.by_tool.entry(x.tool.clone()).or_default();
+        e.0 += x.human_minutes;
+        e.1 += x.usd;
+        e.2 += 1;
         t.files += x.files;
         if x.test_run {
             t.tests_run += 1;
@@ -168,6 +178,19 @@ impl Tally {
             .collect()
     }
 
+    /// Claude Code and Codex side by side, most dollars first.
+    fn tools(&self) -> Vec<Value> {
+        let mut list: Vec<_> = self.by_tool.iter().collect();
+        list.sort_by(|a, b| b.1 .1.total_cmp(&a.1 .1));
+        list.into_iter()
+            .map(|(src, (m, usd, n))| {
+                let (name, color) = crate::widget::tool_label(src);
+                json!({ "id": src, "name": name, "color": color, "hours": hours(*m), "usd": usd, "turns": n,
+                        "share": if self.usd > 0.0 { usd / self.usd } else { 0.0 } })
+            })
+            .collect()
+    }
+
     /// The occupation that earned most, as its display name.
     fn top_job(&self) -> Option<&str> {
         let t = Table::builtin();
@@ -191,6 +214,7 @@ impl Tally {
                 "hours": hours(s.human),
                 "usd": s.usd,
                 "turns": s.turns,
+                "tool": crate::widget::tool_label(&s.tool).0,
                 "job": top,
                 "job_name": Table::builtin().name(&top),
                 "color": color(&top),
@@ -245,6 +269,7 @@ fn base(kind: &str, t: &Tally, show_names: bool) -> serde_json::Map<String, Valu
         "night_turns": t.night,
         "usd": t.usd,
         "jobs": t.jobs(),
+        "tools": t.tools(),
         "rates": { "source": rates.source, "label": rates.label, "as_of": rates.as_of },
     });
     v.as_object().cloned().unwrap()
@@ -490,6 +515,15 @@ pub fn text(r: &Value) -> String {
     let mut out = vec![format!("{}  {}", r["label"].as_str().unwrap_or(""), c["name"].as_str().unwrap_or("")), "─".repeat(44)];
     out.push(format!("{}{}", c["headline"].as_str().unwrap_or(""), c["number"].as_str().filter(|n| !n.is_empty()).map(|n| format!(" {n}")).unwrap_or_default()));
     out.push(c["sub"].as_str().unwrap_or("").to_string());
+    let tools: Vec<String> = r["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|t| format!("{} {} · {}h", t["name"].as_str().unwrap_or(""), fmt_usd(t["usd"].as_f64().unwrap_or(0.0)), t["hours"]))
+        .collect();
+    if !tools.is_empty() {
+        out.push(tools.join("  |  "));
+    }
     if let Some(days) = r["days"].as_array().filter(|_| r["kind"] != "day") {
         let line: Vec<String> = days
             .iter()

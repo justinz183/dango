@@ -28,6 +28,35 @@ pub fn work_of(json: &str) -> BTreeMap<String, f64> {
     serde_json::from_str(json).unwrap_or_default()
 }
 
+/// Display name and colour of an agent (sessions.source).
+pub fn tool_label(source: &str) -> (&'static str, &'static str) {
+    match source {
+        "codex" => ("Codex", "#5b6b7a"),
+        _ => ("Claude Code", "#d97757"),
+    }
+}
+
+/// Claude Code and Codex side by side for turns that ended in [from, to):
+/// dollars, hours, turns and share of the dollars, biggest first.
+pub fn tools(conn: &Connection, from: i64, to: i64) -> Result<Vec<Value>> {
+    let k = ScoringConstants::builtin();
+    let mut st = conn.prepare(
+        "SELECT s.source, SUM(t.usd), SUM(t.credited_pd), COUNT(*) FROM turns t JOIN sessions s ON s.id = t.session_id
+         WHERE t.ended_at >= ?1 AND t.ended_at < ?2 GROUP BY s.source ORDER BY SUM(t.usd) DESC",
+    )?;
+    let rows: Vec<(String, f64, f64, i64)> =
+        st.query_map([from, to], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.flatten().collect();
+    let total: f64 = rows.iter().map(|r| r.1).sum();
+    Ok(rows
+        .into_iter()
+        .map(|(src, usd, pd, n)| {
+            let (name, color) = tool_label(&src);
+            json!({ "id": src, "name": name, "color": color, "usd": usd, "hours": pd * k.caps.minutes_per_day / 60.0, "turns": n,
+                    "share": if total > 0.0 { usd / total } else { 0.0 } })
+        })
+        .collect())
+}
+
 /// Dollars per day from the `usd` counters, for days on or after `from`.
 pub fn usd_by_day(conn: &Connection, from: chrono::NaiveDate) -> Result<HashMap<String, f64>> {
     let mut st = conn.prepare("SELECT substr(scope, 5), value FROM counters WHERE metric = 'usd' AND scope LIKE 'day:%' AND scope >= ?1")?;
@@ -150,8 +179,8 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         .collect();
 
     let mut st = conn.prepare(
-        "SELECT ended_at, work, credited_pd, files_touched, test_run, test_passed, usd FROM turns
-         WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 10",
+        "SELECT t.ended_at, t.work, t.credited_pd, t.files_touched, t.test_run, t.test_passed, t.usd, s.source FROM turns t
+         JOIN sessions s ON s.id = t.session_id WHERE t.ended_at IS NOT NULL ORDER BY t.ended_at DESC LIMIT 10",
     )?;
     let turns: Vec<Value> = st
         .query_map([], |r| {
@@ -163,13 +192,14 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
                 r.get::<_, i64>(4)?,
                 r.get::<_, Option<i64>>(5)?,
                 r.get::<_, f64>(6)?,
+                r.get::<_, String>(7)?,
             ))
         })?
         .flatten()
-        .map(|(at, work, pd, files, test_run, passed, usd)| {
+        .map(|(at, work, pd, files, test_run, passed, usd, src)| {
             let job = occupation::main(&work_of(&work)).unwrap_or_default();
             json!({
-                "at": at, "job": job, "name": t.name(&job), "color": t.get(&job).map(|j| j.color.as_str()), "hours": hours(pd),
+                "at": at, "tool": tool_label(&src).0, "job": job, "name": t.name(&job), "color": t.get(&job).map(|j| j.color.as_str()), "hours": hours(pd),
                 "usd": usd, "person_days": pd, "files": files, "test_passed": (test_run == 1).then(|| passed == Some(1)),
             })
         })
@@ -199,6 +229,8 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         "ranks": RANKS.iter().map(|x| json!({ "name": x.name, "name_en": x.name_en, "xp": x.xp, "color": x.color })).collect::<Vec<_>>(),
         "days": days,
         "jobs": jobs(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX)?,
+        "tools": tools(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX)?,
+        "tools_all": tools(conn, 0, i64::MAX)?,
         "turns": turns,
         "activity": { "working": working, "subagents": subagents, "last_event": last_event },
     }))

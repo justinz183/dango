@@ -1,9 +1,10 @@
 //! History import (SPEC 4.3): replays Claude Code transcripts under
-//! ~/.claude/projects into events, offline, with the same rules as the live
-//! hooks. Only activity before the first live event is imported, so running
-//! it again never double-counts. Transcript content stays in memory.
+//! ~/.claude/projects and Codex rollouts under ~/.codex/sessions into
+//! events, offline, with the same rules as the live hooks. Only activity
+//! before each tool's first live event is imported, so running it again
+//! never double-counts. Transcript content stays in memory.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -14,7 +15,7 @@ use serde_json::{json, Value};
 use shadowcorp_core::{classify, occupation};
 use shadowcorp_core::event::{Event, Kind, Payload, Source};
 
-use crate::capture::{from_claude_hook, CaptureEnv};
+use crate::capture::{command_text, edit_hook, from_claude_hook, CaptureEnv};
 use crate::ingest::{Processor, Result};
 use crate::paths::{short_hash, Paths};
 
@@ -221,17 +222,188 @@ pub fn file_events(path: &Path, parent: Option<&str>, cutoff: i64, paths: &Paths
     out
 }
 
-/// Imports everything before `cutoff` (ms). Runs in one transaction.
-pub fn run(p: &mut Processor, paths: &Paths, claude_dir: &Path, cutoff: i64) -> Result<Report> {
+/// Every Codex rollout file (one per thread), live and archived.
+pub fn codex_files(codex_dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else { return };
+        for p in entries.flatten().map(|e| e.path()) {
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                out.push(p);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&codex_dir.join("sessions"), &mut out);
+    walk(&codex_dir.join("archived_sessions"), &mut out);
+    out.sort();
+    out
+}
+
+/// The Claude Code-shaped hooks for one Codex step (`item_completed`).
+fn codex_step(item: &Value, cwd: &str) -> Vec<Value> {
+    let s = |k: &str| item.get(k).and_then(Value::as_str).unwrap_or("");
+    let tool = |name: &str| json!({ "hook_event_name": "PostToolUse", "tool_name": name, "tool_input": {} });
+    match s("type") {
+        "CommandExecution" => {
+            let ok = item.get("exit_code").and_then(Value::as_i64).unwrap_or(0) == 0;
+            let cmd = item.get("command").map(command_text).unwrap_or_default();
+            vec![json!({ "hook_event_name": if ok { "PostToolUse" } else { "PostToolUseFailure" }, "tool_name": "Bash", "tool_input": { "command": cmd } })]
+        }
+        "FileChange" if s("status") == "completed" => item
+            .get("changes")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .map(|(path, ch)| {
+                let text = |k: &str| ch.get(k).and_then(Value::as_str).unwrap_or("");
+                let (new, lines): (bool, Vec<String>) = match text("type") {
+                    "add" => (true, text("content").lines().map(|l| format!("+{l}")).collect()),
+                    "delete" => (false, text("content").lines().map(|l| format!("-{l}")).collect()),
+                    _ => (false, text("unified_diff").lines().filter(|l| !l.starts_with("+++") && !l.starts_with("---")).filter(|l| l.starts_with('+') || l.starts_with('-')).map(str::to_string).collect()),
+                };
+                edit_hook(cwd, path, new, lines)
+            })
+            .collect(),
+        "McpToolCall" if s("status") == "completed" => vec![tool(&format!("mcp__{}__{}", s("server"), s("tool")))],
+        "WebSearch" => vec![tool("WebSearch")],
+        "Extension" if s("kind") == "web.search" => match item.get("action").and_then(|a| a.get("type")).and_then(Value::as_str) {
+            Some("search") => vec![tool("WebSearch")],
+            Some("openPage") => vec![tool("WebFetch")],
+            _ => Vec::new(),
+        },
+        "SubAgentActivity" if s("kind") == "started" => vec![tool("Agent")],
+        _ => Vec::new(),
+    }
+}
+
+/// Events for one Codex rollout. Each step is an `item_completed` with its
+/// `turn_id`; turns end with `task_complete` or `turn_aborted`. A spawned
+/// sub-agent's steps count toward the parent session; Codex's own reviewer
+/// threads ("guardian") have no steps.
+pub fn codex_file_events(path: &Path, cutoff: i64, paths: &Paths) -> Vec<Event> {
+    let Ok(f) = fs::File::open(path) else { return Vec::new() };
+    let env = CaptureEnv { paths, now_ms: 0, nonce: String::new(), git_lookup: false };
+    let mut out = Vec::new();
+    let (mut sid, mut cwd, mut sub) = (None::<String>, String::new(), false);
+    let (mut first_ts, mut last_ts) = (None::<i64>, 0i64);
+    let mut prompted: HashSet<String> = HashSet::new();
+    let mut last_prompt: Option<(String, u32)> = None;
+    let mut n = 0usize;
+    let codex_event = |seed: &str, ts: i64, kind: Kind, sid: &str| {
+        let mut ev = bf_event(&format!("codex\0{seed}"), ts, kind, sid);
+        ev.payload.origin = Some(Source::Codex);
+        ev
+    };
+    for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
+        let Ok(e) = serde_json::from_str::<Value>(&line) else { continue };
+        let Some(ts) = ts_of(&e) else { continue };
+        let p = e.get("payload").cloned().unwrap_or(Value::Null);
+        let ty = e.get("type").and_then(Value::as_str).unwrap_or("");
+        if ty == "session_meta" && sid.is_none() {
+            sid = p.get("session_id").or_else(|| p.get("id")).and_then(Value::as_str).map(str::to_string);
+            cwd = p.get("cwd").and_then(Value::as_str).unwrap_or("").to_string();
+            sub = p.get("source").and_then(|s| s.get("subagent")).is_some();
+            continue;
+        }
+        let (Some(sid), "event_msg") = (sid.clone(), ty) else { continue };
+        if ts >= cutoff {
+            continue;
+        }
+        if first_ts.is_none() && !sub {
+            first_ts = Some(ts);
+            let mut ev = codex_event(&format!("{sid}\0{}\0start", path.display()), ts, Kind::SessionStart, &sid);
+            ev.payload.session_source = Some("startup".into());
+            out.push(ev);
+        }
+        last_ts = ts;
+        let turn = p.get("turn_id").and_then(Value::as_str).unwrap_or("").to_string();
+        match p.get("type").and_then(Value::as_str).unwrap_or("") {
+            "task_complete" | "turn_aborted" if !sub && !turn.is_empty() => {
+                let mut ev = codex_event(&format!("{sid}\0{turn}\0end"), ts, Kind::TurnEnd, &sid);
+                ev.turn_id = Some(turn);
+                out.push(ev);
+            }
+            "item_completed" => {
+                let item = p.get("item").cloned().unwrap_or(Value::Null);
+                if item.get("type").and_then(Value::as_str) == Some("UserMessage") {
+                    let text: String = item
+                        .get("content")
+                        .and_then(Value::as_array)
+                        .map(|c| c.iter().filter_map(|b| b.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join("\n"))
+                        .unwrap_or_default();
+                    let t = text.trim_start();
+                    if sub || turn.is_empty() || t.is_empty() || t.starts_with('<') || !prompted.insert(turn.clone()) {
+                        continue;
+                    }
+                    let fp = text.trim().to_string();
+                    let repeat = match &last_prompt {
+                        Some((q, n)) if *q == fp => n + 1,
+                        _ => 1,
+                    };
+                    last_prompt = Some((fp, repeat));
+                    let mut ev = codex_event(&format!("{sid}\0{turn}\0prompt"), ts, Kind::Prompt, &sid);
+                    ev.turn_id = Some(turn);
+                    ev.payload = Payload {
+                        origin: Some(Source::Codex),
+                        task_class: Some(classify::classify_prompt(&text)),
+                        is_correction: Some(classify::is_correction(&text)),
+                        prompt_repeat: Some(repeat),
+                        finance: occupation::is_finance_prompt(&text).then_some(true),
+                        translate: occupation::is_translate_prompt(&text).then_some(true),
+                        ..Default::default()
+                    };
+                    ev.cwd_hash = (!cwd.is_empty()).then(|| short_hash(&cwd));
+                    out.push(ev);
+                    continue;
+                }
+                let id = item.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+                for (i, mut hook) in codex_step(&item, &cwd).into_iter().enumerate() {
+                    hook["session_id"] = json!(sid);
+                    hook["cwd"] = json!(cwd);
+                    let Some(mut ev) = from_claude_hook(&hook, b"", &env) else { continue };
+                    n += 1;
+                    let fresh = codex_event(&format!("{sid}\0{id}\0{i}\0{n}\0tool"), ts, Kind::Tool, &sid);
+                    ev.id = fresh.id;
+                    ev.ts = fresh.ts;
+                    ev.source = Source::Backfill;
+                    ev.payload.origin = Some(Source::Codex);
+                    ev.turn_id = (!sub && !turn.is_empty()).then(|| turn.clone());
+                    out.push(ev);
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(sid) = sid.filter(|_| !sub && first_ts.is_some() && cutoff - last_ts > OPEN_SESSION_MS) {
+        let mut ev = codex_event(&format!("{sid}\0{}\0end", path.display()), last_ts, Kind::SessionEnd, &sid);
+        ev.payload.reason = Some("other".into());
+        out.push(ev);
+    }
+    out
+}
+
+/// Imports Claude Code history before `cutoff` and, when `codex` is given
+/// (its directory and cutoff), Codex history too. Runs in one transaction.
+pub fn run(p: &mut Processor, paths: &Paths, claude_dir: &Path, cutoff: i64, codex: Option<(&Path, i64)>) -> Result<Report> {
     let started = Instant::now();
     let files = transcript_files(claude_dir);
     let mut events: Vec<Event> = Vec::new();
     for (f, parent) in &files {
         events.extend(file_events(f, parent.as_deref(), cutoff, paths));
     }
+    let mut n_files = files.len();
+    if let Some((dir, codex_cutoff)) = codex {
+        let rollouts = codex_files(dir);
+        n_files += rollouts.len();
+        for f in &rollouts {
+            events.extend(codex_file_events(f, codex_cutoff, paths));
+        }
+    }
     // Stable sort keeps per-file order for equal timestamps.
     events.sort_by_key(|e| e.ts_ms().unwrap_or(0));
-    let mut report = Report { files: files.len(), events: events.len(), ..Default::default() };
+    let mut report = Report { files: n_files, events: events.len(), ..Default::default() };
     p.begin()?;
     for ev in &events {
         match p.handle(ev) {

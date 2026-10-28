@@ -1,0 +1,5 @@
+{"timestamp": "2026-10-27T03:06:05.000Z", "type": "session_meta", "payload": {"id": "th-sub", "session_id": "th-main", "cwd": "/w/vid", "source": {"subagent": {"thread_spawn": {"parent_thread_id": "th-main", "depth": 1, "agent_nickname": "a", "agent_path": "x", "agent_role": null}}}}}
+{"timestamp": "2026-10-27T03:06:06.000Z", "type": "event_msg", "payload": {"type": "task_started", "turn_id": "s1"}}
+{"timestamp": "2026-10-27T03:07:00.000Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "s1", "thread_id": "th-main", "completed_at_ms": 0, "item": {"type": "UserMessage", "id": "su", "content": [{"type": "text", "text": "analyze the clip"}]}}}
+{"timestamp": "2026-10-27T03:08:00.000Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "s1", "thread_id": "th-main", "completed_at_ms": 0, "item": {"type": "CommandExecution", "id": "sc", "command": ["/bin/zsh", "-lc", "python3 analyze.py"], "exit_code": 0}}}
+{"timestamp": "2026-10-27T03:08:30.000Z", "type": "event_msg", "payload": {"type": "task_complete", "turn_id": "s1"}}

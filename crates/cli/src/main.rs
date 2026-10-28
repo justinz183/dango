@@ -21,8 +21,7 @@ use daemon::spool;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use shadowcorp_core::event::{Event, Kind};
-use shadowcorp_core::progress::stage_for;
-use shadowcorp_core::render::{fmt_pd, settlement_box};
+use shadowcorp_core::render::{fmt_pd, fmt_usd, settlement_box};
 
 const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
 
@@ -51,7 +50,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let paths = Paths::from_env();
     let code = match args.first().map(String::as_str) {
-        Some("hook") => hook::run(&paths),
+        Some("hook") => hook::run(&paths, args.get(1).map(String::as_str) == Some("--codex")),
         Some(cmd) => match dispatch(cmd, &args[1..], &paths) {
             Ok(code) => code,
             Err(e) => {
@@ -262,27 +261,33 @@ fn locked_processor(paths: &Paths, mode: Mode) -> Result<(fs::File, Processor)> 
 }
 
 fn run_backfill(paths: &Paths, args: &[String]) -> Result<i32> {
-    let claude_dir = match args.iter().position(|a| a == "--claude-dir") {
-        Some(i) => PathBuf::from(args.get(i + 1).ok_or("--claude-dir needs a path")?),
-        None => PathBuf::from(std::env::var("HOME")?).join(".claude"),
+    let dir = |flag: &str, default: &str| -> Result<PathBuf> {
+        Ok(match args.iter().position(|a| a == flag) {
+            Some(i) => PathBuf::from(args.get(i + 1).ok_or(format!("{flag} needs a path"))?),
+            None => PathBuf::from(std::env::var("HOME")?).join(default),
+        })
     };
-    if !claude_dir.join("projects").is_dir() {
-        println!("没有找到 {}/projects，跳过回填。", claude_dir.display());
+    let (claude_dir, codex_dir) = (dir("--claude-dir", ".claude")?, dir("--codex-dir", ".codex")?);
+    let codex = Config::load(paths).sources.codex && codex_dir.join("sessions").is_dir();
+    if !claude_dir.join("projects").is_dir() && !codex {
+        println!("没有找到 {}/projects 或 {}/sessions，跳过回填。", claude_dir.display(), codex_dir.display());
         return Ok(0);
     }
     let (_lock, mut p) = locked_processor(paths, Mode::Backfill)?;
-    let cutoff = db::get_meta(&p.conn, "live_since")?.and_then(|v| v.parse().ok()).unwrap_or_else(now_ms);
-    println!("正在整理你的公司历史…");
-    let r = backfill::run(&mut p, paths, &claude_dir, cutoff)?;
+    let since = |key: &str| -> Result<i64> { Ok(db::get_meta(&p.conn, key)?.and_then(|v| v.parse().ok()).unwrap_or_else(now_ms)) };
+    let (cutoff, codex_cutoff) = (since("live_since")?, since("live_since:codex")?);
+    println!("正在整理 Claude Code{} 的历史…", if codex { " 和 Codex" } else { "" });
+    let r = backfill::run(&mut p, paths, &claude_dir, cutoff, codex.then_some((codex_dir.as_path(), codex_cutoff)))?;
     let total = snapshot::counter(&p.conn, "person_days", "all");
     let unlocked: i64 = p.conn.query_row("SELECT COUNT(DISTINCT achievement_id) FROM unlocks", [], |r| r.get(0))?;
-    let stage = stage_for(total);
     p.conn.execute("UPDATE unlocks SET celebrated = 1 WHERE backfilled = 1", [])?;
+    let usd = |m: &str| fmt_usd(snapshot::counter(&p.conn, m, "all"));
     println!(
-        "你已经积累了 {} 人日，解锁了 {unlocked} 个徽章，公司阶段 Lv.{} {}。",
-        fmt_pd(total),
-        stage.level,
-        stage.name
+        "累计 {}（Claude Code {} · Codex {}），{} 人日，解锁了 {unlocked} 个徽章。",
+        usd("usd"),
+        usd("usd:claude_code"),
+        usd("usd:codex"),
+        fmt_pd(total)
     );
     let rate = if r.secs > 0.0 { r.events as f64 / r.secs } else { 0.0 };
     println!("（{} 个 transcript，{} 个事件，新增 {}，用时 {:.2}s，{:.0} 事件/秒）", r.files, r.events, r.new_events, r.secs, rate);
@@ -364,7 +369,7 @@ fn rebuild(paths: &Paths) -> Result<i32> {
     let new = db::open(&tmp)?;
     {
         let mut st = old.prepare(
-            "SELECT key, value FROM meta WHERE key IN ('installed_at', 'live_since', 'display_title') OR key LIKE 'spool_offset:%'",
+            "SELECT key, value FROM meta WHERE key IN ('installed_at', 'live_since', 'display_title') OR key LIKE 'spool_offset:%' OR key LIKE 'live_since:%'",
         )?;
         for (k, v) in st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.flatten() {
             db::set_meta(&new, &k, &v)?;

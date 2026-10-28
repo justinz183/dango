@@ -24,6 +24,13 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
     let row = |k: &str, v: String| format!("  {}{v}", pad(k, 10));
     let mut out = vec![format!("产出 · {}", o.rank.label()), "─".repeat(44)];
     out.push(row("总产出", format!("{} · {} 的活 · {} 人日", fmt_usd(o.total_usd), fmt_hours(o.total_hours), fmt_pd(o.total_pd))));
+    let tools: Vec<String> = daemon::widget::tools(conn, 0, i64::MAX)?
+        .iter()
+        .map(|t| format!("{} {} · {}", t["name"].as_str().unwrap_or(""), fmt_usd(t["usd"].as_f64().unwrap_or(0.0)), fmt_hours(t["hours"].as_f64().unwrap_or(0.0))))
+        .collect();
+    if !tools.is_empty() {
+        out.push(row("分工具", tools.join(" · ")));
+    }
     let jobs = daemon::widget::jobs(conn, 0, i64::MAX)?;
     if !jobs.is_empty() {
         let top: Vec<String> = jobs

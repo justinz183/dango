@@ -1,0 +1,15 @@
+{
+  "description": "ShadowCorp: prices finished Codex work by who you would have hired, plus XP and ranks. Copy to ~/.codex/hooks.json (use the absolute path of shadowcorp if Codex does not see ~/.local/bin), then trust it with /hooks.",
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "async": true }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "async": true }] }],
+    "PostToolUse": [
+      { "matcher": "Bash|apply_patch|mcp__.*", "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "async": true }] }
+    ],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "async": true }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "async": true }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "timeout": 5 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook --codex", "timeout": 2 }] }]
+  }
+}

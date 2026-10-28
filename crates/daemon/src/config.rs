@@ -67,6 +67,7 @@ pub struct General {
 #[serde(default)]
 pub struct Sources {
     pub claude_code: bool,
+    pub codex: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -92,7 +93,7 @@ impl Default for General {
 }
 impl Default for Sources {
     fn default() -> Sources {
-        Sources { claude_code: true }
+        Sources { claude_code: true, codex: true }
     }
 }
 impl Default for Ceremony {
@@ -123,7 +124,7 @@ mod tests {
     fn default_file_parses() {
         let c: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
         assert_eq!(c.general.weekly_target, 0.0);
-        assert!(c.sources.claude_code);
+        assert!(c.sources.claude_code && c.sources.codex);
         assert_eq!(c.ceremony.grand_cooldown_hours, 4.0);
         assert_eq!(c.character.name, "Claude");
     }

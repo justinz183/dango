@@ -30,7 +30,16 @@ let barToday = NSColor(red: 0.65, green: 0.88, blue: 0.81, alpha: 1)
 struct DayPoint { var day = ""; var hours = 0.0; var usd = 0.0; var turns = 0 }
 struct RankStep { var name = ""; var xp = 0; var color = NSColor.gray }
 struct JobShare { var name = ""; var hours = 0.0; var usd = 0.0; var rate = 0.0; var share = 0.0; var color = NSColor.gray }
-struct TurnRow { var at = 0.0; var name = ""; var hours = 0.0; var usd = 0.0; var color = NSColor.gray; var files = 0; var testPassed: Bool? }
+struct TurnRow { var at = 0.0; var tool = ""; var name = ""; var hours = 0.0; var usd = 0.0; var color = NSColor.gray; var files = 0; var testPassed: Bool? }
+/// Claude Code or Codex: what each agent's work would have cost.
+struct ToolShare { var name = ""; var usd = 0.0; var hours = 0.0; var share = 0.0; var color = NSColor.gray }
+
+func toolShares(_ list: [[String: Any]]) -> [ToolShare] {
+    list.map {
+        ToolShare(name: $0["name"] as? String ?? "", usd: $0["usd"] as? Double ?? 0, hours: $0["hours"] as? Double ?? 0,
+                  share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
+    }
+}
 
 struct Model {
     var totalHours = 0.0
@@ -60,6 +69,7 @@ struct Model {
     var days: [DayPoint] = []
     var ranks: [RankStep] = []
     var jobs: [JobShare] = []
+    var tools: [ToolShare] = []
     var turns: [TurnRow] = []
 }
 
@@ -112,8 +122,9 @@ func loadModel() -> Model? {
         JobShare(name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
                  rate: $0["rate"] as? Double ?? 0, share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
     }
+    m.tools = toolShares(list("tools"))
     m.turns = list("turns").map {
-        TurnRow(at: $0["at"] as? Double ?? 0, name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
+        TurnRow(at: $0["at"] as? Double ?? 0, tool: $0["tool"] as? String ?? "", name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
                 color: color(hex: $0["color"] as? String ?? ""), files: $0["files"] as? Int ?? 0, testPassed: $0["test_passed"] as? Bool)
     }
     return m
@@ -375,6 +386,34 @@ final class DashboardView: NSView {
         }
         y += 58 + 22
 
+        // Claude Code and Codex side by side over the same 30 days.
+        let tools = m.tools.filter { $0.usd > 0 }
+        if !tools.isEmpty {
+            section("Claude Code 与 Codex（\(max(m.days.count, 1)) 天）", y, draw: draw)
+            y += 22
+            if draw {
+                var x = pad
+                for t in tools {
+                    let w = max(3, inner * CGFloat(t.share))
+                    t.color.setFill()
+                    NSBezierPath(roundedRect: NSRect(x: x, y: y, width: min(w, pad + inner - x), height: 8), xRadius: 4, yRadius: 4).fill()
+                    x += w + 2
+                }
+            }
+            y += 16
+            for t in tools {
+                if draw {
+                    t.color.setFill()
+                    NSBezierPath(ovalIn: NSRect(x: pad, y: y + 5, width: 7, height: 7)).fill()
+                    put(text(t.name, size: 11), pad + 13, y)
+                    let detail = String(format: "%@ · %@ · %.0f%%", fmtUSD(t.usd), fmtHours(t.hours), t.share * 100)
+                    put(text(detail, size: 10, color: secondary, mono: true), W - pad, y + 1, align: 2)
+                }
+                y += 19
+            }
+            y += 14
+        }
+
         // 30-day chart: one series, direct labels on the best day and today,
         // hover for any other day.
         let avg = m.days.isEmpty ? 0 : m.days.map(\.usd).reduce(0, +) / Double(m.days.count)
@@ -433,7 +472,7 @@ final class DashboardView: NSView {
                 NSBezierPath(ovalIn: NSRect(x: pad + 76, y: y + 5, width: 6, height: 6)).fill()
                 let name = text(t.name, size: 11)
                 put(name, pad + 88, y)
-                var tags: [String] = [fmtHours(t.hours)]
+                var tags: [String] = [t.tool == "Codex" ? "Codex" : "Claude", fmtHours(t.hours)]
                 if t.files > 0 { tags.append("\(t.files) 个文件") }
                 if let p = t.testPassed { tags.append(p ? "测试通过" : "测试未过") }
                 put(text(tags.joined(separator: " · "), size: 10, color: secondary), pad + 96 + name.size().width, y + 1)
@@ -1002,7 +1041,18 @@ class CardView: NSView {
             put(text(ch.s("number"), size: 92, weight: .bold, color: ink, mono: true), tx - 4, 166)
         }
         put(text(ch.s("sub"), size: 28, color: ink2, mono: true), tx, 284)
-        return 356
+        // Who did it: Claude Code and Codex, each with its dollars and share.
+        let tools = toolShares(r.l("tools")).filter { $0.usd > 0 }
+        guard !tools.isEmpty else { return 356 }
+        var x = tx
+        for t in tools {
+            t.color.setFill()
+            NSBezierPath(ovalIn: NSRect(x: x, y: 336, width: 16, height: 16)).fill()
+            let label = text(String(format: "%@ %@ · %.0f%%", t.name, fmtUSD(t.usd), t.share * 100), size: 24, color: ink2)
+            put(label, x + 24, 330)
+            x += 24 + label.size().width + 32
+        }
+        return 388
     }
 
     func sessions(_ r: Report, _ y0: CGFloat, empty: String) -> CGFloat {

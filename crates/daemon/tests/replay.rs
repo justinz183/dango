@@ -277,3 +277,73 @@ fn week_and_month_reports_from_fixtures() {
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
 }
+
+#[test]
+fn codex_history_backfills_and_splits_by_tool() {
+    let paths = home("codex");
+    for e in &events(&paths) {
+        spool::append(&paths, e).unwrap();
+    }
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    processor(&paths).ingest_spool(&paths).unwrap();
+    let mut p = Processor::new(db::open(&paths.db).unwrap(), Mode::Backfill, tz, Config::default());
+    let codex = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/codex");
+    let none = paths.home.join("no-claude-dir");
+    let r = daemon::backfill::run(&mut p, &paths, &none, i64::MAX, Some((&codex, i64::MAX))).unwrap();
+    assert_eq!(r.files, 3);
+    assert!(r.new_events > 10, "{r:?}");
+
+    let q = |sql: &str| -> String { p.conn.query_row(sql, [], |r| r.get::<_, String>(0)).unwrap() };
+    assert_eq!(q("SELECT source FROM sessions WHERE id = 'th-main'"), "codex");
+    assert_eq!(q("SELECT COUNT(*) || '' FROM sessions WHERE id IN ('th-sub', 'th-g')"), "0", "sub-agents count toward the parent");
+    assert_eq!(q("SELECT COUNT(*) || '' FROM turns WHERE session_id = 'th-main' AND ended_at IS NOT NULL"), "2");
+    let work: std::collections::BTreeMap<String, f64> = serde_json::from_str(&q("SELECT work FROM turns WHERE id = 't1'")).unwrap();
+    assert_eq!(shadowcorp_core::occupation::main(&work).as_deref(), Some("video"), "{work:?}");
+    for job in ["swe", "writer", "research", "data"] {
+        assert!(work.contains_key(job), "{job} missing from {work:?}");
+    }
+    // ffmpeg 15 + whisper 20 + turn base 5 + one sub-agent 12.
+    assert!((work["video"] - 52.0).abs() < 1e-9, "{work:?}");
+    let failed: String = q("SELECT test_passed || '' FROM turns WHERE id = 't2'");
+    assert_eq!(failed, "0", "cargo test exited 101");
+
+    let codex_usd = p.ctr("usd:codex", "all");
+    let sum: f64 = p.conn.query_row("SELECT SUM(t.usd) FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.source = 'codex'", [], |r| r.get(0)).unwrap();
+    assert!(codex_usd > 0.0 && (codex_usd - sum).abs() < 1e-6, "{codex_usd} vs {sum}");
+    assert!(p.ctr("usd:claude_code", "all") > 0.0);
+    assert!((p.ctr("usd:claude_code", "all") + codex_usd - p.ctr("usd", "all")).abs() < 1e-6, "tools add up");
+    let mins: f64 = p.conn.query_row("SELECT SUM(t.credited_pd) * 480 FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.source = 'codex'", [], |r| r.get(0)).unwrap();
+    assert!((p.ctr("minutes:codex", "all") - mins).abs() < 1e-6);
+    let dump: String = p.conn.query_row("SELECT group_concat(payload) FROM events", [], |r| r.get(0)).unwrap();
+    assert!(!dump.contains("视频") && !dump.contains("secret") && !dump.contains("/w/vid"), "no prompts, queries or paths");
+
+    let claude = paths.home.join("no-claude-dir");
+    let day = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false).unwrap();
+    let tools = day["tools"].as_array().unwrap();
+    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"Codex") && names.contains(&"Claude Code"), "{names:?}");
+    let share: f64 = tools.iter().map(|t| t["share"].as_f64().unwrap()).sum();
+    assert!((share - 1.0).abs() < 1e-6);
+    assert!(daemon::report::text(&day).contains("Codex $"));
+    let w = daemon::widget::data(&p.conn, tz, &Config::default(), 1_793_200_000_000).unwrap();
+    assert_eq!(w["tools_all"].as_array().unwrap().len(), 2);
+
+    // Running it again changes nothing.
+    let again = daemon::backfill::run(&mut p, &paths, &none, i64::MAX, Some((&codex, i64::MAX))).unwrap();
+    assert_eq!(again.new_events, 0);
+}
+
+#[test]
+fn each_tool_has_its_own_live_cutoff() {
+    let paths = home("cutoff");
+    let mut p = processor(&paths);
+    let env = CaptureEnv { paths: &paths, now_ms: 1_793_000_000_000, nonce: String::new(), git_lookup: false };
+    let hook = serde_json::json!({ "hook_event_name": "UserPromptSubmit", "session_id": "cx", "turn_id": "t", "prompt": "hi" });
+    for ev in daemon::capture::from_codex_hook(&hook, b"x", &env) {
+        p.begin().unwrap();
+        p.handle(&ev).unwrap();
+        p.commit().unwrap();
+    }
+    assert_eq!(db::get_meta(&p.conn, "live_since:codex").unwrap().as_deref(), Some("1793000000000"));
+    assert_eq!(db::get_meta(&p.conn, "live_since").unwrap(), None, "Claude Code history is still open for backfill");
+}

@@ -60,11 +60,11 @@ shadowcorp widget
 
 | 部分 | 状态 |
 | --- | --- |
-| 采集：Claude Code 插件 hooks、spool、SQLite、历史回填 | ✅ |
+| 采集：Claude Code 插件 hooks、Codex hooks、spool、SQLite、两边的历史回填 | ✅ |
 | 计分：按职业计时、BLS 时薪折算 $、XP 与段位 | ✅ |
-| 展示：桌面小部件、终端结算框、状态栏、`stats` | ✅ |
+| 展示：桌面小部件、终端结算框、状态栏、`stats`；Claude Code 和 Codex 分开显示 | ✅ |
 | 旧设定（成就、公司阶段、网页面板 `shadowcorp panel`） | 仍可用，不再是主界面 |
-| Codex / git 接入、安装脚本、Windows / Linux | 未开始 |
+| git 接入、安装脚本、Windows / Linux | 未开始 |
 
 ## 构建与试用
 
@@ -78,7 +78,7 @@ cargo build --release
 SHADOWCORP_HOME=/tmp/sc-demo SHADOWCORP_TZ=+08:00 ./target/release/shadowcorp replay fixtures/hooks/claude_code
 ```
 
-把你的 Claude Code 历史导入一个临时目录（只读 `~/.claude/projects`）：
+把你的 Claude Code 和 Codex 历史导入一个临时目录（只读 `~/.claude/projects` 和 `~/.codex/sessions`）：
 
 ```bash
 SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp backfill
@@ -101,6 +101,16 @@ SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp badges
 5. 可选状态栏，加进 `~/.claude/settings.json`：`{ "statusLine": { "type": "command", "command": "shadowcorp status --claude" } }`
 
 守护进程没运行时事件照样落盘，下次启动补算；结算框只在守护进程运行时出现。
+
+## 接入 Codex
+
+1. 把 [plugins/codex/hooks.json](plugins/codex/hooks.json) 复制到 `~/.codex/hooks.json`，把里面的 `shadowcorp` 换成绝对路径（Codex 桌面版不一定能找到 `~/.local/bin`）。
+2. 在 Codex 里用 `/hooks` 审阅并信任这些 hook（Codex 要求非托管 hook 先信任才会运行，改过文件要重新信任）。
+3. `shadowcorp backfill` 会一起导入 `~/.codex/sessions` 的历史。每个工具各有自己的分界点（第一个实时事件），所以重复跑不会重复计。信任 hook 之后再跑一次，可以补上中间那段。
+
+Codex 的每一步按和 Claude Code 一样的规则归给职业：命令（`Bash` / unified exec）、`apply_patch`（按文件拆开）、MCP 工具、子 agent。日报卡、周报卡、月报卡头部、仪表盘和 `stats` 都会分开写出 Claude Code 和 Codex 各自的 $ 和占比。
+
+已知限制：Codex 的结算框会以提示（warning）的样式出现；Codex 内置的网页搜索不触发 hook，只有回填时能看到；Codex 的电脑操作（`cua_repl` 的点击、滚动）不计钱，和 Claude 里点浏览器一样。
 
 ## 网页面板（旧）
 
