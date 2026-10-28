@@ -345,6 +345,12 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert_eq!(views["codex"]["days"].as_array().unwrap().len(), 30);
     let codex_hours = views["codex"]["total"]["hours"].as_f64().unwrap();
     assert!((codex_hours - mins / 60.0).abs() < 1e-6);
+    // Shorter windows never show more than the 30-day one; today has 24 hours.
+    assert_eq!(views["codex"]["hours"].as_array().unwrap().len(), 24);
+    let sum = |v: &Value| v.as_array().unwrap().iter().map(|j| j["usd"].as_f64().unwrap()).sum::<f64>();
+    let (j1, j7) = (sum(&views["codex"]["jobs_1d"]), sum(&views["codex"]["jobs_7d"]));
+    assert!(j1 <= j7 + 1e-9 && j7 <= codex_jobs + 1e-9, "{j1} {j7} {codex_jobs}");
+    assert!(w["tools_7d"].is_array() && w["tools_1d"].is_array());
 
     // Reports for one agent.
     let only = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, Some("codex")).unwrap();

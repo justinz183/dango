@@ -8,7 +8,7 @@
 //
 // Build: apps/widget/build.sh (binary) or apps/widget/bundle.sh (ShadowCorp.app)
 // Snapshots (no window): --snapshot out.png, --snapshot-dashboard out.png
-// [--board claude_code|codex] [--open-jobs], --snapshot-pet out.png [--state S]
+// [--board claude_code|codex] [--range 1|7|30] [--open-jobs], --snapshot-pet out.png [--state S]
 // [--job ID] [--helpers N] [--receipt] [--backdrop] (transparent unless --backdrop)
 
 import AppKit
@@ -68,8 +68,15 @@ struct Model {
     var subagents = 0
     var generatedAt = 0.0
     var days: [DayPoint] = []
+    /// Today's dollars by local hour (24 values).
+    var hours: [Double] = []
+    /// Who the work would have needed, over 30 / 7 days and today.
     var jobs: [JobShare] = []
+    var jobs7: [JobShare] = []
+    var jobs1: [JobShare] = []
     var tools: [ToolShare] = []
+    var tools7: [ToolShare] = []
+    var tools1: [ToolShare] = []
     var turns: [TurnRow] = []
     /// The same dashboard for one agent ("claude_code", "codex"), from
     /// widget.json `views`: tiles, 30 days, jobs and turns are that agent's.
@@ -96,10 +103,16 @@ func applyBoard(_ m: inout Model, _ j: [String: Any]) {
     m.days = list("days").map {
         DayPoint(day: $0["day"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0, turns: $0["turns"] as? Int ?? 0)
     }
-    m.jobs = list("jobs").map {
-        JobShare(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
-                 rate: $0["rate"] as? Double ?? 0, share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
+    func jobShares(_ k: String) -> [JobShare] {
+        list(k).map {
+            JobShare(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
+                     rate: $0["rate"] as? Double ?? 0, share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
+        }
     }
+    m.jobs = jobShares("jobs")
+    m.jobs7 = jobShares("jobs_7d")
+    m.jobs1 = jobShares("jobs_1d")
+    m.hours = (j["hours"] as? [Double]) ?? []
     m.turns = list("turns").map {
         TurnRow(at: $0["at"] as? Double ?? 0, tool: $0["tool"] as? String ?? "", name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
                 color: color(hex: $0["color"] as? String ?? ""), files: $0["files"] as? Int ?? 0, testPassed: $0["test_passed"] as? Bool)
@@ -137,6 +150,8 @@ func loadModel() -> Model? {
     m.subagents = act["subagents"] as? Int ?? 0
     m.generatedAt = j["generated_at"] as? Double ?? 0
     m.tools = toolShares(list("tools"))
+    m.tools7 = toolShares(list("tools_7d"))
+    m.tools1 = toolShares(list("tools_1d"))
     for (id, view) in obj("views") {
         guard let view = view as? [String: Any] else { continue }
         var v = m
@@ -322,16 +337,25 @@ final class DashboardView: NSView {
     /// Which agent the dashboard shows: "all", "claude_code" or "codex".
     private(set) var filter = "all"
     private var pillRects: [(String, NSRect)] = []
+    /// The window the three middle blocks cover: 1, 7 or 30 days.
+    private(set) var range: Int = {
+        let r = UserDefaults.standard.integer(forKey: "range")
+        return [1, 7, 30].contains(r) ? r : 30
+    }()
+    private var rangeRects: [(Int, NSRect)] = []
+    /// How many bars the chart currently has (for hover).
+    private var chartCount = 0
     /// The "还有 N 种" line under the jobs; clicking it opens the full list.
     private var jobsOpen = false
     private var moreRect = NSRect.zero
     /// Called when the content changes height (switch, jobs list).
     var onResize: (() -> Void)?
 
-    /// For snapshots: start on one agent and/or with the jobs list open.
-    func preset(filter: String, jobsOpen: Bool) {
+    /// For snapshots: start on one agent, a window, and/or with the jobs list open.
+    func preset(filter: String, jobsOpen: Bool, range: Int = 30) {
         self.filter = filter
         self.jobsOpen = jobsOpen
+        self.range = range
     }
 
     /// The model for the selected agent (all of them by default).
@@ -399,25 +423,36 @@ final class DashboardView: NSView {
         y += 22
         headerBottom = y
 
-        // 全部 · Claude Code · Codex: every block below follows the switch.
+        // 全部 · Claude Code · Codex at the left, 1 天 · 7 天 · 30 天 at the
+        // right: the three blocks below follow both.
         pillRects = []
-        let ids = ["all"] + base.boards.keys.sorted()
+        rangeRects = []
+        func pill(_ s: String, on: Bool, x: CGFloat, draw: Bool) -> NSRect {
+            let label = text(s, size: 11, weight: on ? .semibold : .regular, color: on ? primary : secondary)
+            let r = NSRect(x: x, y: y, width: label.size().width + 20, height: 22)
+            if draw {
+                NSColor.white.withAlphaComponent(on ? 0.16 : 0.05).setFill()
+                NSBezierPath(roundedRect: r, xRadius: 11, yRadius: 11).fill()
+                put(label, r.midX, r.minY + 4, align: 1)
+            }
+            return r
+        }
         if base.boards.count > 1 {
             var x = pad
-            for id in ids {
-                let on = id == filter
-                let label = text(boardNames[id] ?? id, size: 11, weight: on ? .semibold : .regular, color: on ? primary : secondary)
-                let r = NSRect(x: x, y: y, width: label.size().width + 20, height: 22)
-                if draw {
-                    NSColor.white.withAlphaComponent(on ? 0.16 : 0.05).setFill()
-                    NSBezierPath(roundedRect: r, xRadius: 11, yRadius: 11).fill()
-                    put(label, r.midX, r.minY + 4, align: 1)
-                }
+            for id in ["all"] + base.boards.keys.sorted() {
+                let r = pill(boardNames[id] ?? id, on: id == filter, x: x, draw: draw)
                 pillRects.append((id, r))
                 x = r.maxX + 6
             }
-            y += 22 + 14
         }
+        var rx = W - pad
+        for days in [30, 7, 1] {
+            let probe = pill("\(days) 天", on: days == range, x: 0, draw: false)
+            let r = pill("\(days) 天", on: days == range, x: rx - probe.width, draw: draw)
+            rangeRects.append((days, r))
+            rx = r.minX - 6
+        }
+        y += 22 + 14
 
         // Four headline numbers.
         let tiles: [(String, Double, Double)] = [("今日", m.todayUSD, m.todayHours), ("本周", m.weekUSD, m.weekHours),
@@ -436,14 +471,17 @@ final class DashboardView: NSView {
         }
         y += 58 + 22
 
-        // Claude Code and Codex side by side over the same 30 days.
-        let tools = m.tools.filter { $0.usd > 0 }
-        if filter == "all" && !tools.isEmpty {
-            section("Claude Code 与 Codex（\(max(m.days.count, 1)) 天）", y, draw: draw)
+        let window = range == 1 ? "今天" : "\(range) 天"
+        let jobsSel = (range == 1 ? m.jobs1 : range == 7 ? m.jobs7 : m.jobs).filter { $0.usd > 0 }
+        let toolsSel = (range == 1 ? base.tools1 : range == 7 ? base.tools7 : base.tools).filter { $0.usd > 0 }
+
+        // Claude Code and Codex side by side over the window.
+        if filter == "all" && !toolsSel.isEmpty {
+            section("Claude Code 与 Codex（\(window)）", y, draw: draw)
             y += 22
             if draw {
                 var x = pad
-                for t in tools {
+                for t in toolsSel {
                     let w = max(3, inner * CGFloat(t.share))
                     t.color.setFill()
                     NSBezierPath(roundedRect: NSRect(x: x, y: y, width: min(w, pad + inner - x), height: 8), xRadius: 4, yRadius: 4).fill()
@@ -451,7 +489,7 @@ final class DashboardView: NSView {
                 }
             }
             y += 16
-            for t in tools {
+            for t in toolsSel {
                 if draw {
                     t.color.setFill()
                     NSBezierPath(ovalIn: NSRect(x: pad, y: y + 5, width: 7, height: 7)).fill()
@@ -464,26 +502,50 @@ final class DashboardView: NSView {
             y += 14
         }
 
-        // 30-day chart: one series, direct labels on the best day and today,
-        // hover for any other day.
-        let avg = m.days.isEmpty ? 0 : m.days.map(\.usd).reduce(0, +) / Double(m.days.count)
-        section("最近 \(max(m.days.count, 1)) 天每日产出", y, right: "日均 " + fmtUSD(avg), draw: draw)
+        // The chart: today by hour, or the last 7 / 30 days, one series with
+        // direct labels on the best bar and the current one, hover for any.
+        var bars: [(usd: Double, tip: String)] = []
+        var ticks: [(Int, String)] = []
+        var current = -1
+        if range == 1 {
+            let hour = Calendar.current.component(.hour, from: Date())
+            for h in 0..<24 {
+                let usd = h < m.hours.count ? m.hours[h] : 0
+                bars.append((usd, String(format: "%02d:00–%02d:00 · %@", h, h + 1, fmtUSD(usd))))
+            }
+            ticks = [(0, "0"), (6, "6"), (12, "12"), (18, "18"), (23, "23")]
+            current = hour
+        } else {
+            let days = Array(m.days.suffix(range))
+            for d in days {
+                bars.append((d.usd, "\(shortDay(d.day)) · \(fmtUSD(d.usd)) · \(fmtHours(d.hours)) · \(d.turns) 个回合"))
+            }
+            if range == 7 {
+                ticks = days.indices.map { ($0, $0 == days.count - 1 ? "今天" : weekday(days[$0].day)) }
+            } else {
+                ticks = [(0, shortDay(days.first?.day ?? "")), (days.count / 2, shortDay(days[max(0, days.count / 2)].day)), (days.count - 1, "今天")]
+            }
+            current = days.count - 1
+        }
+        let total = bars.map(\.usd).reduce(0, +)
+        let rightLabel = range == 1 ? "共 " + fmtUSD(total) : "日均 " + fmtUSD(bars.isEmpty ? 0 : total / Double(bars.count))
+        section(range == 1 ? "今天每小时产出" : "最近 \(range) 天每日产出", y, right: rightLabel, draw: draw)
         y += 22
         let chartH: CGFloat = 112
         chartRect = NSRect(x: pad, y: y, width: inner, height: chartH)
-        if draw { drawChart(m, chartRect) }
+        chartCount = bars.count
+        if draw { drawChart(bars, ticks: ticks, current: current, chartRect) }
         y += chartH + 20
 
-        // Who the same window's work would have needed.
-        let jobs = m.jobs.filter { $0.usd > 0 }
-        section("相当于请了谁（\(max(m.days.count, 1)) 天）", y, draw: draw)
+        // Who the window's work would have needed.
+        section("都当了谁（\(window)）", y, draw: draw)
         y += 22
-        if jobs.isEmpty {
+        if jobsSel.isEmpty {
             if draw { put(text("还没有回合", size: 11, color: secondary), pad, y) }
             y += 18
         } else {
-            let maxU = max(jobs.map(\.usd).max() ?? 1, 0.01)
-            for c in jobs.prefix(jobsOpen ? jobs.count : 6) {
+            let maxU = max(jobsSel.map(\.usd).max() ?? 1, 0.01)
+            for c in jobsSel.prefix(jobsOpen ? jobsSel.count : 6) {
                 if draw {
                     put(text(c.name, size: 11), pad, y)
                     let br = NSRect(x: pad + 66, y: y + 5, width: inner - 66 - 150, height: 6)
@@ -494,10 +556,10 @@ final class DashboardView: NSView {
                 y += 19
             }
             moreRect = .zero
-            if jobs.count > 6 {
+            if jobsSel.count > 6 {
                 // A dropdown: "还有 N 种 ▾" opens the rest, "收起 ▴" closes it.
-                let rest = jobs.dropFirst(6).map(\.usd).reduce(0, +)
-                let label = text(jobsOpen ? "收起 ▴" : "还有 \(jobs.count - 6) 种 · \(fmtUSD(rest))  展开 ▾", size: 10, weight: .medium, color: secondary)
+                let rest = jobsSel.dropFirst(6).map(\.usd).reduce(0, +)
+                let label = text(jobsOpen ? "收起 ▴" : "还有 \(jobsSel.count - 6) 种 · \(fmtUSD(rest))  展开 ▾", size: 10, weight: .medium, color: secondary)
                 moreRect = NSRect(x: pad - 4, y: y - 3, width: label.size().width + 8, height: label.size().height + 6)
                 if draw {
                     NSColor.white.withAlphaComponent(0.05).setFill()
@@ -507,32 +569,7 @@ final class DashboardView: NSView {
                 y += 19
             }
         }
-        y += 14
-
-        // Recent turns.
-        section("最近回合", y, draw: draw)
-        y += 22
-        let rows = Array(m.turns.prefix(6))
-        if rows.isEmpty {
-            if draw { put(text("还没有回合", size: 11, color: secondary), pad, y) }
-            y += 18
-        }
-        for t in rows {
-            if draw {
-                put(text(when(t.at), size: 10, color: secondary, mono: true), pad, y + 1)
-                t.color.setFill()
-                NSBezierPath(ovalIn: NSRect(x: pad + 76, y: y + 5, width: 6, height: 6)).fill()
-                let name = text(t.name, size: 11)
-                put(name, pad + 88, y)
-                var tags: [String] = [t.tool == "Codex" ? "Codex" : "Claude", fmtHours(t.hours)]
-                if t.files > 0 { tags.append("\(t.files) 个文件") }
-                if let p = t.testPassed { tags.append(p ? "测试通过" : "测试未过") }
-                put(text(tags.joined(separator: " · "), size: 10, color: secondary), pad + 96 + name.size().width, y + 1)
-                put(text(fmtUSD(t.usd), size: 11, weight: .medium, mono: true), W - pad, y, align: 2)
-            }
-            y += 20
-        }
-        y += 10
+        y += 18
 
         let button = text("生成今日日报 →", size: 12, weight: .semibold, color: NSColor(red: 0.65, green: 0.88, blue: 0.81, alpha: 1))
         let bs = button.size()
@@ -549,31 +586,23 @@ final class DashboardView: NSView {
         return y
     }
 
-    private func when(_ ms: Double) -> String {
-        let d = Date(timeIntervalSince1970: ms / 1000)
-        let f = DateFormatter()
-        f.dateFormat = Calendar.current.isDateInToday(d) ? "今天 HH:mm" : "M/d HH:mm"
-        return f.string(from: d)
-    }
-
-    private func drawChart(_ m: Model, _ r: NSRect) {
-        let n = m.days.count
+    private func drawChart(_ bars: [(usd: Double, tip: String)], ticks: [(Int, String)], current: Int, _ r: NSRect) {
+        let n = bars.count
         guard n > 0 else { return }
         let labelH: CGFloat = 16
         let plotTop = r.minY + 14
         let base = r.maxY - labelH
-        let maxUSD = max(m.days.map(\.usd).max() ?? 0, 1)
+        let maxUSD = max(bars.map(\.usd).max() ?? 0, 1)
         let slot = r.width / CGFloat(n)
         let bw = max(2, slot - 2)
-        let peak = m.days.indices.max { m.days[$0].usd < m.days[$1].usd } ?? 0
+        let peak = bars.indices.max { bars[$0].usd < bars[$1].usd } ?? 0
         faint.setFill()
         NSBezierPath(rect: NSRect(x: r.minX, y: base, width: r.width, height: 1)).fill()
-        for (i, d) in m.days.enumerated() {
+        for (i, d) in bars.enumerated() {
             let h = CGFloat(d.usd / maxUSD) * (base - plotTop)
             guard h > 0 else { continue }
             let x = r.minX + CGFloat(i) * slot + (slot - bw) / 2
-            let isToday = i == n - 1
-            var c = isToday ? barToday : barColor
+            var c = i == current ? barToday : barColor
             if let hv = hover, hv != i { c = c.withAlphaComponent(0.45) }
             c.setFill()
             let rad = min(2, h / 2, bw / 2)
@@ -582,31 +611,35 @@ final class DashboardView: NSView {
             NSBezierPath(rect: NSRect(x: x, y: base - min(h, rad), width: bw, height: min(h, rad))).fill()
         }
         func label(_ i: Int, _ bold: Bool) {
-            let d = m.days[i]
-            let h = CGFloat(d.usd / maxUSD) * (base - plotTop)
+            let h = CGFloat(bars[i].usd / maxUSD) * (base - plotTop)
             let cx = r.minX + CGFloat(i) * slot + slot / 2
-            let s = text(fmtUSD(d.usd), size: 9, weight: bold ? .semibold : .regular, color: bold ? primary : secondary, mono: true)
+            let s = text(fmtUSD(bars[i].usd), size: 9, weight: bold ? .semibold : .regular, color: bold ? primary : secondary, mono: true)
             let sz = s.size()
             let x = min(max(cx, r.minX + sz.width / 2 + 3), r.maxX - sz.width / 2 - 3)
             NSColor(calibratedWhite: 0.13, alpha: 0.92).setFill()
             NSBezierPath(roundedRect: NSRect(x: x - sz.width / 2 - 3, y: base - h - 14, width: sz.width + 6, height: sz.height + 1), xRadius: 3, yRadius: 3).fill()
             put(s, x, base - h - 13, align: 1)
         }
-        if let hv = hover, m.days.indices.contains(hv) {
-            let d = m.days[hv]
-            let tip = text("\(shortDay(d.day)) · \(fmtUSD(d.usd)) · \(fmtHours(d.hours)) · \(d.turns) 个回合", size: 10, weight: .medium, mono: true)
-            put(tip, r.maxX, r.minY - 2, align: 2)
+        if let hv = hover, bars.indices.contains(hv) {
+            put(text(bars[hv].tip, size: 10, weight: .medium, mono: true), r.maxX, r.minY - 2, align: 2)
             label(hv, true)
         } else {
-            if m.days[peak].usd > 0 { label(peak, peak == n - 1) }
-            if peak != n - 1 && m.days[n - 1].usd > 0 { label(n - 1, true) }
+            if bars[peak].usd > 0 { label(peak, peak == current) }
+            if peak != current, bars.indices.contains(current), bars[current].usd > 0 { label(current, true) }
         }
-        let ticks = [0, n / 2, n - 1]
-        for i in ticks {
+        for (i, name) in ticks where bars.indices.contains(i) {
             let cx = r.minX + CGFloat(i) * slot + slot / 2
-            let s = text(i == n - 1 ? "今天" : shortDay(m.days[i].day), size: 9, color: secondary)
+            let s = text(name, size: 9, color: secondary)
             put(s, min(max(cx, r.minX + s.size().width / 2), r.maxX - s.size().width / 2), base + 3, align: 1)
         }
+    }
+
+    /// 一 … 日 for a YYYY-MM-DD day.
+    private func weekday(_ d: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        guard let date = f.date(from: d) else { return d }
+        return ["日", "一", "二", "三", "四", "五", "六"][Calendar.current.component(.weekday, from: date) - 1]
     }
 
     private func shortDay(_ d: String) -> String {
@@ -627,8 +660,8 @@ final class DashboardView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         var h: Int?
-        if let m = shown, !m.days.isEmpty, chartRect.contains(p) {
-            h = min(m.days.count - 1, max(0, Int((p.x - chartRect.minX) / (chartRect.width / CGFloat(m.days.count)))))
+        if chartCount > 0, chartRect.contains(p) {
+            h = min(chartCount - 1, max(0, Int((p.x - chartRect.minX) / (chartRect.width / CGFloat(chartCount)))))
         }
         if h != hover {
             hover = h
@@ -650,6 +683,13 @@ final class DashboardView: NSView {
         } else if let (id, _) = pillRects.first(where: { $0.1.contains(p) }) {
             guard id != filter else { return }
             filter = id
+            jobsOpen = false
+            hover = nil
+            onResize?()
+        } else if let (days, _) = rangeRects.first(where: { $0.1.contains(p) }) {
+            guard days != range else { return }
+            range = days
+            UserDefaults.standard.set(days, forKey: "range")
             jobsOpen = false
             hover = nil
             onResize?()
@@ -1523,7 +1563,7 @@ class CardView: NSView {
     func jobs(_ r: Report, _ y0: CGFloat) -> CGFloat {
         var y = y0
         let all = r.l("jobs").filter { (($0["usd"] as? Double) ?? 0) > 0 }
-        title("相当于请了谁", y, right: all.isEmpty ? nil : "\(all.count) 种工作")
+        title("都当了谁", y, right: all.isEmpty ? nil : "\(all.count) 种工作")
         y += 42
         let shown = Array(all.prefix(6))
         let maxU = max(shown.map { ($0["usd"] as? Double) ?? 0 }.max() ?? 1, 0.1)
@@ -1877,7 +1917,8 @@ if let i = args.firstIndex(of: "--snapshot-dashboard"), args.count > i + 1 {
     v.drawBackground = true
     v.model = loadModel()
     let board = args.firstIndex(of: "--board").flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } ?? "all"
-    v.preset(filter: board, jobsOpen: args.contains("--open-jobs"))
+    let range = args.firstIndex(of: "--range").flatMap { args.indices.contains($0 + 1) ? Int(args[$0 + 1]) : nil } ?? 30
+    v.preset(filter: board, jobsOpen: args.contains("--open-jobs"), range: range)
     let h = v.contentHeight()
     snapshot(v, NSSize(width: dashboardWidth, height: h), args[i + 1])
     exit(0)

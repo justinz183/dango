@@ -244,13 +244,23 @@ pub fn view(conn: &Connection, tz: Tz, now: i64, tool: Option<&str>) -> Result<V
     let month_start = today.with_day(1).unwrap_or(today);
     let from = today - Duration::days(HISTORY_DAYS - 1);
     let first = from.min(month_start);
+    let midnight = |d: chrono::NaiveDate| tz.ms(d.and_hms_opt(0, 0, 0).unwrap());
+    let (d1, d7, d30) = (midnight(today), midnight(today - Duration::days(6)), midnight(from));
     let (usd_days, min_days) = (metric_by_day(conn, &usd_m, first)?, metric_by_day(conn, &min_m, first)?);
     let mut turns_by_day: HashMap<String, i64> = HashMap::new();
     let mut st = conn.prepare(
         "SELECT t.ended_at FROM turns t JOIN sessions s ON s.id = t.session_id WHERE t.ended_at >= ?1 AND (?2 IS NULL OR s.source = ?2)",
     )?;
-    for at in st.query_map(rusqlite::params![tz.ms(from.and_hms_opt(0, 0, 0).unwrap()), tool], |r| r.get::<_, i64>(0))?.flatten() {
+    for at in st.query_map(rusqlite::params![d30, tool], |r| r.get::<_, i64>(0))?.flatten() {
         *turns_by_day.entry(day_key(tz.date(at))).or_default() += 1;
+    }
+    // Today by local hour of the turn's end.
+    let mut hours = [0.0f64; 24];
+    let mut st = conn.prepare(
+        "SELECT t.ended_at, t.usd FROM turns t JOIN sessions s ON s.id = t.session_id WHERE t.ended_at >= ?1 AND (?2 IS NULL OR s.source = ?2)",
+    )?;
+    for (at, usd) in st.query_map(rusqlite::params![d1, tool], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, f64>(1)?)))?.flatten() {
+        hours[tz.local(at).hour() as usize] += usd;
     }
     let get = |m: &HashMap<String, f64>, d: &str| m.get(d).copied().unwrap_or(0.0);
     let days: Vec<Value> = (0..HISTORY_DAYS)
@@ -267,7 +277,10 @@ pub fn view(conn: &Connection, tz: Tz, now: i64, tool: Option<&str>) -> Result<V
         "month": { "usd": in_month(&usd_days), "hours": to_hours(in_month(&min_days)) },
         "total": pair("all".to_string()),
         "days": days,
-        "jobs": jobs(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX, tool)?,
+        "hours": hours.to_vec(),
+        "jobs": jobs(conn, d30, i64::MAX, tool)?,
+        "jobs_7d": jobs(conn, d7, i64::MAX, tool)?,
+        "jobs_1d": jobs(conn, d1, i64::MAX, tool)?,
         "turns": recent_turns(conn, tool)?,
     }))
 }
@@ -279,6 +292,8 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
     let job = current_job(conn, now)?;
     let job_json = job.as_deref().map(|j| json!({ "id": j, "name": t.name(j), "color": t.get(j).map(|x| x.color.as_str()) }));
     let all = view(conn, tz, now, None)?;
+    let today = tz.date(now);
+    let midnight = |d: chrono::NaiveDate| tz.ms(d.and_hms_opt(0, 0, 0).unwrap());
     let mut views = serde_json::Map::new();
     let mut st = conn.prepare("SELECT DISTINCT source FROM sessions ORDER BY source")?;
     for src in st.query_map([], |r| r.get::<_, String>(0))?.flatten().collect::<Vec<_>>() {
@@ -296,8 +311,13 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         "week": { "hours": o.week_hours, "usd": o.week_usd, "person_days": o.week_pd, "leverage": o.week_leverage },
         "month": all["month"],
         "days": all["days"],
+        "hours": all["hours"],
         "jobs": all["jobs"],
-        "tools": tools(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX)?,
+        "jobs_7d": all["jobs_7d"],
+        "jobs_1d": all["jobs_1d"],
+        "tools": tools(conn, midnight(today - Duration::days(HISTORY_DAYS - 1)), i64::MAX)?,
+        "tools_7d": tools(conn, midnight(today - Duration::days(6)), i64::MAX)?,
+        "tools_1d": tools(conn, midnight(today), i64::MAX)?,
         "tools_all": tools(conn, 0, i64::MAX)?,
         "turns": all["turns"],
         "views": views,

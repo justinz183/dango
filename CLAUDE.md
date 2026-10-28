@@ -9,7 +9,7 @@
 - 测试：`cargo test --workspace`（黄金回合 fixtures/scoring/golden.toml，由 occupation.rs 的 golden_turns 读；成就用例 crates/daemon/tests/achievements.rs）
 - 回放：`SHADOWCORP_HOME=/tmp/sc SHADOWCORP_TZ=+08:00 cargo run -p cli -- replay fixtures/hooks/claude_code`
 - 日报：`shadowcorp report --day yesterday --names [--tool claude|codex]`；卡片：`shadowcorp card --day yesterday --names --out /tmp/x.png --no-open`（渲染走 /Applications/ShadowCorp.app，改了 Swift 要先 bundle.sh + 重装）
-- 仪表盘截图：`ShadowCorp --snapshot-dashboard out.png [--board claude_code|codex] [--open-jobs]`（读 $SHADOWCORP_HOME/widget.json；按工具的数据在 widget.json 的 `views`）；宠物截图：`--snapshot-pet out.png --state working|waiting|happy|proud|sleepy|missing --job <职业id> [--helpers N] [--receipt] [--backdrop]`（透明 PNG，`--backdrop` 加深色底）。改角色 / 装扮要把 12 种职业 × 主要状态都截一遍看。
+- 仪表盘截图：`ShadowCorp --snapshot-dashboard out.png [--board claude_code|codex] [--range 1|7|30] [--open-jobs]`（读 $SHADOWCORP_HOME/widget.json；按工具的数据在 widget.json 的 `views`）；宠物截图：`--snapshot-pet out.png --state working|waiting|happy|proud|sleepy|missing --job <职业id> [--helpers N] [--receipt] [--backdrop]`（透明 PNG，`--backdrop` 加深色底）。改角色 / 装扮要把 12 种职业 × 主要状态都截一遍看。
 - 隐私扫描：`cargo run -p cli -- privacy-scan`（提交前必跑）
 - 本地试验一律设 `SHADOWCORP_HOME` 指向临时目录，不要碰 ~/.shadowcorp 或 ~/.claude/settings.json。
 

@@ -545,7 +545,7 @@ pub fn text(r: &Value) -> String {
         ));
     }
     out.push(String::new());
-    out.push("  相当于请了：".to_string());
+    out.push("  都当了谁：".to_string());
     for j in r["jobs"].as_array().into_iter().flatten() {
         out.push(format!(
             "  {}  {}h × ${:.2}/h = {}",
