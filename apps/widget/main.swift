@@ -31,11 +31,14 @@ let barToday = NSColor(red: 0.65, green: 0.88, blue: 0.81, alpha: 1)
 struct DayPoint { var day = ""; var hours = 0.0; var usd = 0.0; var turns = 0 }
 /// The occupation the agent is "being" right now, from activity.job.
 struct Job { var id = ""; var name = ""; var color = NSColor.gray }
-/// Someone in the office: a session at work or just finished.
+/// Someone in the office: an occupation that worked this week.
 struct Occupant {
-    var id = ""; var toolId = ""; var tool = ""; var toolColor = NSColor.gray; var project: String?
-    var job: Job?; var working = false; var helpers = 0; var usd = 0.0
-    /// Last activity, unix ms.
+    var job = Job()
+    var working = false
+    var helpers = 0
+    /// Earned this week.
+    var usd = 0.0
+    /// Last worked at, unix ms.
     var since = 0.0
 }
 
@@ -155,14 +158,9 @@ func loadModel() -> Model? {
     m.recordUSD = obj("record")["day_usd"] as? Double ?? 0
     m.occupations = list("occupations").map { Job(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "", color: color(hex: $0["color"] as? String ?? "")) }
     m.office = list("office").map {
-        var job: Job?
-        if let jb = $0["job"] as? [String: Any] {
-            job = Job(id: jb["id"] as? String ?? "", name: jb["name"] as? String ?? "", color: color(hex: jb["color"] as? String ?? ""))
-        }
-        return Occupant(id: $0["id"] as? String ?? "", toolId: $0["tool_id"] as? String ?? "", tool: $0["tool"] as? String ?? "",
-                        toolColor: color(hex: $0["tool_color"] as? String ?? ""), project: $0["project"] as? String, job: job,
-                        working: $0["working"] as? Bool ?? false, helpers: $0["helpers"] as? Int ?? 0, usd: $0["usd"] as? Double ?? 0,
-                        since: $0["since"] as? Double ?? 0)
+        Occupant(job: Job(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "", color: color(hex: $0["color"] as? String ?? "")),
+                 working: $0["working"] as? Bool ?? false, helpers: $0["helpers"] as? Int ?? 0, usd: $0["usd"] as? Double ?? 0,
+                 since: $0["since"] as? Double ?? 0)
     }
     m.daysTogether = ch["days_together"] as? Int ?? 0
     if let jb = act["job"] as? [String: Any] {
@@ -383,9 +381,9 @@ final class DashboardView: NSView {
         }
         y += 22 + 14
 
-        // The office: who is at work right now, for the selected agent.
+        // The office: this week's occupations, whoever is at work typing.
         if office.superview == nil { addSubview(office) }
-        let staff = base.office.filter { filter == "all" || $0.toolId == filter }
+        let staff = base.office
         let atWork = staff.filter(\.working).count
         let slacking = staff.count - atWork
         let who = [atWork > 0 ? "\(atWork) 人在干" : nil, slacking > 0 ? "\(slacking) 人摸鱼" : nil].compactMap { $0 }.joined(separator: " · ")
@@ -653,9 +651,10 @@ final class DashboardView: NSView {
 /// outfit, blinking, breathing), helpers behind it, and when `working` a
 /// desk and laptop in front with hands typing. `c` is the character's box;
 /// everything else scales with it.
-func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, working: Bool, helpers: Int, desk: Bool? = nil) {
+func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, working: Bool, helpers: Int, desk: Bool? = nil, slump: CGFloat = 0) {
     let s = c.width / 80
-    let bob = CGFloat(sin(t * (working ? 3.0 : 1.6))) * (working ? 1.3 : 0.9) * s
+    // `slump` lowers the body only (asleep at the desk); the desk stays put.
+    let bob = CGFloat(sin(t * (working ? 3.0 : 1.6))) * (working ? 1.3 : 0.9) * s - slump
     NSColor.black.withAlphaComponent(0.25).setFill()
     NSBezierPath(ovalIn: NSRect(x: c.midX - 36 * s, y: c.minY - 10 * s, width: 72 * s, height: 10 * s)).fill()
     for i in 0..<min(helpers, 3) {
@@ -863,11 +862,11 @@ final class PetView: NSView {
 
 // MARK: - Office
 
-/// The office in the dashboard: everyone who worked in the last 12 hours.
-/// Whoever has a turn running types at a desk, dressed for the job, with
-/// helpers; the rest slack off — coffee right after a turn, then phone,
-/// window or watering the plant, asleep after two quiet hours — each with
-/// its own motion and a name plate saying what it is up to.
+/// The office in the dashboard: the occupations that worked this week,
+/// one character each in its outfit. Whoever's job a running turn is doing
+/// types at a desk, with helpers; the rest slack off — coffee right after
+/// a turn, then phone, window or watering the plant, asleep after two
+/// quiet hours — each with its own motion and a plate saying what it is up to.
 final class OfficeView: NSView {
     static let height: CGFloat = 178
     var occupants: [Occupant] = []
@@ -889,7 +888,7 @@ final class OfficeView: NSView {
             let idle = (now - o.since) / 60_000
             if idle < 15 { return (o, .coffee) }
             if idle > 120 { return (o, .sleep) }
-            switch stableHash(o.id + "\(Int(now / 180_000))") % 4 {
+            switch stableHash(o.job.id + "\(Int(now / 180_000))") % 4 {
             case 0 where !windowTaken:
                 windowTaken = true
                 return (o, .window)
@@ -962,31 +961,35 @@ final class OfficeView: NSView {
             put(text("有 agent 开工，它就会坐到这里。", size: 10, color: secondary), b.midX, floorH + 16, align: 1)
             return
         }
-        // Desks from the left wall (room for helpers) to the wanderers' spots.
+        // Desks from the left wall (room for helpers) up to whoever stands at
+        // the window or the plant.
         let deskers = plan.filter { $0.1 != .window && $0.1 != .plant }.count
-        let reserve: CGFloat = (plan.contains { $0.1 == .window } ? 66 : 0) + (plan.contains { $0.1 == .plant } ? 52 : 0)
-        let left: CGFloat = 30, right = b.width - 56 - reserve
+        let windowX = b.maxX - 128, plantX = b.maxX - 76
+        var right = b.width - 56
+        if plan.contains(where: { $0.1 == .window }) { right = min(right, windowX - 30) }
+        if plan.contains(where: { $0.1 == .plant }) { right = min(right, plantX - 30) }
+        let left: CGFloat = 30
         let slot = deskers > 0 ? (right - left) / CGFloat(deskers) : 0
         var di = 0
         for (o, p) in plan {
             let cx: CGFloat
             switch p {
-            case .window: cx = b.maxX - 58 - 62
-            case .plant: cx = b.maxX - 34 - 46
+            case .window: cx = windowX
+            case .plant: cx = plantX
             default:
                 cx = left + slot * (CGFloat(di) + 0.5)
                 di += 1
             }
-            let phase = t + Double(stableHash(o.id) % 100) * 0.07
+            let phase = t + Double(stableHash(o.job.id) % 100) * 0.07
             let blink = fmod(phase, 4.3) < 0.12
             // Characters shrink a little when the desks get close.
             let size = min(56, max(44, slot - 10))
-            var c = NSRect(x: cx - size / 2, y: floorH + 6, width: size, height: size)
+            let c = NSRect(x: cx - size / 2, y: floorH + 6, width: size, height: size)
             let state: String
             switch p {
             case .typing:
                 drawWorker(c, job: o.job, mood: "focused", t: phase, blink: blink, working: true, helpers: o.helpers)
-                state = (o.job?.name ?? "刚开工") + (o.helpers > 0 ? " · +\(o.helpers)" : "")
+                state = "在干" + (o.helpers > 0 ? " · +\(o.helpers)" : "")
             case .coffee:
                 drawWorker(c, job: o.job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: true)
                 // A mug in front, steam rising.
@@ -1003,12 +1006,11 @@ final class OfficeView: NSView {
                 drawWorker(c, job: o.job, mood: "focused", t: phase, blink: blink, working: false, helpers: 0, desk: true)
                 NSColor(calibratedWhite: 0.12, alpha: 1).setFill()
                 NSBezierPath(roundedRect: NSRect(x: c.midX - 6, y: c.minY + 10, width: 12, height: 18), xRadius: 2, yRadius: 2).fill()
-                (o.job?.color ?? barColor).withAlphaComponent(0.55 + 0.3 * CGFloat(sin(phase * 2.6))).setFill()
+                o.job.color.withAlphaComponent(0.55 + 0.3 * CGFloat(sin(phase * 2.6))).setFill()
                 NSBezierPath(roundedRect: NSRect(x: c.midX - 4.5, y: c.minY + 12, width: 9, height: 14), xRadius: 1, yRadius: 1).fill()
                 state = "刷手机"
             case .sleep:
-                c.origin.y -= 5
-                drawWorker(c, job: o.job, mood: "sleepy", t: phase * 0.5, blink: false, working: false, helpers: 0, desk: true)
+                drawWorker(c, job: o.job, mood: "sleepy", t: phase * 0.5, blink: false, working: false, helpers: 0, desk: true, slump: 5)
                 state = "睡着了"
             case .window:
                 drawWorker(c, job: o.job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
@@ -1033,16 +1035,13 @@ final class OfficeView: NSView {
                 }
                 state = "浇花"
             }
-            // Name plate on the floor: project (or agent), then what it is doing · dollars.
+            // Plate on the floor: the occupation in its colour, then what it is
+            // doing · what it earned this week (the dollars only when they fit).
             let width = (p == .window || p == .plant) ? CGFloat(64) : slot - 6
             let fs: CGFloat = slot < 72 ? 9 : 10
-            let name = truncate(o.project ?? o.tool, size: fs, weight: .semibold, width: width)
-            let nameText = text(name, size: fs, weight: .semibold)
-            put(nameText, cx + 5, 24, align: 1)
-            o.toolColor.setFill()
-            NSBezierPath(ovalIn: NSRect(x: cx + 5 - nameText.size().width / 2 - 10, y: 28, width: 6, height: 6)).fill()
-            let sub = state + " · " + fmtUSD(o.usd)
-            put(text(truncate(sub, size: fs - 1, weight: .regular, width: width + 8), size: fs - 1, color: p == .typing ? (o.job?.color ?? secondary) : secondary, mono: true), cx, 9, align: 1)
+            put(text(truncate(o.job.name, size: fs, weight: .semibold, width: width), size: fs, weight: .semibold, color: o.job.color), cx, 24, align: 1)
+            let sub = width >= 66 ? state + " · " + fmtUSD(o.usd) : state
+            put(text(truncate(sub, size: fs - 1, weight: .regular, width: width + 8), size: fs - 1, color: secondary, mono: true), cx, 9, align: 1)
         }
     }
 }
@@ -2048,11 +2047,8 @@ if let i = args.firstIndex(of: "--snapshot-dashboard"), args.count > i + 1 {
     // --office N fills the room with N made-up occupants, for a look.
     if let n = args.firstIndex(of: "--office").flatMap({ args.indices.contains($0 + 1) ? Int(args[$0 + 1]) : nil }), var m = v.model, !m.occupations.isEmpty {
         m.office = (0..<n).map { i in
-            let claude = i % 2 == 0
-            return Occupant(id: "\(i)", toolId: claude ? "claude_code" : "codex", tool: claude ? "Claude Code" : "Codex",
-                            toolColor: color(hex: claude ? "#d97757" : "#5b6b7a"), project: ["shadowcorp", "stock-research", "rhesus-video", "ww2-global-war"][i % 4],
-                            job: m.occupations[(i * 3) % m.occupations.count], working: i == 0 || i == 3, helpers: i == 0 ? 2 : 0, usd: Double(140 * (i + 1)),
-                            since: Date().timeIntervalSince1970 * 1000 - [2.0, 40, 200, 1, 5, 70][i % 6] * 60_000)
+            Occupant(job: m.occupations[(i * 3) % m.occupations.count], working: i == 0 || i == 3, helpers: i == 0 ? 2 : 0,
+                     usd: Double(140 * (i + 1)), since: Date().timeIntervalSince1970 * 1000 - [2.0, 40, 200, 1, 5, 70][i % 6] * 60_000)
         }
         v.model = m
     }
