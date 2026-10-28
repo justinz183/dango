@@ -75,6 +75,12 @@ pub fn week_key(d: NaiveDate) -> String {
     format!("{}-W{:02}", w.year(), w.week())
 }
 
+/// Whether turn `tid` was opened for prompt `prompt_id` (the id itself, or
+/// the `<prompt_id>:<event id>` form used when a prompt id is reused).
+fn same_prompt(tid: &str, prompt_id: &str) -> bool {
+    tid == prompt_id || tid.strip_prefix(prompt_id).is_some_and(|rest| rest.starts_with(':'))
+}
+
 pub fn parse_day(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
 }
@@ -648,6 +654,11 @@ impl Processor {
     /// The turn a tool-level event belongs to: its own turn id if known,
     /// else the session's open turn, else its latest turn, else a new one.
     fn turn_for(&mut self, ev: &Event, sid: &str, ts: i64) -> Result<String> {
+        if let (Some(open), Some(t)) = (self.sess(sid)?.open_turn, &ev.turn_id) {
+            if same_prompt(&open, t) {
+                return Ok(open);
+            }
+        }
         if let Some(t) = &ev.turn_id {
             if self.turn(t)?.is_some_and(|r| r.session_id == sid) {
                 return Ok(t.clone());
@@ -674,7 +685,15 @@ impl Processor {
     fn on_prompt(&mut self, ev: &Event, ts: i64) -> Result<()> {
         let Some(sid) = ev.session_id.as_deref() else { return Ok(()) };
         self.ensure_session(sid, ts)?;
-        if let Some(open) = self.sess(sid)?.open_turn {
+        let base = ev.turn_id.clone().unwrap_or_else(|| ev.id.clone());
+        let open = self.sess(sid)?.open_turn;
+        // A message injected mid-turn (a task notification, queued input)
+        // fires UserPromptSubmit again with the same prompt_id: the turn
+        // simply continues, and its text is not the user's request.
+        if open.as_deref().is_some_and(|o| same_prompt(o, &base)) {
+            return Ok(());
+        }
+        if let Some(open) = open {
             // No Stop came (interrupted): close it at its last activity.
             self.close_turn(sid, &open, None)?;
         }
@@ -686,7 +705,9 @@ impl Processor {
             self.set_ctr("clean_streak", "all", 0.0);
             self.set_ctr("clean_streak", &sc.key("session").unwrap(), 0.0);
         }
-        let tid = ev.turn_id.clone().unwrap_or_else(|| ev.id.clone());
+        // A finished turn's id can come back when the agent is woken again
+        // under the same prompt; that work is scored as a turn of its own.
+        let tid = if self.turn(&base)?.is_some() { format!("{base}:{}", ev.id) } else { base };
         self.create_turn(&tid, sid, ts, p.task_class.unwrap_or(TaskClass::Other), correction)?;
         let mut st = self.sess(sid)?;
         st.open_turn = Some(tid);

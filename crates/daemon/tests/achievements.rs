@@ -118,6 +118,13 @@ impl Sim {
         self
     }
 
+    /// A message injected mid-turn (task notification, queued input):
+    /// Claude Code fires UserPromptSubmit again with the same prompt_id.
+    fn inject(&mut self, text: &str) -> &mut Self {
+        self.send("UserPromptSubmit", json!({ "prompt": text }));
+        self
+    }
+
     /// prompt → `minutes` of work → Stop.
     fn turn(&mut self, text: &str, minutes: f64) -> &mut Self {
         self.prompt(text).adv(minutes).stop()
@@ -730,6 +737,32 @@ fn p06_collector() {
     assert_eq!(s.tier("P06"), 0, "29 unlocked");
     s.grant(&ids[29], 1).turn("config env", 1.0);
     assert_eq!(s.tier("P06"), 1);
+}
+
+#[test]
+fn mid_turn_prompt_keeps_the_turn_and_its_box() {
+    let mut s = Sim::new();
+    s.start().prompt("Yes, register it").edit("a.rs", 10, 0).adv(1.0);
+    s.inject("<task-notification>background command failed</task-notification>");
+    s.edit("b.rs", 5, 0).adv(1.0).stop();
+    let sid = s.sid.clone();
+    let summary = s.p.settlements.remove(&sid).expect("Stop must produce a box");
+    assert_eq!(summary.files, 2, "both edits belong to the one turn");
+    let ended: i64 = s.p.conn.query_row("SELECT COUNT(*) FROM turns WHERE ended_at IS NOT NULL", [], |r| r.get(0)).unwrap();
+    assert_eq!(ended, 1);
+}
+
+#[test]
+fn reused_prompt_id_after_stop_starts_a_fresh_turn() {
+    let mut s = Sim::new();
+    s.start().prompt("implement x").edit("a.rs", 3, 0).stop();
+    s.p.settlements.clear();
+    // The agent is woken again (e.g. by a background task) under the same id.
+    s.adv(1.0).inject("<task-notification>done</task-notification>").edit("c.rs", 4, 0).adv(1.0).stop();
+    let sid = s.sid.clone();
+    assert!(s.p.settlements.remove(&sid).is_some(), "the second Stop gets a box too");
+    let ended: i64 = s.p.conn.query_row("SELECT COUNT(*) FROM turns WHERE ended_at IS NOT NULL", [], |r| r.get(0)).unwrap();
+    assert_eq!(ended, 2);
 }
 
 #[test]
