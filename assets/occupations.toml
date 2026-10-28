@@ -1,0 +1,105 @@
+# Who you would have hired (docs/DESIGN.md §3, v3). Each occupation is priced
+# at the US national median hourly wage from the BLS Occupational Employment
+# and Wage Statistics, May 2025, fetched 2026-10-29 from
+# https://api.bls.gov/publicAPI/v2/timeseries/data/ (series
+# OEUN0000000000000<SOC>08 = hourly median). Wages only, no benefits: the
+# conservative reading of "what a person would have cost".
+source = "BLS OEWS May 2025, national hourly median"
+label = "按美国劳工统计局 2025 年 5 月各职业时薪中位数折算"
+as_of = "2026-10-29"
+
+[[occupation]]
+id = "swe"
+name = "程序员"
+name_en = "Software developer"
+soc = "15-1252"
+rate = 65.38
+color = "#4a78c4"
+
+[[occupation]]
+id = "web"
+name = "网页开发"
+name_en = "Web developer"
+soc = "15-1254"
+rate = 47.49
+color = "#2f9e9e"
+
+[[occupation]]
+id = "qa"
+name = "测试工程师"
+name_en = "QA tester"
+soc = "15-1253"
+rate = 50.14
+color = "#8a6fd1"
+
+[[occupation]]
+id = "ops"
+name = "运维"
+name_en = "Systems administrator"
+soc = "15-1244"
+rate = 47.66
+color = "#6f7f8f"
+
+[[occupation]]
+id = "data"
+name = "数据分析师"
+name_en = "Data scientist"
+soc = "15-2051"
+rate = 57.80
+color = "#3c9a5f"
+
+[[occupation]]
+id = "fin"
+name = "金融分析师"
+name_en = "Financial analyst"
+soc = "13-2051"
+rate = 49.40
+color = "#c99a2e"
+
+[[occupation]]
+id = "research"
+name = "研究员"
+name_en = "Research analyst"
+soc = "13-1161"
+rate = 37.87
+color = "#8fb04a"
+
+[[occupation]]
+id = "writer"
+name = "文案写作"
+name_en = "Writer"
+soc = "27-3043"
+rate = 36.98
+color = "#d9734e"
+
+[[occupation]]
+id = "translator"
+name = "翻译"
+name_en = "Translator"
+soc = "27-3091"
+rate = 28.93
+color = "#c85d8a"
+
+[[occupation]]
+id = "designer"
+name = "平面设计"
+name_en = "Graphic designer"
+soc = "27-1024"
+rate = 30.27
+color = "#b65fc4"
+
+[[occupation]]
+id = "video"
+name = "视频剪辑"
+name_en = "Video editor"
+soc = "27-4032"
+rate = 36.26
+color = "#d94f4f"
+
+[[occupation]]
+id = "entry"
+name = "资料录入"
+name_en = "Data entry"
+soc = "43-9021"
+rate = 19.88
+color = "#a39a8a"

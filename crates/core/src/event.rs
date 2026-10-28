@@ -106,23 +106,6 @@ impl TaskClass {
         }
     }
 
-    pub fn name_zh(self) -> &'static str {
-        match self {
-            TaskClass::Feature => "新功能",
-            TaskClass::Bugfix => "修复",
-            TaskClass::Refactor => "重构",
-            TaskClass::Test => "测试",
-            TaskClass::Docs => "文档",
-            TaskClass::Infra => "基础设施",
-            TaskClass::Data => "数据",
-            TaskClass::Review => "审阅",
-            TaskClass::Migration => "迁移",
-            TaskClass::Config => "配置",
-            TaskClass::Research => "调研",
-            TaskClass::Other => "杂项",
-        }
-    }
-
     pub fn parse(s: &str) -> Option<TaskClass> {
         TaskClass::ALL.into_iter().find(|c| c.as_str() == s)
     }
@@ -257,6 +240,21 @@ pub struct Payload {
     pub notification_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// Who would have done this step (an occupation id, docs/DESIGN.md v3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub occupation: Option<String>,
+    /// Minutes that person would have needed for it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minutes: Option<f64>,
+    /// Words of prose added (counted, never kept).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub words: Option<u32>,
+    /// The prompt or a connector is about markets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finance: Option<bool>,
+    /// The prompt asks for a translation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub translate: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,172 +1,147 @@
-# Golden cases for the SPEC 5.3 formula. `h` is what the formula produces;
-# `doc_h` is the value printed in the SPEC table where it differs (see
-# docs/OPEN_QUESTIONS.md — two SPEC rows do not match its own formula).
-# Tolerance: 0.5 minutes (SPEC 17.2).
+# Golden turns for the occupation model (docs/DESIGN.md §3). Each step
+# goes through occupation::for_edit / for_command / for_tool; the turn
+# then gets remap + finish (5 min base and 12 min per subagent on the main
+# occupation, 360 min cap). Values computed by an independent model
+# (scratchpad golden_occ.py) and priced with assets/occupations.toml.
 
 [[case]]
-name = "改一个配置项"
-class = "config"
-files = 1
-lines = 3
-h = 11.58
-doc_h = 8.6
+name = "talk only"
+main = "research"
+minutes = 5.00
+usd = 3.16
 
 [[case]]
-name = "中等重构并跑测试"
-class = "refactor"
-files = 6
-lines = 252
-test = true
-h = 87.53
+name = "small bugfix"
+steps = [
+  { edit = "src/parse.rs", lines = 6 },
+  { cmd = "cargo test" },
+]
+main = "qa"
+minutes = 19.39
+usd = 17.32
 
 [[case]]
-name = "新功能含提交"
-class = "feature"
-files = 12
-lines = 800
-test = true
-merged = true
-h = 194.56
-doc_h = 175
+name = "feature with tests and commit"
+steps = [
+  { edit = "src/api.rs", lines = 120 },
+  { edit = "src/db.rs", lines = 80 },
+  { edit = "tests/api.rs", lines = 60 },
+  { cmd = "cargo test" },
+  { cmd = "cargo test" },
+  { cmd = "git commit -m feat" },
+]
+subagents = 1
+main = "swe"
+minutes = 112.12
+usd = 113.43
 
 [[case]]
-name = "大迁移带 3 个子 agent"
-class = "migration"
-files = 40
-lines = 3000
-test = true
+name = "landing page"
+steps = [
+  { edit = "site/index.html", lines = 150 },
+  { edit = "site/style.css", lines = 90 },
+  { edit = "site/hero.svg", lines = 20 },
+]
+main = "web"
+minutes = 81.25
+usd = 55.70
+
+[[case]]
+name = "blog post"
+steps = [
+  { edit = "posts/launch.md", lines = 40, words = 1200 },
+]
+main = "writer"
+minutes = 149.00
+usd = 91.83
+
+[[case]]
+name = "translation"
+steps = [
+  { edit = "docs/zh/guide.md", lines = 60, words = 1500 },
+]
+translate = true
+main = "translator"
+minutes = 185.00
+usd = 89.20
+
+[[case]]
+name = "stock research"
+steps = [
+  { tool = "WebSearch" },
+  { tool = "WebSearch" },
+  { tool = "WebSearch" },
+  { tool = "WebFetch" },
+  { tool = "WebFetch" },
+  { tool = "mcp__financial-datasets__get_income_statement" },
+  { tool = "mcp__financial-datasets__get_income_statement" },
+  { cmd = "python3 dcf.py" },
+]
+finance = true
+main = "fin"
+minutes = 64.00
+usd = 52.69
+
+[[case]]
+name = "video explainer"
+steps = [
+  { edit = "render.py", lines = 200 },
+  { cmd = "edge-tts --text x --write-media a.mp3" },
+  { cmd = "ffmpeg -i a.mp3 -i b.png out.mp4" },
+  { cmd = "ffmpeg -i out.mp4 -vf subtitles=s.srt final.mp4" },
+  { cmd = "python3 render.py zh" },
+]
+main = "video"
+minutes = 87.69
+usd = 70.78
+
+[[case]]
+name = "scanned book OCR"
+steps = [
+  { cmd = "swift ocr.swift page1.png" },
+  { cmd = "swift ocr.swift page1.png" },
+  { cmd = "swift ocr.swift page1.png" },
+  { cmd = "swift ocr.swift page1.png" },
+  { edit = "ocr.swift", lines = 70 },
+]
+main = "entry"
+minutes = 80.97
+usd = 38.94
+
+[[case]]
+name = "server setup"
+steps = [
+  { cmd = "brew install sqlite" },
+  { edit = "deploy/config.toml", lines = 12 },
+  { cmd = "launchctl bootstrap gui/501 x.plist" },
+]
+main = "ops"
+minutes = 20.00
+usd = 15.89
+
+[[case]]
+name = "research with subagents"
 subagents = 3
-merged = true
-h = 360
-
-# Boundary cases.
-
-[[case]]
-name = "空回合（无匹配、无工具）"
-class = "other"
-h = 12
+main = "research"
+minutes = 41.00
+usd = 25.88
 
 [[case]]
-name = "只读审阅回合"
-class = "review"
-h = 10
-
-[[case]]
-name = "只读调研回合"
-class = "research"
-h = 15
-
-[[case]]
-name = "纯文档一行"
-class = "docs"
-files = 1
-lines = 1
-h = 17.95
-
-[[case]]
-name = "超大 diff 封顶"
-class = "feature"
-files = 300
-lines = 100000
-h = 360
-
-[[case]]
-name = "只跑测试"
-class = "test"
-test = true
-h = 30
-
-[[case]]
-name = "子 agent 调研"
-class = "research"
-subagents = 2
-h = 39
-
-[[case]]
-name = "只提交"
-class = "other"
-merged = true
-h = 32
-
-[[case]]
-name = "单文件小修"
-class = "bugfix"
-files = 1
-lines = 2
-h = 33.28
-
-[[case]]
-name = "测试 + 提交"
-class = "bugfix"
-files = 2
-lines = 20
-test = true
-merged = true
-h = 69.94
-
-[[case]]
-name = "大重构"
-class = "refactor"
-files = 30
-lines = 2000
-test = true
-h = 306.81
-
-[[case]]
-name = "infra 一个文件"
-class = "infra"
-files = 1
-lines = 40
-h = 41.11
-
-[[case]]
-name = "data 查询"
-class = "data"
-files = 1
-lines = 10
-h = 30.34
-
-[[case]]
-name = "migration 只读"
-class = "migration"
-h = 35
-
-[[case]]
-name = "config 无文件"
-class = "config"
-h = 8
-
-[[case]]
-name = "feature 无改动"
-class = "feature"
-h = 40
-
-[[case]]
-name = "十个子 agent 封顶"
-class = "feature"
-files = 50
-lines = 5000
-subagents = 10
-h = 360
-
-[[case]]
-name = "测试类加测试文件"
-class = "test"
-files = 3
-lines = 150
-test = true
-h = 62.28
-
-[[case]]
-name = "review 带一个文件"
-class = "review"
-files = 1
-lines = 4
-h = 13.86
-
-[[case]]
-name = "docs 大文档"
-class = "docs"
-files = 2
-lines = 600
-h = 95.12
+name = "huge refactor is capped"
+steps = [
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+  { edit = "src/big.rs", lines = 2000 },
+]
+main = "swe"
+minutes = 360.00
+usd = 392.28

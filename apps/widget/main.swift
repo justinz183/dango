@@ -1,7 +1,8 @@
 // shadowcorp-widget: a small always-on-top panel in the bottom-right corner
-// of the screen showing output value ($), rank and XP. Click it to expand a
-// dashboard (today / week / month / total, 30-day chart, rank road, task
-// types, recent turns); click its header or anywhere else to collapse.
+// of the screen showing what the agent's output would have cost to hire
+// out ($), rank and XP. Click it to expand a dashboard (today / week / month
+// / total, 30-day chart, rank road, who you would have hired, recent turns);
+// click its header or anywhere else to collapse.
 // Reads ~/.shadowcorp/widget.json (written by the daemon) every 2 seconds.
 // No dock icon, no menu bar item; right-click for the menu.
 //
@@ -26,29 +27,25 @@ let originKey = "compactOrigin"
 let barColor = NSColor(red: 0.47, green: 0.72, blue: 0.65, alpha: 1)
 let barToday = NSColor(red: 0.65, green: 0.88, blue: 0.81, alpha: 1)
 
-struct DayPoint { var day = ""; var hours = 0.0; var turns = 0 }
+struct DayPoint { var day = ""; var hours = 0.0; var usd = 0.0; var turns = 0 }
 struct RankStep { var name = ""; var xp = 0; var color = NSColor.gray }
-struct CatShare { var name = ""; var hours = 0.0; var share = 0.0; var color = NSColor.gray; var turns = 0 }
-struct TurnRow { var at = 0.0; var name = ""; var hours = 0.0; var color = NSColor.gray; var files = 0; var testPassed: Bool? }
+struct JobShare { var name = ""; var hours = 0.0; var usd = 0.0; var rate = 0.0; var share = 0.0; var color = NSColor.gray }
+struct TurnRow { var at = 0.0; var name = ""; var hours = 0.0; var usd = 0.0; var color = NSColor.gray; var files = 0; var testPassed: Bool? }
 
 struct Model {
     var totalHours = 0.0
-    var totalPD = 0.0
-    var totalUSD: Double?
+    var totalUSD = 0.0
     var todayHours = 0.0
-    var todayPD = 0.0
-    var todayUSD: Double?
+    var todayUSD = 0.0
     var weekHours = 0.0
-    var weekPD = 0.0
-    var weekUSD: Double?
+    var weekUSD = 0.0
     var monthHours = 0.0
-    var monthPD = 0.0
-    var monthUSD: Double?
+    var monthUSD = 0.0
     var name = "Claude"
     var mood = "happy"
     var line = ""
     var weekLeverage: Double?
-    var hourlyRate = 0.0
+    var ratesLabel = ""
     var xp = 0
     var rankIndex = 0
     var rankLabel = "—"
@@ -62,7 +59,7 @@ struct Model {
     var generatedAt = 0.0
     var days: [DayPoint] = []
     var ranks: [RankStep] = []
-    var categories: [CatShare] = []
+    var jobs: [JobShare] = []
     var turns: [TurnRow] = []
 }
 
@@ -82,23 +79,19 @@ func loadModel() -> Model? {
     let total = obj("total"), today = obj("today"), week = obj("week"), month = obj("month")
     let rank = obj("rank"), act = obj("activity")
     m.totalHours = total["hours"] as? Double ?? 0
-    m.totalPD = total["person_days"] as? Double ?? 0
-    m.totalUSD = total["usd"] as? Double
+    m.totalUSD = total["usd"] as? Double ?? 0
     m.todayHours = today["hours"] as? Double ?? 0
-    m.todayPD = today["person_days"] as? Double ?? 0
-    m.todayUSD = today["usd"] as? Double
+    m.todayUSD = today["usd"] as? Double ?? 0
     m.weekHours = week["hours"] as? Double ?? 0
-    m.weekPD = week["person_days"] as? Double ?? 0
-    m.weekUSD = week["usd"] as? Double
+    m.weekUSD = week["usd"] as? Double ?? 0
     m.weekLeverage = week["leverage"] as? Double
     m.monthHours = month["hours"] as? Double ?? 0
-    m.monthPD = month["person_days"] as? Double ?? 0
-    m.monthUSD = month["usd"] as? Double
+    m.monthUSD = month["usd"] as? Double ?? 0
     let ch = obj("character")
     m.name = ch["name"] as? String ?? "Claude"
     m.mood = ch["mood"] as? String ?? "happy"
     m.line = ch["line"] as? String ?? ""
-    m.hourlyRate = j["hourly_rate_usd"] as? Double ?? 0
+    m.ratesLabel = obj("rates")["label"] as? String ?? ""
     m.xp = total["xp"] as? Int ?? 0
     m.rankIndex = rank["index"] as? Int ?? 0
     m.rankLabel = rank["label"] as? String ?? "—"
@@ -111,14 +104,16 @@ func loadModel() -> Model? {
     m.working = act["working"] as? Int ?? 0
     m.subagents = act["subagents"] as? Int ?? 0
     m.generatedAt = j["generated_at"] as? Double ?? 0
-    m.days = list("days").map { DayPoint(day: $0["day"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, turns: $0["turns"] as? Int ?? 0) }
+    m.days = list("days").map {
+        DayPoint(day: $0["day"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0, turns: $0["turns"] as? Int ?? 0)
+    }
     m.ranks = list("ranks").map { RankStep(name: $0["name"] as? String ?? "", xp: $0["xp"] as? Int ?? 0, color: color(hex: $0["color"] as? String ?? "")) }
-    m.categories = list("categories").map {
-        CatShare(name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, share: $0["share"] as? Double ?? 0,
-                 color: color(hex: $0["color"] as? String ?? ""), turns: $0["turns"] as? Int ?? 0)
+    m.jobs = list("jobs").map {
+        JobShare(name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
+                 rate: $0["rate"] as? Double ?? 0, share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
     }
     m.turns = list("turns").map {
-        TurnRow(at: $0["at"] as? Double ?? 0, name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0,
+        TurnRow(at: $0["at"] as? Double ?? 0, name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
                 color: color(hex: $0["color"] as? String ?? ""), files: $0["files"] as? Int ?? 0, testPassed: $0["test_passed"] as? Bool)
     }
     return m
@@ -252,8 +247,8 @@ final class WidgetView: NSView {
         characterBadge(NSRect(x: 12, y: (b.height - 44) / 2, width: 44, height: 44), mood: flashing ? "proud" : m.mood, ring: m.rankColor, glow: flashing)
         let x0: CGFloat = 66
         let right = b.width - 14
-        put(text(fmtHours(m.totalHours), size: 20, weight: .bold, mono: true), x0, 44)
-        put(text("今日 " + fmtHours(m.todayHours), size: 11, color: secondary, mono: true), right, 48, align: 2)
+        put(text(fmtUSD(m.totalUSD), size: 20, weight: .bold, mono: true), x0, 44)
+        put(text("今日 " + fmtUSD(m.todayUSD), size: 11, color: secondary, mono: true), right, 48, align: 2)
         if flashing {
             put(text(flashText, size: 12, weight: .semibold, color: m.rankColor), x0, 25)
         } else if hovering && !m.line.isEmpty {
@@ -364,8 +359,8 @@ final class DashboardView: NSView {
         headerBottom = y
 
         // Four headline numbers.
-        let tiles: [(String, Double, Double, Double?)] = [("今日", m.todayHours, m.todayPD, m.todayUSD), ("本周", m.weekHours, m.weekPD, m.weekUSD),
-                                                          ("本月", m.monthHours, m.monthPD, m.monthUSD), ("总计", m.totalHours, m.totalPD, m.totalUSD)]
+        let tiles: [(String, Double, Double)] = [("今日", m.todayUSD, m.todayHours), ("本周", m.weekUSD, m.weekHours),
+                                                  ("本月", m.monthUSD, m.monthHours), ("总计", m.totalUSD, m.totalHours)]
         let gap: CGFloat = 8
         let tw = (inner - gap * 3) / 4
         if draw {
@@ -374,17 +369,16 @@ final class DashboardView: NSView {
                 NSColor.white.withAlphaComponent(0.06).setFill()
                 NSBezierPath(roundedRect: r, xRadius: 9, yRadius: 9).fill()
                 put(text(t.0, size: 10, color: secondary), r.minX + 9, r.minY + 8)
-                put(text(fmtHours(t.1), size: 15, weight: .bold, mono: true), r.minX + 9, r.minY + 22)
-                let sub = t.3.map { "≈" + fmtUSD($0) } ?? String(format: "%.2f 人日", t.2)
-                put(text(sub, size: 9, color: secondary, mono: true), r.minX + 9, r.minY + 41)
+                put(text(fmtUSD(t.1), size: 15, weight: .bold, mono: true), r.minX + 9, r.minY + 22)
+                put(text(fmtHours(t.2) + " 的活", size: 9, color: secondary, mono: true), r.minX + 9, r.minY + 41)
             }
         }
         y += 58 + 22
 
         // 30-day chart: one series, direct labels on the best day and today,
         // hover for any other day.
-        let avg = m.days.isEmpty ? 0 : m.days.map(\.hours).reduce(0, +) / Double(m.days.count)
-        section("最近 \(max(m.days.count, 1)) 天每日工时", y, right: "日均 " + fmtHours(avg), draw: draw)
+        let avg = m.days.isEmpty ? 0 : m.days.map(\.usd).reduce(0, +) / Double(m.days.count)
+        section("最近 \(max(m.days.count, 1)) 天每日产出", y, right: "日均 " + fmtUSD(avg), draw: draw)
         y += 22
         let chartH: CGFloat = 112
         chartRect = NSRect(x: pad, y: y, width: inner, height: chartH)
@@ -397,23 +391,29 @@ final class DashboardView: NSView {
         if draw { drawRoad(m, NSRect(x: pad, y: y, width: inner, height: 44)) }
         y += 48 + 14
 
-        // Kinds of work over the same window.
-        let cats = m.categories.filter { $0.hours > 0 }
-        section("做了哪些事（\(max(m.days.count, 1)) 天）", y, draw: draw)
+        // Who the same window's work would have needed.
+        let jobs = m.jobs.filter { $0.usd > 0 }
+        section("相当于请了谁（\(max(m.days.count, 1)) 天）", y, draw: draw)
         y += 22
-        if cats.isEmpty {
+        if jobs.isEmpty {
             if draw { put(text("还没有回合", size: 11, color: secondary), pad, y) }
             y += 18
         } else {
-            let maxH = max(cats.map(\.hours).max() ?? 1, 0.01)
-            for c in cats {
+            let maxU = max(jobs.map(\.usd).max() ?? 1, 0.01)
+            for c in jobs.prefix(6) {
                 if draw {
                     put(text(c.name, size: 11), pad, y)
-                    let br = NSRect(x: pad + 44, y: y + 5, width: inner - 44 - 110, height: 6)
-                    bar(br, c.hours / maxH, c.color)
-                    put(text(String(format: "%@ · %.0f%%", fmtHours(c.hours), c.share * 100), size: 10, color: secondary, mono: true), W - pad, y + 1, align: 2)
+                    let br = NSRect(x: pad + 66, y: y + 5, width: inner - 66 - 150, height: 6)
+                    bar(br, c.usd / maxU, c.color)
+                    let detail = String(format: "%@ × $%.0f = %@", fmtHours(c.hours), c.rate, fmtUSD(c.usd))
+                    put(text(detail, size: 10, color: secondary, mono: true), W - pad, y + 1, align: 2)
                 }
                 y += 19
+            }
+            if jobs.count > 6 {
+                let rest = jobs.dropFirst(6).map(\.usd).reduce(0, +)
+                if draw { put(text("还有 \(jobs.count - 6) 种 · \(fmtUSD(rest))", size: 10, color: secondary), pad, y) }
+                y += 17
             }
         }
         y += 14
@@ -433,13 +433,11 @@ final class DashboardView: NSView {
                 NSBezierPath(ovalIn: NSRect(x: pad + 76, y: y + 5, width: 6, height: 6)).fill()
                 let name = text(t.name, size: 11)
                 put(name, pad + 88, y)
-                var tags: [String] = []
+                var tags: [String] = [fmtHours(t.hours)]
                 if t.files > 0 { tags.append("\(t.files) 个文件") }
                 if let p = t.testPassed { tags.append(p ? "测试通过" : "测试未过") }
-                if !tags.isEmpty {
-                    put(text(tags.joined(separator: " · "), size: 10, color: secondary), pad + 96 + name.size().width, y + 1)
-                }
-                put(text(fmtHours(t.hours), size: 11, weight: .medium, mono: true), W - pad, y, align: 2)
+                put(text(tags.joined(separator: " · "), size: 10, color: secondary), pad + 96 + name.size().width, y + 1)
+                put(text(fmtUSD(t.usd), size: 11, weight: .medium, mono: true), W - pad, y, align: 2)
             }
             y += 20
         }
@@ -449,7 +447,7 @@ final class DashboardView: NSView {
         let bs = button.size()
         reportRect = NSRect(x: W - pad - bs.width - 16, y: y - 6, width: bs.width + 16, height: bs.height + 12)
         if draw {
-            var foot = "按人类等价工时估算"
+            var foot = "按 BLS 各职业中位时薪折算"
             if let l = m.weekLeverage { foot += String(format: " · 本周杠杆 %.1fx", l) }
             put(text(foot, size: 10, color: secondary), pad, y + 1)
             NSColor.white.withAlphaComponent(0.08).setFill()
@@ -473,14 +471,14 @@ final class DashboardView: NSView {
         let labelH: CGFloat = 16
         let plotTop = r.minY + 14
         let base = r.maxY - labelH
-        let maxUSD = max(m.days.map(\.hours).max() ?? 0, 1)
+        let maxUSD = max(m.days.map(\.usd).max() ?? 0, 1)
         let slot = r.width / CGFloat(n)
         let bw = max(2, slot - 2)
-        let peak = m.days.indices.max { m.days[$0].hours < m.days[$1].hours } ?? 0
+        let peak = m.days.indices.max { m.days[$0].usd < m.days[$1].usd } ?? 0
         faint.setFill()
         NSBezierPath(rect: NSRect(x: r.minX, y: base, width: r.width, height: 1)).fill()
         for (i, d) in m.days.enumerated() {
-            let h = CGFloat(d.hours / maxUSD) * (base - plotTop)
+            let h = CGFloat(d.usd / maxUSD) * (base - plotTop)
             guard h > 0 else { continue }
             let x = r.minX + CGFloat(i) * slot + (slot - bw) / 2
             let isToday = i == n - 1
@@ -494,9 +492,9 @@ final class DashboardView: NSView {
         }
         func label(_ i: Int, _ bold: Bool) {
             let d = m.days[i]
-            let h = CGFloat(d.hours / maxUSD) * (base - plotTop)
+            let h = CGFloat(d.usd / maxUSD) * (base - plotTop)
             let cx = r.minX + CGFloat(i) * slot + slot / 2
-            let s = text(fmtHours(d.hours), size: 9, weight: bold ? .semibold : .regular, color: bold ? primary : secondary, mono: true)
+            let s = text(fmtUSD(d.usd), size: 9, weight: bold ? .semibold : .regular, color: bold ? primary : secondary, mono: true)
             let sz = s.size()
             let x = min(max(cx, r.minX + sz.width / 2 + 3), r.maxX - sz.width / 2 - 3)
             NSColor(calibratedWhite: 0.13, alpha: 0.92).setFill()
@@ -505,12 +503,12 @@ final class DashboardView: NSView {
         }
         if let hv = hover, m.days.indices.contains(hv) {
             let d = m.days[hv]
-            let tip = text("\(shortDay(d.day)) · \(fmtHours(d.hours)) · \(d.turns) 个回合", size: 10, weight: .medium, mono: true)
+            let tip = text("\(shortDay(d.day)) · \(fmtUSD(d.usd)) · \(fmtHours(d.hours)) · \(d.turns) 个回合", size: 10, weight: .medium, mono: true)
             put(tip, r.maxX, r.minY - 2, align: 2)
             label(hv, true)
         } else {
-            if m.days[peak].hours > 0 { label(peak, peak == n - 1) }
-            if peak != n - 1 && m.days[n - 1].hours > 0 { label(n - 1, true) }
+            if m.days[peak].usd > 0 { label(peak, peak == n - 1) }
+            if peak != n - 1 && m.days[n - 1].usd > 0 { label(n - 1, true) }
         }
         let ticks = [0, n / 2, n - 1]
         for i in ticks {
@@ -974,8 +972,8 @@ func truncate(_ s: String, size: CGFloat, weight: NSFont.Weight, width: CGFloat)
     return t == s ? s : t + "…"
 }
 
-/// Shared drawing for the share cards: warm paper, charcoal ink, the four
-/// kind-of-work colours only on data, system fonts.
+/// Shared drawing for the share cards: warm paper, charcoal ink, the
+/// occupation colours only on data, system fonts.
 class CardView: NSView {
     var report: Report?
     /// How far down the last block reached on the most recent draw.
@@ -1001,9 +999,7 @@ class CardView: NSView {
         let tx = pad + 200
         put(text(ch.s("headline"), size: 36, color: ink2), tx, 128)
         if !ch.s("number").isEmpty {
-            let num = text(ch.s("number"), size: 92, weight: .bold, color: ink, mono: true)
-            put(num, tx - 4, 166)
-            put(text("的活", size: 36, color: ink2), tx + num.size().width + 8, 212)
+            put(text(ch.s("number"), size: 92, weight: .bold, color: ink, mono: true), tx - 4, 166)
         }
         put(text(ch.s("sub"), size: 28, color: ink2, mono: true), tx, 284)
         return 356
@@ -1020,7 +1016,7 @@ class CardView: NSView {
             put(text(span, size: 24, color: ink2, mono: true), pad + 28, y + 2)
             var t = sr.s("title")
             if let p = s["project"] as? String, !p.isEmpty { t = "\(p) · \(t)" }
-            let h = text(fmtHours(sr.d("hours")), size: 26, weight: .semibold, color: ink, mono: true)
+            let h = text(fmtUSD(sr.d("usd")), size: 26, weight: .semibold, color: ink, mono: true)
             let titleW = W - pad - (pad + 236) - h.size().width - 24
             put(text(truncate(t, size: 26, weight: .medium, width: titleW), size: 26, weight: .medium, color: ink), pad + 236, y)
             put(h, W - pad, y, align: 2)
@@ -1033,25 +1029,35 @@ class CardView: NSView {
         return y + 22
     }
 
-    func categories(_ r: Report, _ y0: CGFloat) -> CGFloat {
+    /// Who you would have hired: hours × that job's median wage, per job.
+    func jobs(_ r: Report, _ y0: CGFloat) -> CGFloat {
         var y = y0
-        title("做了哪些事", y)
+        let all = r.l("jobs").filter { (($0["usd"] as? Double) ?? 0) > 0 }
+        title("相当于请了谁", y, right: all.isEmpty ? nil : "\(all.count) 种工作")
         y += 42
-        let cats = r.l("categories").filter { (($0["hours"] as? Double) ?? 0) > 0 }
-        let maxH = max(cats.map { ($0["hours"] as? Double) ?? 0 }.max() ?? 1, 0.1)
-        for c in cats {
+        let shown = Array(all.prefix(6))
+        let maxU = max(shown.map { ($0["usd"] as? Double) ?? 0 }.max() ?? 1, 0.1)
+        for c in shown {
             let cr = Report(j: c)
             put(text(cr.s("name"), size: 26, weight: .semibold, color: ink), pad, y)
-            let br = NSRect(x: pad + 110, y: y + 10, width: inner - 110 - 230, height: 16)
+            let br = NSRect(x: pad + 150, y: y + 10, width: inner - 150 - 300, height: 16)
             paper2.setFill()
             NSBezierPath(roundedRect: br, xRadius: 8, yRadius: 8).fill()
             color(hex: cr.s("color")).setFill()
-            let fw = max(16, br.width * CGFloat(cr.d("hours") / maxH))
+            let fw = max(16, br.width * CGFloat(cr.d("usd") / maxU))
             NSBezierPath(roundedRect: NSRect(x: br.minX, y: br.minY, width: fw, height: 16), xRadius: 8, yRadius: 8).fill()
-            put(text(String(format: "%@ · %.0f%%", fmtHours(cr.d("hours")), cr.d("share") * 100), size: 24, color: ink2, mono: true), W - pad, y + 2, align: 2)
+            let usd = text(fmtUSD(cr.d("usd")), size: 26, weight: .semibold, color: ink, mono: true)
+            put(usd, W - pad, y, align: 2)
+            let how = String(format: "%@ × $%.0f", fmtHours(cr.d("hours")), cr.d("rate"))
+            put(text(how, size: 22, color: ink2, mono: true), W - pad - usd.size().width - 16, y + 3, align: 2)
             y += 48
         }
-        if cats.isEmpty {
+        if all.count > shown.count {
+            let rest = all.dropFirst(shown.count).map { ($0["usd"] as? Double) ?? 0 }.reduce(0, +)
+            put(text("还有 \(all.count - shown.count) 种 · \(fmtUSD(rest))", size: 22, color: ink2), pad, y)
+            y += 40
+        }
+        if all.isEmpty {
             put(text("—", size: 24, color: ink2), pad, y)
             y += 48
         }
@@ -1117,9 +1123,8 @@ class CardView: NSView {
     }
 
     func footer(_ r: Report) {
-        var foot = "按人类等价工时估算 · 参考 Anthropic Economic Index"
-        if let usd = r.j["usd"] as? Double { foot = "≈ \(fmtUSD(usd)) · " + foot }
-        put(text(foot, size: 20, color: ink2.withAlphaComponent(0.7)), pad, bounds.height - 58)
+        let foot = (r.o("rates")["label"] as? String) ?? ""
+        put(text(foot + " · 不含福利", size: 20, color: ink2.withAlphaComponent(0.7)), pad, bounds.height - 58)
     }
 
     func leverageText(_ r: Report) -> String {
@@ -1149,7 +1154,7 @@ final class DayCardView: CardView {
         }
         y = track.maxY + 48
         y = sessions(r, y, empty: "今天没有回合")
-        y = categories(r, y)
+        y = jobs(r, y)
         y = tiles([("回合", "\(r.i("turns"))"), ("改动文件", "\(r.i("files"))"),
                    ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"), ("一次过", "\(r.i("clean_turns"))/\(r.i("turns"))")], y)
         y = rankProgress(r, y)
@@ -1158,7 +1163,7 @@ final class DayCardView: CardView {
     }
 }
 
-/// Week card, 1080 × 1920: a stacked bar per day by kind of work.
+/// Week card, 1080 × 1920: a stacked bar per day by occupation, in dollars.
 final class WeekCardView: CardView {
     override func draw(_ dirtyRect: NSRect) {
         guard let r = report else { return }
@@ -1169,7 +1174,7 @@ final class WeekCardView: CardView {
         let chart = NSRect(x: pad, y: y, width: inner, height: 300)
         let base = chart.maxY - 40
         let top = chart.minY + 40
-        let maxH = max(days.map { ($0["hours"] as? Double) ?? 0 }.max() ?? 0, 0.5)
+        let maxU = max(days.map { ($0["usd"] as? Double) ?? 0 }.max() ?? 0, 1)
         let slot = inner / CGFloat(max(days.count, 1))
         let bw = min(84, slot - 28)
         let best = r.j["best_day"] as? Int
@@ -1179,24 +1184,24 @@ final class WeekCardView: CardView {
             let dr = Report(j: d)
             let cx = chart.minX + slot * CGFloat(i) + slot / 2
             var yTop = base
-            // Stack each kind of work bottom-up, with a paper gap between parts.
+            // Stack each occupation bottom-up, with a paper gap between parts.
             for part in dr.l("parts") {
-                let h = CGFloat((part["hours"] as? Double ?? 0) / maxH) * (base - top)
+                let h = CGFloat((part["usd"] as? Double ?? 0) / maxU) * (base - top)
                 guard h > 0.5 else { continue }
                 color(hex: part["color"] as? String ?? "").setFill()
                 let rect = NSRect(x: cx - bw / 2, y: yTop - h, width: bw, height: max(h - 3, 2))
                 NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
                 yTop -= h
             }
-            if dr.d("hours") > 0 {
+            if dr.d("usd") > 0 {
                 let isBest = best == i
-                put(text(fmtHours(dr.d("hours")), size: 22, weight: isBest ? .bold : .regular, color: isBest ? ink : ink2, mono: true), cx, yTop - 32, align: 1)
+                put(text(fmtUSD(dr.d("usd")), size: 22, weight: isBest ? .bold : .regular, color: isBest ? ink : ink2, mono: true), cx, yTop - 32, align: 1)
             }
             let today = dr.j["today"] as? Bool ?? false
             put(text(dr.s("label"), size: 24, weight: today ? .bold : .regular, color: today ? ink : ink2), cx, base + 10, align: 1)
         }
         y = chart.maxY + 30
-        y = categories(r, y)
+        y = jobs(r, y)
         title("花时间最多的事", y)
         y += 42
         y = sessions(r, y, empty: "这周没有回合")
@@ -1224,7 +1229,7 @@ final class MonthCardView: CardView {
         y += 34
         let days = r.l("days")
         let first = r.i("first_weekday")
-        let maxH = max(days.map { ($0["hours"] as? Double) ?? 0 }.max() ?? 0, 0.5)
+        let maxU = max(days.map { ($0["usd"] as? Double) ?? 0 }.max() ?? 0, 1)
         let light = (0.85, 0.92, 0.89), dark = (0.24, 0.42, 0.37)
         var rows = 0
         for (k, d) in days.enumerated() {
@@ -1233,13 +1238,13 @@ final class MonthCardView: CardView {
             let (row, col) = (slot / 7, slot % 7)
             rows = max(rows, row + 1)
             let cell = NSRect(x: pad + CGFloat(col) * (cw + gap), y: y + CGFloat(row) * (chH + gap), width: cw, height: chH)
-            let h = dr.d("hours")
+            let usd = dr.d("usd")
             let future = dr.j["future"] as? Bool ?? false
             var fill = paper2
             var label = ink2
-            if h > 0 {
-                // One hue, light → dark by hours (square-rooted so small days still show).
-                let f = sqrt(min(1, h / maxH))
+            if usd > 0 {
+                // One hue, light → dark by dollars (square-rooted so small days still show).
+                let f = sqrt(min(1, usd / maxU))
                 fill = NSColor(calibratedRed: light.0 + (dark.0 - light.0) * f, green: light.1 + (dark.1 - light.1) * f,
                                blue: light.2 + (dark.2 - light.2) * f, alpha: 1)
                 label = f > 0.55 ? NSColor.white : ink
@@ -1255,8 +1260,8 @@ final class MonthCardView: CardView {
                 o.stroke()
             }
             put(text("\(dr.i("day"))", size: 18, color: label.withAlphaComponent(future ? 0.4 : 0.8), mono: true), cell.minX + 10, cell.minY + 6)
-            if h > 0 {
-                put(text(fmtHours(h), size: 18, weight: .semibold, color: label, mono: true), cell.maxX - 10, cell.maxY - 26, align: 2)
+            if usd > 0 {
+                put(text(fmtUSD(usd), size: 18, weight: .semibold, color: label, mono: true), cell.maxX - 10, cell.maxY - 26, align: 2)
             }
         }
         y += CGFloat(rows) * (chH + gap) + 30
@@ -1278,7 +1283,7 @@ final class MonthCardView: CardView {
             put(text("\(hour)", size: 20, color: ink2, mono: true), pad + inner * CGFloat(hour) / 24, y + hh + 8, align: hour == 0 ? 0 : hour == 24 ? 2 : 1)
         }
         y += hh + 60
-        y = categories(r, y)
+        y = jobs(r, y)
         title("花时间最多的事", y)
         y += 42
         y = sessions(r, y, empty: "这个月没有回合")

@@ -225,7 +225,7 @@ fn widget(paths: &Paths) -> Result<i32> {
 
 fn status(paths: &Paths, claude: bool) -> Result<i32> {
     if !claude {
-        return with_fresh_db(paths, |c, cfg| snapshot::status(c, Tz::from_env(), cfg, now_ms(), None));
+        return with_fresh_db(paths, |c, _| snapshot::status(c, Tz::from_env(), now_ms(), None));
     }
     // statusLine mode: session_id from stdin, answer from the daemon or the
     // last cached line (SPEC 4.2). Never slower than the hook budget.

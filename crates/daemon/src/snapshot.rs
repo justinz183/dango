@@ -7,9 +7,8 @@ use shadowcorp_core::achievements::{self, display_name, Catalog, Category, Rarit
 use shadowcorp_core::progress::{self, stage_for, Stage, Streak};
 use shadowcorp_core::render::{fmt_int, fmt_short, grand_badge, StatusInfo};
 use shadowcorp_core::rank::{standing, xp_from_pd, Standing};
-use shadowcorp_core::scoring::{leverage, value_usd, ScoringConstants};
+use shadowcorp_core::scoring::{leverage, ScoringConstants};
 
-use crate::config::Config;
 use crate::db::{get_meta, set_meta};
 use crate::ingest::{day_key, week_key, Result, Tz, PERMISSION_QUIET_MS};
 
@@ -161,14 +160,12 @@ pub struct Output {
     pub week_usd: f64,
     pub week_leverage: Option<f64>,
     pub rank: Standing,
-    pub hourly_rate: f64,
 }
 
-pub fn output(conn: &Connection, tz: Tz, cfg: &Config, now_ms: i64) -> Output {
+pub fn output(conn: &Connection, tz: Tz, now_ms: i64) -> Output {
     let k = ScoringConstants::builtin();
     let d = tz.date(now_ms);
     let (dk, wk) = (format!("day:{}", day_key(d)), format!("week:{}", week_key(d)));
-    let rate = cfg.value.hourly_rate_usd;
     let (total_pd, today_pd, week_pd) =
         (counter(conn, "person_days", "all"), counter(conn, "person_days", &dk), counter(conn, "person_days", &wk));
     Output {
@@ -178,12 +175,11 @@ pub fn output(conn: &Connection, tz: Tz, cfg: &Config, now_ms: i64) -> Output {
         total_hours: total_pd * k.caps.minutes_per_day / 60.0,
         today_hours: today_pd * k.caps.minutes_per_day / 60.0,
         week_hours: week_pd * k.caps.minutes_per_day / 60.0,
-        total_usd: value_usd(k, total_pd, rate),
-        today_usd: value_usd(k, today_pd, rate),
-        week_usd: value_usd(k, week_pd, rate),
+        total_usd: counter(conn, "usd", "all"),
+        today_usd: counter(conn, "usd", &dk),
+        week_usd: counter(conn, "usd", &wk),
         week_leverage: leverage(counter(conn, "human_minutes", &wk), counter(conn, "active_minutes", &wk)),
         rank: standing(xp_from_pd(total_pd, k.caps.minutes_per_day)),
-        hourly_rate: rate,
     }
 }
 
@@ -213,8 +209,8 @@ pub fn activity(conn: &Connection, now_ms: i64) -> Result<(i64, i64, Option<i64>
 }
 
 /// One status line: rank, XP, today's and this week's value, leverage.
-pub fn status(conn: &Connection, tz: Tz, cfg: &Config, now_ms: i64, session: Option<&str>) -> Result<String> {
-    let o = output(conn, tz, cfg, now_ms);
+pub fn status(conn: &Connection, tz: Tz, now_ms: i64, session: Option<&str>) -> Result<String> {
+    let o = output(conn, tz, now_ms);
     let lev = session
         .map(|s| {
             let k = format!("session:{s}");
@@ -226,8 +222,8 @@ pub fn status(conn: &Connection, tz: Tz, cfg: &Config, now_ms: i64, session: Opt
         rank_label: o.rank.label(),
         xp: o.rank.xp,
         rank_progress: o.rank.progress,
-        today_hours: o.today_hours,
-        week_hours: o.week_hours,
+        today_usd: o.today_usd,
+        week_usd: o.week_usd,
         leverage: lev,
     }))
 }

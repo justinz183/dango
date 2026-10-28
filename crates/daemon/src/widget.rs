@@ -1,19 +1,18 @@
 //! ~/.shadowcorp/widget.json: the state the desktop widget shows — the
-//! headline hours and rank for the collapsed panel, the character's live
+//! headline dollars and rank for the collapsed panel, the character's live
 //! mood and line, and the history the expanded dashboard draws. Rewritten
 //! by the daemon after new activity.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 
 use chrono::{Datelike, Duration, Timelike};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
-use shadowcorp_core::event::TaskClass;
+use shadowcorp_core::occupation::{self, Table};
 use shadowcorp_core::rank::RANKS;
-use shadowcorp_core::render::fmt_hours;
-use shadowcorp_core::scoring::{value_usd, ScoringConstants};
-use shadowcorp_core::value::Category;
+use shadowcorp_core::render::{fmt_hours, fmt_usd};
+use shadowcorp_core::scoring::ScoringConstants;
 
 use crate::config::Config;
 use crate::ingest::{day_key, Result, Tz};
@@ -24,8 +23,47 @@ const MIN_MS: i64 = 60_000;
 const DAY_MS: i64 = 86_400_000;
 pub const HISTORY_DAYS: i64 = 30;
 
-fn class_name(c: &str) -> &'static str {
-    TaskClass::parse(c).map(|c| c.name_zh()).unwrap_or("杂项")
+/// A turn's credited minutes per occupation (turns.work).
+pub fn work_of(json: &str) -> BTreeMap<String, f64> {
+    serde_json::from_str(json).unwrap_or_default()
+}
+
+/// Dollars per day from the `usd` counters, for days on or after `from`.
+pub fn usd_by_day(conn: &Connection, from: chrono::NaiveDate) -> Result<HashMap<String, f64>> {
+    let mut st = conn.prepare("SELECT substr(scope, 5), value FROM counters WHERE metric = 'usd' AND scope LIKE 'day:%' AND scope >= ?1")?;
+    let rows = st.query_map([format!("day:{}", day_key(from))], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?;
+    Ok(rows.flatten().collect())
+}
+
+/// Who did the work of turns that ended in [from, to): one entry per
+/// occupation with hours, dollars and share of the dollars, biggest first.
+pub fn jobs(conn: &Connection, from: i64, to: i64) -> Result<Vec<Value>> {
+    let t = Table::builtin();
+    let mut st = conn.prepare(
+        "SELECT j.key, SUM(j.value) FROM turns, json_each(turns.work) j
+         WHERE turns.ended_at >= ?1 AND turns.ended_at < ?2 GROUP BY j.key",
+    )?;
+    let mut rows: Vec<(String, f64, f64)> = st
+        .query_map([from, to], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?
+        .flatten()
+        .filter(|(_, m)| *m > 0.0)
+        .map(|(o, m)| {
+            let usd = m / 60.0 * t.rate(&o);
+            (o, m, usd)
+        })
+        .collect();
+    rows.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let total: f64 = rows.iter().map(|r| r.2).sum();
+    Ok(rows
+        .into_iter()
+        .map(|(o, m, usd)| {
+            let job = t.get(&o);
+            json!({
+                "id": o, "name": t.name(&o), "name_en": job.map(|j| j.name_en.as_str()), "color": job.map(|j| j.color.as_str()),
+                "rate": t.rate(&o), "hours": m / 60.0, "usd": usd, "share": if total > 0.0 { usd / total } else { 0.0 },
+            })
+        })
+        .collect())
 }
 
 /// The character's mood and line right now (DESIGN.md §2), from what the
@@ -39,11 +77,11 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
             |r| r.get(0),
         )
         .optional()?;
-    let last: Option<(String, f64, i64, i64, Option<i64>)> = conn
+    let last: Option<(String, f64, i64, i64, Option<i64>, f64)> = conn
         .query_row(
-            "SELECT task_class, credited_pd, ended_at, test_run, test_passed FROM turns WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1",
+            "SELECT work, credited_pd, ended_at, test_run, test_passed, usd FROM turns WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
         )
         .optional()?;
     let k = ScoringConstants::builtin();
@@ -64,15 +102,15 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
         ("waiting", "我在，随时开工。".to_string())
     } else if o.today_hours >= 16.0 {
         ("proud", "今天顶一个人干两天。".to_string())
-    } else if let Some((class, pd, at, test_run, passed)) = last.filter(|l| now - l.2 < 30 * MIN_MS) {
-        let _ = at;
+    } else if let Some((work, pd, _, test_run, passed, usd)) = last.filter(|l| now - l.2 < 30 * MIN_MS) {
         if test_run == 1 && passed == Some(1) {
             ("happy", "这把测试全绿。".to_string())
         } else {
-            ("happy", format!("刚干完一段{}，{}。", class_name(&class), fmt_hours(pd * k.caps.minutes_per_day / 60.0)))
+            let job = occupation::main(&work_of(&work)).map(|o| Table::builtin().name(&o).to_string()).unwrap_or_default();
+            ("happy", format!("刚干了 {} 的{}活，值 {}。", fmt_hours(pd * k.caps.minutes_per_day / 60.0), job, fmt_usd(usd)))
         }
-    } else if o.today_hours > 0.0 {
-        ("happy", format!("今天 {} 了。", fmt_hours(o.today_hours)))
+    } else if o.today_usd > 0.0 {
+        ("happy", format!("今天干了 {} 的活。", fmt_usd(o.today_usd)))
     } else {
         ("waiting", "我在，随时开工。".to_string())
     };
@@ -80,12 +118,11 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
 }
 
 pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> {
-    let o = snapshot::output(conn, tz, cfg, now);
+    let o = snapshot::output(conn, tz, now);
     let (working, subagents, last_event) = snapshot::activity(conn, now)?;
     let k = ScoringConstants::builtin();
-    let rate = o.hourly_rate;
+    let t = Table::builtin();
     let hours = |pd: f64| pd * k.caps.minutes_per_day / 60.0;
-    let usd = |pd: f64| (rate > 0.0).then(|| value_usd(k, pd, rate));
     let today = tz.date(now);
 
     let month_start = today.with_day(1).unwrap_or(today);
@@ -94,8 +131,10 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         [day_key(month_start)],
         |r| r.get(0),
     )?;
+    let month_usd: f64 = usd_by_day(conn, month_start)?.values().sum();
 
     let from = today - Duration::days(HISTORY_DAYS - 1);
+    let usd_days = usd_by_day(conn, from)?;
     let mut by_day: HashMap<String, (f64, i64)> = HashMap::new();
     let mut st = conn.prepare("SELECT day, person_days, turns FROM daily WHERE day >= ?1")?;
     for (d, pd, t) in st.query_map([day_key(from)], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)?)))?.flatten() {
@@ -105,30 +144,13 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         .map(|i| {
             let key = day_key(from + Duration::days(i));
             let (pd, turns) = by_day.get(&key).copied().unwrap_or((0.0, 0));
-            json!({ "day": key, "hours": hours(pd), "usd": usd(pd), "person_days": pd, "turns": turns })
-        })
-        .collect();
-
-    // Hours per kind of work over the same window.
-    let mut by_cat: HashMap<Category, (f64, i64)> = HashMap::new();
-    let mut st = conn.prepare("SELECT task_class, SUM(credited_pd), COUNT(*) FROM turns WHERE ended_at >= ?1 GROUP BY task_class")?;
-    for (c, pd, n) in st.query_map([now - HISTORY_DAYS * DAY_MS], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)?)))?.flatten() {
-        let e = by_cat.entry(Category::of(TaskClass::parse(&c).unwrap_or(TaskClass::Other))).or_default();
-        e.0 += pd;
-        e.1 += n;
-    }
-    let total_cat: f64 = by_cat.values().map(|v| v.0).sum();
-    let categories: Vec<Value> = Category::ALL
-        .iter()
-        .map(|c| {
-            let (pd, n) = by_cat.get(c).copied().unwrap_or((0.0, 0));
-            json!({ "category": c.as_str(), "name": c.name_zh(), "color": c.color(), "hours": hours(pd),
-                    "share": if total_cat > 0.0 { pd / total_cat } else { 0.0 }, "turns": n })
+            let usd = usd_days.get(&key).copied().unwrap_or(0.0);
+            json!({ "day": key, "hours": hours(pd), "usd": usd, "person_days": pd, "turns": turns })
         })
         .collect();
 
     let mut st = conn.prepare(
-        "SELECT ended_at, task_class, credited_pd, files_touched, test_run, test_passed FROM turns
+        "SELECT ended_at, work, credited_pd, files_touched, test_run, test_passed, usd FROM turns
          WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 10",
     )?;
     let turns: Vec<Value> = st
@@ -140,14 +162,15 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
                 r.get::<_, i64>(3)?,
                 r.get::<_, i64>(4)?,
                 r.get::<_, Option<i64>>(5)?,
+                r.get::<_, f64>(6)?,
             ))
         })?
         .flatten()
-        .map(|(at, c, pd, files, test_run, passed)| {
-            let cat = Category::of(TaskClass::parse(&c).unwrap_or(TaskClass::Other));
+        .map(|(at, work, pd, files, test_run, passed, usd)| {
+            let job = occupation::main(&work_of(&work)).unwrap_or_default();
             json!({
-                "at": at, "class": c, "name": class_name(&c), "color": cat.color(), "hours": hours(pd), "usd": usd(pd),
-                "person_days": pd, "files": files, "test_passed": (test_run == 1).then(|| passed == Some(1)),
+                "at": at, "job": job, "name": t.name(&job), "color": t.get(&job).map(|j| j.color.as_str()), "hours": hours(pd),
+                "usd": usd, "person_days": pd, "files": files, "test_passed": (test_run == 1).then(|| passed == Some(1)),
             })
         })
         .collect();
@@ -155,12 +178,12 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
     let r = &o.rank;
     Ok(json!({
         "generated_at": now,
-        "hourly_rate_usd": rate,
+        "rates": { "source": t.source, "label": t.label, "as_of": t.as_of },
         "character": character(conn, tz, cfg, &o, now, working, subagents, last_event)?,
-        "total": { "hours": o.total_hours, "usd": usd(o.total_pd), "person_days": o.total_pd, "xp": r.xp },
-        "today": { "hours": o.today_hours, "usd": usd(o.today_pd), "person_days": o.today_pd },
-        "week": { "hours": o.week_hours, "usd": usd(o.week_pd), "person_days": o.week_pd, "leverage": o.week_leverage },
-        "month": { "hours": hours(month_pd), "usd": usd(month_pd), "person_days": month_pd },
+        "total": { "hours": o.total_hours, "usd": o.total_usd, "person_days": o.total_pd, "xp": r.xp },
+        "today": { "hours": o.today_hours, "usd": o.today_usd, "person_days": o.today_pd },
+        "week": { "hours": o.week_hours, "usd": o.week_usd, "person_days": o.week_pd, "leverage": o.week_leverage },
+        "month": { "hours": hours(month_pd), "usd": month_usd, "person_days": month_pd },
         "rank": {
             "index": r.index,
             "name": r.rank().name,
@@ -175,7 +198,7 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         },
         "ranks": RANKS.iter().map(|x| json!({ "name": x.name, "name_en": x.name_en, "xp": x.xp, "color": x.color })).collect::<Vec<_>>(),
         "days": days,
-        "categories": categories,
+        "jobs": jobs(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX)?,
         "turns": turns,
         "activity": { "working": working, "subagents": subagents, "last_event": last_event },
     }))

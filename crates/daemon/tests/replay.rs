@@ -80,7 +80,19 @@ fn fixtures_ingest_and_score() {
     let turns: i64 = p.conn.query_row("SELECT COUNT(*) FROM turns WHERE ended_at IS NOT NULL", [], |r| r.get(0)).unwrap();
     assert_eq!(turns, 9);
     let pd = p.ctr("person_days", "all");
-    assert!(pd > 0.4 && pd < 1.5, "fixture total {pd}");
+    assert!(pd > 0.2 && pd < 1.5, "fixture total {pd}");
+    // Every credited minute belongs to an occupation, and the dollars are
+    // exactly those minutes at each occupation's wage.
+    let rates = shadowcorp_core::occupation::Table::builtin();
+    let mut st = p.conn.prepare("SELECT substr(metric, 6), value FROM counters WHERE metric LIKE 'work:%' AND scope = 'all'").unwrap();
+    let work: Vec<(String, f64)> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().flatten().collect();
+    drop(st);
+    let minutes: f64 = work.iter().map(|w| w.1).sum();
+    assert!((minutes - pd * 480.0).abs() < 1e-6, "{minutes} min vs {pd} pd");
+    let usd: f64 = work.iter().map(|(o, m)| m / 60.0 * rates.rate(o)).sum();
+    assert!((p.ctr("usd", "all") - usd).abs() < 1e-6 && usd > 0.0, "{usd}");
+    let turn_usd: f64 = p.conn.query_row("SELECT SUM(usd) FROM turns", [], |r| r.get(0)).unwrap();
+    assert!((turn_usd - usd).abs() < 1e-6);
     // Spool consumed: a second pass is a no-op.
     assert_eq!(p.ingest_spool(&paths).unwrap(), 0);
 }
@@ -167,19 +179,22 @@ fn widget_data_carries_history_without_paths() {
     assert_eq!(d["days"][29]["day"], "2026-10-28");
     assert!(d["today"]["hours"].as_f64().unwrap() > 0.0, "{}", d["today"]);
     assert!(d["month"]["hours"].as_f64().unwrap() >= d["today"]["hours"].as_f64().unwrap());
-    assert!(d["today"]["usd"].is_null(), "no rate configured, no dollars");
-    let cats = d["categories"].as_array().unwrap();
-    assert_eq!(cats.len(), 5);
-    let share: f64 = cats.iter().map(|c| c["share"].as_f64().unwrap()).sum();
+    assert!(d["today"]["usd"].as_f64().unwrap() > 0.0, "{}", d["today"]);
+    assert!(d["total"]["usd"].as_f64().unwrap() >= d["month"]["usd"].as_f64().unwrap() - 1e-9);
+    assert!(!d["rates"]["label"].as_str().unwrap().is_empty());
+    let jobs = d["jobs"].as_array().unwrap();
+    assert!(!jobs.is_empty());
+    let share: f64 = jobs.iter().map(|c| c["share"].as_f64().unwrap()).sum();
     assert!((share - 1.0).abs() < 1e-6, "{share}");
+    assert!(jobs.windows(2).all(|w| w[0]["usd"].as_f64() >= w[1]["usd"].as_f64()), "most dollars first");
     let turns = d["turns"].as_array().unwrap();
     assert!(turns.len() <= 10 && !turns.is_empty());
-    assert!(turns[0]["hours"].as_f64().unwrap() >= 0.0);
+    assert!(turns[0]["usd"].as_f64().unwrap() > 0.0 && turns[0]["color"].is_string(), "{}", turns[0]);
     let ch = &d["character"];
     assert_eq!(ch["name"], "Claude");
     assert!(["waiting", "focused", "happy", "proud", "sleepy", "missing"].contains(&ch["mood"].as_str().unwrap()), "{ch}");
     assert!(ch["line"].as_str().unwrap().chars().count() <= 18, "{ch}");
-    assert_eq!(d["rank"]["label"], "青铜 III");
+    assert_eq!(d["rank"]["label"], "青铜 IV", "{}", d["total"]);
     let js = d.to_string();
     assert!(!js.contains("/Users") && !js.contains("/w/repo") && !js.contains("acme"), "no paths or repo names");
 }
@@ -202,10 +217,14 @@ fn day_report_from_fixtures() {
     assert_eq!((s["from"].as_str(), s["to"].as_str()), (Some("10:01"), Some("10:22")));
     assert_eq!(s["title"], "会话 1", "no transcript → numbered");
     assert!(r["human_hours"].as_f64().unwrap() > 0.0);
-    let cats: f64 = r["categories"].as_array().unwrap().iter().map(|c| c["share"].as_f64().unwrap()).sum();
-    assert!((cats - 1.0).abs() < 1e-6);
+    let jobs = r["jobs"].as_array().unwrap();
+    let share: f64 = jobs.iter().map(|c| c["share"].as_f64().unwrap()).sum();
+    assert!((share - 1.0).abs() < 1e-6);
+    let job_usd: f64 = jobs.iter().map(|c| c["usd"].as_f64().unwrap()).sum();
+    assert!((job_usd - r["usd"].as_f64().unwrap()).abs() < 1e-6 && job_usd > 0.0);
     assert_eq!(r["blocks"].as_array().unwrap().len(), 3);
-    assert!(r["usd"].is_null());
+    assert!(r["blocks"].as_array().unwrap().iter().all(|b| b["color"].is_string()));
+    assert!(r["character"]["number"].as_str().unwrap().starts_with('$'));
     assert_eq!(r["character"]["mood"], "happy");
     let empty = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date.succ_opt().unwrap().succ_opt().unwrap(), 1_793_200_000_000, false).unwrap();
     assert_eq!(empty["turns"], 0);
@@ -235,6 +254,8 @@ fn week_and_month_reports_from_fixtures() {
     assert_eq!(w["turns"], 9);
     let sum: f64 = days.iter().map(|d| d["hours"].as_f64().unwrap()).sum();
     assert!((sum - w["human_hours"].as_f64().unwrap()).abs() < 0.3, "days add up: {sum} vs {}", w["human_hours"]);
+    let usd: f64 = days.iter().map(|d| d["usd"].as_f64().unwrap()).sum();
+    assert!((usd - w["usd"].as_f64().unwrap()).abs() < 1e-6, "dollars add up");
     assert!(w["rank_end"]["xp"].as_u64().unwrap() >= w["rank_start"]["xp"].as_u64().unwrap());
     assert!(w["sessions"].as_array().unwrap().len() <= 3);
 

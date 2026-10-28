@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::Command;
 
 use serde_json::Value;
-use shadowcorp_core::classify;
+use shadowcorp_core::{classify, occupation};
 use shadowcorp_core::event::{Event, Kind, Payload, Source};
 
 use crate::paths::{short_hash, write_private, Paths};
@@ -85,6 +85,30 @@ pub fn edit_counts(tool: &str, input: &Value, response: Option<&Value>) -> (u32,
     }
 }
 
+/// The text an edit added, for counting words: the patch's "+" lines when
+/// Claude Code reports them, else the new text itself.
+pub fn added_text(tool: &str, input: &Value, response: Option<&Value>) -> String {
+    if let Some(hunks) = response.and_then(|r| r.get("structuredPatch")).and_then(Value::as_array).filter(|h| !h.is_empty()) {
+        return hunks
+            .iter()
+            .filter_map(|h| h.get("lines").and_then(Value::as_array))
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(|l| l.strip_prefix('+'))
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    match tool {
+        "Write" => s(input, "content").unwrap_or("").to_string(),
+        "MultiEdit" => input
+            .get("edits")
+            .and_then(Value::as_array)
+            .map(|e| e.iter().filter_map(|x| s(x, "new_string")).collect::<Vec<_>>().join("\n"))
+            .unwrap_or_default(),
+        _ => s(input, "new_string").unwrap_or("").to_string(),
+    }
+}
+
 /// Fills the per-file derived fields for one edited file.
 pub fn file_signals(p: &mut Payload, cwd: &str, path: &str) {
     let rel = path
@@ -148,6 +172,8 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
             let prompt = s(input, "prompt").unwrap_or("");
             p.task_class = Some(classify::classify_prompt(prompt));
             p.is_correction = Some(classify::is_correction(prompt));
+            p.finance = occupation::is_finance_prompt(prompt).then_some(true);
+            p.translate = occupation::is_translate_prompt(prompt).then_some(true);
             if let Some(sid) = s(input, "session_id") {
                 p.prompt_repeat = Some(prompt_repeat(env.paths, sid, prompt));
             }
@@ -164,20 +190,29 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
                     }
                     let path = s(&ti, "file_path")?;
                     let (add, del) = edit_counts(tool, &ti, input.get("tool_response"));
+                    let words = occupation::word_count(&added_text(tool, &ti, input.get("tool_response")));
+                    let (occ, minutes) = occupation::for_edit(path, add + del, words);
                     p.tool = Some(if tool == "Write" { "write" } else { "edit" }.to_string());
                     p.lines_added = Some(add);
                     p.lines_removed = Some(del);
+                    p.words = (words > 0).then_some(words);
+                    p.occupation = Some(occ.into());
+                    p.minutes = Some(minutes);
                     file_signals(&mut p, cwd, path);
                     if env.git_lookup && tool != "Write" {
                         p.file_ages_days_max = file_age_days(path, env.now_ms);
                     }
                 }
                 "Bash" => {
-                    let info = classify::analyze_command(s(&ti, "command").unwrap_or(""));
-                    if !info.test && info.git.is_none() {
-                        return None;
-                    }
+                    let cmd = s(&ti, "command").unwrap_or("");
+                    let info = classify::analyze_command(cmd);
+                    // A failed run still took work (debugging); a failed commit did not happen.
+                    let work = occupation::for_command(cmd).filter(|_| ok || info.test || info.git.is_none());
                     p.tool = Some("bash".into());
+                    if let Some((occ, minutes)) = work {
+                        p.occupation = Some(occ.into());
+                        p.minutes = Some(minutes);
+                    }
                     let interrupted = input.get("is_interrupt").and_then(Value::as_bool).unwrap_or(false);
                     if info.test && !interrupted {
                         p.test_cmd = Some(true);
@@ -186,7 +221,7 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
                     if ok {
                         p.git_action = info.git;
                     }
-                    if p.test_cmd.is_none() && p.git_action.is_none() {
+                    if p.test_cmd.is_none() && p.git_action.is_none() && p.occupation.is_none() {
                         return None;
                     }
                 }
@@ -194,7 +229,16 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
                     p.tool = Some("agent".into());
                     p.subagents = Some(1);
                 }
-                _ => return None,
+                other => {
+                    // Research and connectors: web search, reading pages, data.
+                    let (occ, minutes) = occupation::for_tool(other)?;
+                    p.tool = Some(if other.starts_with("mcp__") { "mcp" } else { "web" }.into());
+                    p.occupation = Some(occ.into());
+                    p.minutes = Some(minutes);
+                    if other.starts_with("mcp__") && occupation::is_finance_server(other.split("__").nth(1).unwrap_or("")) {
+                        p.finance = Some(true);
+                    }
+                }
             }
             Kind::Tool
         }
@@ -297,5 +341,29 @@ mod tests {
             "hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_input": { "command": "git commit -m x" }
         });
         assert!(from_claude_hook(&failed_commit, b"", &env(&paths)).is_none());
+    }
+
+    #[test]
+    fn occupations_from_tools_and_prompts() {
+        let paths = tmp();
+        let e = |v: Value| from_claude_hook(&v, b"", &env(&paths)).unwrap().payload;
+        let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "WebSearch", "tool_input": { "query": "secret query" } }));
+        assert_eq!((p.occupation.as_deref(), p.minutes), (Some("research"), Some(5.0)));
+        let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "mcp__financial-datasets__get_news", "tool_input": {} }));
+        assert_eq!((p.occupation.as_deref(), p.finance), (Some("fin"), Some(true)));
+        let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": { "command": "ffmpeg -i a.mp4 b.mp4" } }));
+        assert_eq!((p.occupation.as_deref(), p.minutes), (Some("video"), Some(15.0)));
+        let doc = "第一段文字。\nSecond paragraph here.";
+        let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "Write", "cwd": "/w",
+                          "tool_input": { "file_path": "/w/notes.md", "content": doc }, "tool_response": { "type": "create", "structuredPatch": [] } }));
+        assert_eq!((p.occupation.as_deref(), p.words), (Some("writer"), Some(8)));
+        let line = serde_json::to_string(&p).unwrap();
+        assert!(!line.contains("第一段") && !line.contains("paragraph"), "words counted, never kept");
+        let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "fx", "prompt": "帮我分析一下这只股票的财报" }));
+        assert_eq!((p.finance, p.translate), (Some(true), None));
+        let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "tr", "prompt": "Translate this into Chinese" }));
+        assert_eq!(p.translate, Some(true));
+        let read = json!({ "hook_event_name": "PostToolUse", "tool_name": "mcp__Claude_Browser__computer", "tool_input": {} });
+        assert!(from_claude_hook(&read, b"", &env(&paths)).is_none(), "clicking around is not research");
     }
 }

@@ -54,7 +54,10 @@ CREATE TABLE IF NOT EXISTS turns (
   human_minutes REAL NOT NULL DEFAULT 0,
   credited_pd   REAL NOT NULL DEFAULT 0,
   scoring_version TEXT NOT NULL,
-  agg           TEXT NOT NULL DEFAULT '{}'
+  agg           TEXT NOT NULL DEFAULT '{}',
+  -- Credited minutes per occupation (JSON) and what hiring them would cost.
+  work          TEXT NOT NULL DEFAULT '{}',
+  usd           REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS turns_session ON turns(session_id, started_at);
 
@@ -161,6 +164,13 @@ fn init(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.execute_batch(SCHEMA)?;
+    // Databases from before occupations (docs/DESIGN.md §3) lack these.
+    if !conn.prepare("SELECT 1 FROM pragma_table_info('turns') WHERE name = 'usd'")?.exists([])? {
+        conn.execute_batch(
+            "ALTER TABLE turns ADD COLUMN work TEXT NOT NULL DEFAULT '{}';
+             ALTER TABLE turns ADD COLUMN usd REAL NOT NULL DEFAULT 0;",
+        )?;
+    }
     conn.execute(
         "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?1)",
         [SCHEMA_VERSION],

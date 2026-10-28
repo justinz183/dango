@@ -140,11 +140,12 @@ impl Sim {
         self.bash("git commit -m done", true).adv(30.0).stop()
     }
 
-    /// About 0.15 person-days: enough to make a day active.
+    /// About 0.13 person-days (10 × 5.8 + 5 programmer minutes): enough
+    /// to make a day active.
     fn medium_turn(&mut self) -> &mut Self {
         self.prompt("implement a form");
         for i in 0..10 {
-            self.edit(&format!("src/f{i}.rs"), 3, 0);
+            self.edit(&format!("src/f{i}.rs"), 12, 0);
         }
         self.adv(5.0).stop()
     }
@@ -222,12 +223,13 @@ fn m03_to_m07_milestones() {
 #[test]
 fn l01_light_touch_needs_session_leverage() {
     let mut s = Sim::new();
-    // 40 (feature) + 10 (test) = 50 human minutes.
-    s.start().prompt("implement x").bash("cargo test", true).adv(11.0).stop().end();
+    // Three video renders (3 × 15) + the 5-minute turn base = 50 human minutes.
+    let cut = "ffmpeg -i a.mp4 b.mp4";
+    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(11.0).stop().end();
     assert_eq!(s.tier("L01"), 0, "50 / 11 = 4.5x");
-    s.start().prompt("implement x").bash("cargo test", true).adv(10.0).stop().end();
+    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(10.0).stop().end();
     assert_eq!(s.tier("L01"), 1, "5x");
-    s.start().prompt("implement x").bash("cargo test", true).adv(5.0).stop().end();
+    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(5.0).stop().end();
     assert_eq!(s.tier("L01"), 2, "10x");
 }
 
@@ -774,4 +776,23 @@ fn every_catalog_entry_has_a_test_here() {
             || src.contains(&format!("\"{}\"", a.id).to_lowercase());
         assert!(covered, "{} has no test", a.id);
     }
+}
+
+#[test]
+fn turns_are_priced_by_who_would_have_done_them() {
+    let mut s = Sim::new();
+    s.start().prompt("把这段视频剪一下").bash("ffmpeg -i a.mp4 b.mp4", true).bash("ffmpeg -i b.mp4 c.mp4", true).adv(3.0).stop();
+    let sid = s.sid.clone();
+    let b = s.p.settlements.remove(&sid).expect("a box");
+    assert_eq!(b.jobs, vec!["视频剪辑".to_string()]);
+    // 2 × 15 minutes of editing + the 5-minute turn base, at $36.26/h.
+    assert!((b.usd - 35.0 / 60.0 * 36.26).abs() < 1e-9, "{}", b.usd);
+    assert!((b.today_usd - b.usd).abs() < 1e-9);
+    // A tool result that lands after Stop adds to the same turn.
+    let before = s.p.ctr("usd", "all");
+    s.adv(0.1).bash("ffmpeg -i c.mp4 d.mp4", true);
+    let after = s.p.ctr("usd", "all");
+    assert!((after - before - 15.0 / 60.0 * 36.26).abs() < 1e-9, "{before} → {after}");
+    let (usd, work): (f64, String) = s.p.conn.query_row("SELECT usd, work FROM turns", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert!((usd - after).abs() < 1e-9 && work.contains("\"video\":50"), "{work}");
 }

@@ -22,9 +22,6 @@ git_hook = false
 version = "1.0"
 classifier_v2 = false
 
-[value]
-hourly_rate_usd = 0        # 0 = 不显示金额；填你自己的时薪后，报告里会多一行 ≈ $
-
 [character]
 name = "Claude"            # 小部件里那个角色的名字
 
@@ -45,7 +42,6 @@ pub struct Config {
     pub general: General,
     pub sources: Sources,
     pub ceremony: Ceremony,
-    pub value: ValueCfg,
     pub character: Character,
 }
 
@@ -58,18 +54,6 @@ pub struct Character {
 impl Default for Character {
     fn default() -> Character {
         Character { name: "Claude".into() }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct ValueCfg {
-    pub hourly_rate_usd: f64,
-}
-
-impl Default for ValueCfg {
-    fn default() -> ValueCfg {
-        ValueCfg { hourly_rate_usd: 0.0 }
     }
 }
 
@@ -97,7 +81,6 @@ impl Default for Config {
             general: General::default(),
             sources: Sources::default(),
             ceremony: Ceremony::default(),
-            value: ValueCfg::default(),
             character: Character::default(),
         }
     }
@@ -142,7 +125,6 @@ mod tests {
         assert_eq!(c.general.weekly_target, 0.0);
         assert!(c.sources.claude_code);
         assert_eq!(c.ceremony.grand_cooldown_hours, 4.0);
-        assert_eq!(c.value.hourly_rate_usd, 0.0);
         assert_eq!(c.character.name, "Claude");
     }
 }

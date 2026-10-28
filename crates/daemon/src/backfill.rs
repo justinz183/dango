@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use chrono::DateTime;
 use serde_json::{json, Value};
-use shadowcorp_core::classify;
+use shadowcorp_core::{classify, occupation};
 use shadowcorp_core::event::{Event, Kind, Payload, Source};
 
 use crate::capture::{from_claude_hook, CaptureEnv};
@@ -202,6 +202,8 @@ pub fn file_events(path: &Path, parent: Option<&str>, cutoff: i64, paths: &Paths
             task_class: Some(classify::classify_prompt(&text)),
             is_correction: Some(classify::is_correction(&text)),
             prompt_repeat: Some(repeat),
+            finance: occupation::is_finance_prompt(&text).then_some(true),
+            translate: occupation::is_translate_prompt(&text).then_some(true),
             ..Default::default()
         };
         ev.cwd_hash = (!cwd.is_empty()).then(|| short_hash(&cwd));

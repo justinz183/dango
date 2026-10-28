@@ -71,7 +71,7 @@ pub fn respond(p: &mut Processor, paths: &Paths, req: &Value) -> Value {
             }
             json!({ "ok": true, "text": text })
         }
-        "status" => match snapshot::status(&p.conn, p.tz, &p.cfg, now, sid) {
+        "status" => match snapshot::status(&p.conn, p.tz, now, sid) {
             Ok(t) => json!({ "ok": true, "text": t }),
             Err(e) => json!({ "ok": false, "error": e.to_string() }),
         },

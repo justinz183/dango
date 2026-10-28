@@ -2,7 +2,7 @@
 //! counters up to date, runs the achievement engine and queues ceremonies.
 //! Only one processor may run at a time (the daemon holds processor.lock).
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -13,10 +13,11 @@ use shadowcorp_core::achievements::{self, display_name, roman, Catalog, Category
 use shadowcorp_core::classify::{final_class, turn_role};
 use shadowcorp_core::event::{Event, Kind, Role, Source, TaskClass};
 use shadowcorp_core::expr::Val;
+use shadowcorp_core::occupation::{self, Table};
 use shadowcorp_core::progress::{self, coins_for_pd, stage_for, Streak, ACTIVE_DAY_PD, DEFAULT_WEEKLY_TARGET};
 use shadowcorp_core::rank::{standing, xp_from_pd, Standing};
 use shadowcorp_core::render::{fmt_pd, fmt_short, width, TurnSummary, HIGHLIGHT_WIDTH};
-use shadowcorp_core::scoring::{self, credit, human_minutes, leverage, value_usd, ScoringConstants, TurnSignals};
+use shadowcorp_core::scoring::{self, credit, leverage, ScoringConstants, TurnSignals};
 
 use crate::config::Config;
 use crate::db::{get_meta, set_meta};
@@ -122,12 +123,15 @@ struct TurnAgg {
     migration: bool,
     recent_agent_removed: u32,
     last_activity: i64,
+    /// Minutes per occupation from the turn's steps.
+    work: BTreeMap<String, f64>,
+    finance: bool,
+    translate: bool,
 }
 
 impl TurnAgg {
-    fn signals(&self, class: TaskClass) -> TurnSignals {
+    fn signals(&self) -> TurnSignals {
         TurnSignals {
-            class,
             files: self.file_ids.len() as u32,
             lines: self.lines_added + self.lines_removed,
             test_run: self.test_run,
@@ -135,6 +139,17 @@ impl TurnAgg {
             merged: self.commit || self.merge,
         }
     }
+
+    /// Minutes per occupation the whole turn is worth (docs/DESIGN.md §3).
+    fn work(&self, cap: f64) -> BTreeMap<String, f64> {
+        let mut w = self.work.clone();
+        occupation::remap(&mut w, self.finance, self.translate);
+        occupation::finish(w, self.agent_calls.max(self.subagent_stops), cap)
+    }
+}
+
+fn scaled(work: &BTreeMap<String, f64>, k: f64) -> BTreeMap<String, f64> {
+    work.iter().map(|(o, m)| (o.clone(), m * k)).collect()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -154,6 +169,8 @@ struct TurnRow {
     human_minutes: f64,
     credited_pd: f64,
     agg: TurnAgg,
+    paid: BTreeMap<String, f64>,
+    usd: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -171,6 +188,7 @@ pub struct Processor {
     pub cfg: Config,
     cat: &'static Catalog,
     k: &'static ScoringConstants,
+    occ: &'static Table,
     counters: HashMap<(String, String), f64>,
     dirty: HashSet<(String, String)>,
     unlocked: Option<HashMap<String, u32>>,
@@ -202,6 +220,7 @@ impl Processor {
             cfg,
             cat: Catalog::builtin(),
             k: ScoringConstants::builtin(),
+            occ: Table::builtin(),
             counters: HashMap::new(),
             dirty: HashSet::new(),
             unlocked: None,
@@ -631,7 +650,7 @@ impl Processor {
         Ok(self
             .conn
             .query_row(
-                "SELECT session_id, started_at, ended_at, task_class, human_minutes, credited_pd, agg FROM turns WHERE id = ?1",
+                "SELECT session_id, started_at, ended_at, task_class, human_minutes, credited_pd, agg, work, usd FROM turns WHERE id = ?1",
                 [tid],
                 |r| {
                     Ok(TurnRow {
@@ -642,6 +661,8 @@ impl Processor {
                         human_minutes: r.get(4)?,
                         credited_pd: r.get(5)?,
                         agg: serde_json::from_str(&r.get::<_, String>(6)?).unwrap_or_default(),
+                        paid: serde_json::from_str(&r.get::<_, String>(7)?).unwrap_or_default(),
+                        usd: r.get(8)?,
                     })
                 },
             )
@@ -653,8 +674,8 @@ impl Processor {
         Ok(())
     }
 
-    fn create_turn(&self, tid: &str, sid: &str, ts: i64, class: TaskClass, correction: bool) -> Result<()> {
-        let agg = TurnAgg { last_activity: ts, ..Default::default() };
+    fn create_turn(&self, tid: &str, sid: &str, ts: i64, class: TaskClass, correction: bool, agg: TurnAgg) -> Result<()> {
+        let agg = TurnAgg { last_activity: ts, ..agg };
         self.conn.execute(
             "INSERT OR IGNORE INTO turns (id, session_id, started_at, task_class, is_correction, scoring_version, agg)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -688,7 +709,7 @@ impl Processor {
             return Ok(t);
         }
         let tid = ev.turn_id.clone().unwrap_or_else(|| format!("imp_{}", ev.id));
-        self.create_turn(&tid, sid, ts, TaskClass::Other, false)?;
+        self.create_turn(&tid, sid, ts, TaskClass::Other, false, TurnAgg::default())?;
         st.open_turn = Some(tid.clone());
         self.save_sess(sid, &st)?;
         Ok(tid)
@@ -720,7 +741,8 @@ impl Processor {
         // A finished turn's id can come back when the agent is woken again
         // under the same prompt; that work is scored as a turn of its own.
         let tid = if self.turn(&base)?.is_some() { format!("{base}:{}", ev.id) } else { base };
-        self.create_turn(&tid, sid, ts, p.task_class.unwrap_or(TaskClass::Other), correction)?;
+        let agg = TurnAgg { finance: p.finance.unwrap_or(false), translate: p.translate.unwrap_or(false), ..Default::default() };
+        self.create_turn(&tid, sid, ts, p.task_class.unwrap_or(TaskClass::Other), correction, agg)?;
         let mut st = self.sess(sid)?;
         st.open_turn = Some(tid);
         self.save_sess(sid, &st)?;
@@ -770,6 +792,10 @@ impl Processor {
             _ => {}
         }
         agg.agent_calls += p.subagents.unwrap_or(0);
+        if let (Some(o), Some(m)) = (&p.occupation, p.minutes) {
+            *agg.work.entry(o.clone()).or_default() += m;
+        }
+        agg.finance |= p.finance.unwrap_or(false);
         agg.last_activity = agg.last_activity.max(ts);
         self.save_agg(&tid, &agg)?;
 
@@ -861,13 +887,17 @@ impl Processor {
         let agg = row.agg;
         let end_ts = end.unwrap_or(agg.last_activity).max(row.started_at);
         let class = final_class(row.prompt_class, agg.test_run, agg.migration);
-        let sig = agg.signals(class);
-        let h = human_minutes(self.k, &sig);
+        let sig = agg.signals();
+        let work = agg.work(self.k.caps.turn_max);
+        let h: f64 = work.values().sum();
         let sc = self.scopes(end_ts, Some(sid));
         let (dkey, wkey, skey) = (sc.key("day").unwrap(), sc.key("week").unwrap(), sc.key("session").unwrap());
         let day_pd = self.ctr("person_days", &dkey);
         let week_pd = self.ctr("person_days", &wkey);
         let credited = credit(self.k, h, day_pd, week_pd);
+        let mpd = self.k.caps.minutes_per_day;
+        let paid = scaled(&work, credited * mpd / h);
+        let usd = self.occ.usd(&paid);
         let role = turn_role(class, &agg.roles, agg.dir_ids.len());
         let duration = (end_ts - row.started_at) as f64 / MIN;
 
@@ -892,10 +922,11 @@ impl Processor {
         self.conn.execute(
             "UPDATE turns SET ended_at = ?2, task_class = ?3, role_card = ?4, files_touched = ?5, lines_added = ?6,
                lines_removed = ?7, test_run = ?8, test_passed = ?9, git_action = ?10, subagents = ?11,
-               human_minutes = ?12, credited_pd = ?13, scoring_version = ?14 WHERE id = ?1",
+               human_minutes = ?12, credited_pd = ?13, scoring_version = ?14, work = ?15, usd = ?16 WHERE id = ?1",
             params![
                 tid, end_ts, class.as_str(), role.map(|r| r.as_str()), sig.files, agg.lines_added, agg.lines_removed,
-                agg.test_run as i64, agg.test_last.map(|b| b as i64), git, sig.subagents, h, credited, self.k.version
+                agg.test_run as i64, agg.test_last.map(|b| b as i64), git, sig.subagents, h, credited, self.k.version,
+                serde_json::to_string(&paid)?, usd
             ],
         )?;
         self.conn.execute(
@@ -910,6 +941,7 @@ impl Processor {
         self.add_in("human_minutes", h, &sc, &all4);
         self.add_in("active_minutes", active, &sc, &all4);
         self.add_in("turns", 1.0, &sc, &all4);
+        self.add_paid(&paid, usd, &sc);
         self.add_in("clean_streak", 1.0, &sc, &["all", "session"]);
         self.add_ctr("files_touched", &skey, sig.files as f64);
         self.add_ctr("lines_added", &skey, agg.lines_added as f64);
@@ -934,7 +966,6 @@ impl Processor {
         if new_stage.level > old_stage.level && self.live() {
             self.ceremony("grand", "stage_up", &new_stage.level.to_string())?;
         }
-        let mpd = self.k.caps.minutes_per_day;
         let (old_rank, new_rank) = (standing(xp_from_pd(old_total, mpd)), standing(xp_from_pd(new_total, mpd)));
         if new_rank.level() > old_rank.level() && self.live() {
             let level = if new_rank.index > old_rank.index { "grand" } else { "mid" };
@@ -979,12 +1010,18 @@ impl Processor {
         self.eval_day(end_ts)?;
 
         if end.is_some() && self.live() {
-            let rate = self.cfg.value.hourly_rate_usd;
-            let hours = |pd: f64| pd * self.k.caps.minutes_per_day / 60.0;
+            // Who was hired, biggest share first; minor helpers stay off the box.
+            let mut jobs: Vec<(&String, &f64)> = paid.iter().collect();
+            jobs.sort_by(|a, b| b.1.total_cmp(a.1));
             let summary = TurnSummary {
-                hours: hours(credited),
-                usd: (rate > 0.0).then(|| value_usd(self.k, credited, rate)),
-                class_name: class.name_zh().to_string(),
+                usd,
+                hours: credited * mpd / 60.0,
+                jobs: jobs
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, (_, m))| *i == 0 || **m >= 0.2 * credited * mpd)
+                    .map(|(_, (o, _))| self.occ.name(o).to_string())
+                    .collect(),
                 files: sig.files,
                 test_passed: agg.test_run.then_some(agg.test_last == Some(true)),
                 committed: sig.merged,
@@ -992,8 +1029,8 @@ impl Processor {
                 xp: new_rank.xp,
                 rank_progress: new_rank.progress,
                 xp_to_next: new_rank.xp_to_next(),
-                today_hours: hours(self.ctr("person_days", &dkey)),
-                week_hours: hours(self.ctr("person_days", &wkey)),
+                today_usd: self.ctr("usd", &dkey),
+                week_usd: self.ctr("usd", &wkey),
                 leverage: leverage(self.ctr("human_minutes", &skey), self.ctr("active_minutes", &skey)),
                 highlight: self.take_highlight(),
             };
@@ -1007,8 +1044,8 @@ impl Processor {
     fn rescore(&mut self, tid: &str) -> Result<()> {
         let Some(row) = self.turn(tid)? else { return Ok(()) };
         let Some(end_ts) = row.ended_at else { return Ok(()) };
-        let class = final_class(row.prompt_class, row.agg.test_run, row.agg.migration);
-        let h = human_minutes(self.k, &row.agg.signals(class));
+        let work = row.agg.work(self.k.caps.turn_max);
+        let h: f64 = work.values().sum();
         if h <= row.human_minutes + 1e-9 {
             return Ok(());
         }
@@ -1017,9 +1054,16 @@ impl Processor {
         let day_pd = self.ctr("person_days", &sc.key("day").unwrap());
         let week_pd = self.ctr("person_days", &sc.key("week").unwrap());
         let dpd = credit(self.k, dh, day_pd, week_pd);
+        // The extra credit, split the way the turn now splits.
+        let add = scaled(&work, dpd * self.k.caps.minutes_per_day / h);
+        let dusd = self.occ.usd(&add);
+        let mut paid = row.paid;
+        for (o, m) in &add {
+            *paid.entry(o.clone()).or_default() += m;
+        }
         self.conn.execute(
-            "UPDATE turns SET human_minutes = ?2, credited_pd = ?3 WHERE id = ?1",
-            params![tid, h, row.credited_pd + dpd],
+            "UPDATE turns SET human_minutes = ?2, credited_pd = ?3, work = ?4, usd = ?5 WHERE id = ?1",
+            params![tid, h, row.credited_pd + dpd, serde_json::to_string(&paid)?, row.usd + dusd],
         )?;
         self.conn.execute(
             "UPDATE sessions SET human_minutes = human_minutes + ?2 WHERE id = ?1",
@@ -1029,8 +1073,17 @@ impl Processor {
         let all4 = ["all", "day", "week", "session"];
         self.add_in("person_days", dpd, &sc, &all4);
         self.add_in("human_minutes", dh, &sc, &all4);
+        self.add_paid(&add, dusd, &sc);
         self.upsert_daily(&sc)?;
         self.give_coins(coins_for_pd(old_total, old_total + dpd))
+    }
+
+    /// Moves the money and per-occupation counters by credited work.
+    fn add_paid(&mut self, paid: &BTreeMap<String, f64>, usd: f64, sc: &Scopes) {
+        self.add_in("usd", usd, sc, &["all", "day", "week", "session"]);
+        for (o, m) in paid {
+            self.add_in(&format!("work:{o}"), *m, sc, &["all", "day", "week"]);
+        }
     }
 
     // ---- rewards, records, ceremonies --------------------------------------

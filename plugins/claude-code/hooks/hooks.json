@@ -1,10 +1,10 @@
 {
-  "description": "ShadowCorp: turns finished agent work into person-days, badges and a growing office.",
+  "description": "ShadowCorp: prices finished agent work by who you would have hired, plus XP and ranks.",
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }],
     "PostToolUse": [
-      { "matcher": "Edit|Write|MultiEdit|Bash|Agent|Task", "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }
+      { "matcher": "Edit|Write|MultiEdit|Bash|Agent|Task|WebSearch|WebFetch|mcp__.*", "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }
     ],
     "PostToolUseFailure": [
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }
