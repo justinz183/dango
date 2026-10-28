@@ -32,10 +32,11 @@ const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
   shadowcorp stats                 公司页
   shadowcorp badges                成就与职业图鉴
   shadowcorp widget                启动桌面小部件（屏幕右下角）
-  shadowcorp report [--day DATE] [--names] [--json]
-                                   某天的工作日报（DATE = YYYY-MM-DD | today | yesterday）
-  shadowcorp card [--day DATE] [--names] [--out PNG] [--no-open]
-                                   渲染日报分享卡到 ~/Pictures/ShadowCorp/ 并复制到剪贴板
+  shadowcorp report [--week|--month] [--day DATE] [--names] [--json]
+                                   日报 / 周报 / 月报（DATE = YYYY-MM-DD | today | yesterday，
+                                   周报取 DATE 所在的周，月报取所在的月）
+  shadowcorp card [--week|--month] [--day DATE] [--names] [--out PNG] [--no-open]
+                                   渲染分享卡到 ~/Pictures/ShadowCorp/ 并复制到剪贴板
   shadowcorp panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   shadowcorp backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
@@ -131,18 +132,29 @@ fn parse_day(args: &[String]) -> Result<chrono::NaiveDate> {
     })
 }
 
-fn day_report(paths: &Paths, args: &[String]) -> Result<Value> {
+/// The day, week or month report the arguments ask for.
+fn any_report(paths: &Paths, args: &[String]) -> Result<Value> {
     let date = parse_day(args)?;
     let names = args.iter().any(|a| a == "--names");
-    fresh_db(paths, |c, cfg| daemon::report::day(c, Tz::from_env(), cfg, &claude_dir(), date, now_ms(), names))
+    let has = |f: &str| args.iter().any(|a| a == f);
+    fresh_db(paths, |c, cfg| {
+        let (tz, dir, now) = (Tz::from_env(), claude_dir(), now_ms());
+        if has("--month") {
+            daemon::report::month(c, tz, cfg, &dir, date, now, names)
+        } else if has("--week") {
+            daemon::report::week(c, tz, cfg, &dir, date, now, names)
+        } else {
+            daemon::report::day(c, tz, cfg, &dir, date, now, names)
+        }
+    })
 }
 
 fn report(paths: &Paths, args: &[String]) -> Result<i32> {
-    let r = day_report(paths, args)?;
+    let r = any_report(paths, args)?;
     if args.iter().any(|a| a == "--json") {
         println!("{}", serde_json::to_string_pretty(&r)?);
     } else {
-        println!("{}", daemon::report::day_text(&r));
+        println!("{}", daemon::report::text(&r));
     }
     Ok(0)
 }
@@ -159,25 +171,27 @@ fn renderer() -> Result<PathBuf> {
 }
 
 fn card(paths: &Paths, args: &[String]) -> Result<i32> {
-    let r = day_report(paths, args)?;
-    let date = r["date"].as_str().unwrap_or("day").to_string();
+    let r = any_report(paths, args)?;
+    let kind = r["kind"].as_str().unwrap_or("day").to_string();
+    let date = format!("{kind}-{}", r["date"].as_str().unwrap_or(""));
     let cards = paths.home.join("cards");
     fs::create_dir_all(&cards)?;
-    let json_path = cards.join(format!("day-{date}.json"));
+    let json_path = cards.join(format!("{date}.json"));
     daemon::paths::write_private(&json_path, serde_json::to_string(&r)?.as_bytes())?;
     let out = match flag(args, "--out") {
         Some(o) => PathBuf::from(o),
         None => {
             let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("ShadowCorp");
             fs::create_dir_all(&dir)?;
-            dir.join(format!("day-{date}.png"))
+            dir.join(format!("{date}.png"))
         }
     };
     let status = std::process::Command::new(renderer()?).arg("--card").arg(&json_path).arg(&out).arg("--copy").status()?;
     if !status.success() {
         return Err("渲染失败".into());
     }
-    println!("日报卡：{}（已复制到剪贴板）", out.display());
+    let what = match kind.as_str() { "week" => "周报卡", "month" => "月报卡", _ => "日报卡" };
+    println!("{what}：{}（已复制到剪贴板）", out.display());
     if !args.iter().any(|a| a == "--no-open") {
         std::process::Command::new("open").arg(&out).status()?;
     }

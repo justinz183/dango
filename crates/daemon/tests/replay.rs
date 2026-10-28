@@ -165,13 +165,20 @@ fn widget_data_carries_history_without_paths() {
     assert_eq!(d["days"].as_array().unwrap().len(), 30);
     assert_eq!(d["ranks"].as_array().unwrap().len(), 7);
     assert_eq!(d["days"][29]["day"], "2026-10-28");
-    assert!(d["today"]["person_days"].as_f64().unwrap() > 0.0, "{}", d["today"]);
-    assert!(d["month"]["person_days"].as_f64().unwrap() >= d["today"]["person_days"].as_f64().unwrap());
-    assert_eq!(d["today"]["usd"], 0.0, "no rate configured, no dollars");
-    assert!(!d["classes"].as_array().unwrap().is_empty());
+    assert!(d["today"]["hours"].as_f64().unwrap() > 0.0, "{}", d["today"]);
+    assert!(d["month"]["hours"].as_f64().unwrap() >= d["today"]["hours"].as_f64().unwrap());
+    assert!(d["today"]["usd"].is_null(), "no rate configured, no dollars");
+    let cats = d["categories"].as_array().unwrap();
+    assert_eq!(cats.len(), 5);
+    let share: f64 = cats.iter().map(|c| c["share"].as_f64().unwrap()).sum();
+    assert!((share - 1.0).abs() < 1e-6, "{share}");
     let turns = d["turns"].as_array().unwrap();
     assert!(turns.len() <= 10 && !turns.is_empty());
-    assert!(turns[0]["usd"].as_f64().unwrap() >= 0.0);
+    assert!(turns[0]["hours"].as_f64().unwrap() >= 0.0);
+    let ch = &d["character"];
+    assert_eq!(ch["name"], "Claude");
+    assert!(["waiting", "focused", "happy", "proud", "sleepy", "missing"].contains(&ch["mood"].as_str().unwrap()), "{ch}");
+    assert!(ch["line"].as_str().unwrap().chars().count() <= 18, "{ch}");
     assert_eq!(d["rank"]["label"], "青铜 III");
     let js = d.to_string();
     assert!(!js.contains("/Users") && !js.contains("/w/repo") && !js.contains("acme"), "no paths or repo names");
@@ -204,4 +211,48 @@ fn day_report_from_fixtures() {
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
     assert!(daemon::report::day_text(&r).contains("会话 1"));
+}
+
+#[test]
+fn week_and_month_reports_from_fixtures() {
+    let paths = home("weekmonth");
+    for e in &events(&paths) {
+        spool::append(&paths, e).unwrap();
+    }
+    let mut p = processor(&paths);
+    p.ingest_spool(&paths).unwrap();
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let claude = paths.home.join("no-claude-dir");
+    let now = 1_793_200_000_000; // 2026-10-28 local
+    let any = chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
+    let w = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any, now, false).unwrap();
+    assert_eq!(w["kind"], "week");
+    assert_eq!(w["date"], "2026-W44");
+    let days = w["days"].as_array().unwrap();
+    assert_eq!(days.len(), 7);
+    assert_eq!(days[0]["date"], "2026-10-26", "weeks start on Monday");
+    assert_eq!(w["active_days"], 3, "fixtures span Mon, Tue, Wed");
+    assert_eq!(w["turns"], 9);
+    let sum: f64 = days.iter().map(|d| d["hours"].as_f64().unwrap()).sum();
+    assert!((sum - w["human_hours"].as_f64().unwrap()).abs() < 0.3, "days add up: {sum} vs {}", w["human_hours"]);
+    assert!(w["rank_end"]["xp"].as_u64().unwrap() >= w["rank_start"]["xp"].as_u64().unwrap());
+    assert!(w["sessions"].as_array().unwrap().len() <= 3);
+
+    let m = daemon::report::month(&p.conn, tz, &Config::default(), &claude, any, now, false).unwrap();
+    assert_eq!(m["date"], "2026-10");
+    assert_eq!(m["days"].as_array().unwrap().len(), 31);
+    assert_eq!(m["first_weekday"], 3, "2026-10-01 is a Thursday");
+    assert_eq!(m["active_days"], 3);
+    assert_eq!(m["longest_run"], 3);
+    assert_eq!(m["by_hour"].as_array().unwrap().len(), 24);
+    let window = m["peak_window"].as_str().unwrap();
+    let hours: Vec<u32> = window.trim_end_matches(" 点").split('–').map(|x| x.parse().unwrap()).collect();
+    assert!(hours.iter().all(|h| *h < 24), "a real clock window: {window}");
+    assert_eq!(m["turns"], w["turns"]);
+    let text = daemon::report::text(&m);
+    assert!(text.contains("活跃 3 天"), "{text}");
+
+    let empty = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any + chrono::Duration::days(14), now, false).unwrap();
+    assert_eq!(empty["turns"], 0);
+    assert_eq!(empty["character"]["mood"], "waiting");
 }

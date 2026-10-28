@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use shadowcorp_core::achievements::{self, display_name, roman, Catalog, Category, Store};
 use shadowcorp_core::progress::record_label;
 use daemon::config::Config;
-use shadowcorp_core::render::{fmt_int, fmt_pd, fmt_short, fmt_usd, pad, ring_bar};
+use shadowcorp_core::render::{fmt_hours, fmt_int, fmt_pd, fmt_short, fmt_usd, pad, ring_bar};
 use shadowcorp_core::scoring::fmt_leverage;
 
 fn fmt_record(key: &str, v: f64) -> String {
@@ -23,13 +23,14 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
     let cat = Catalog::builtin();
     let row = |k: &str, v: String| format!("  {}{v}", pad(k, 10));
     let mut out = vec![format!("产出 · {}", o.rank.label()), "─".repeat(44)];
-    out.push(row("总产出", format!("{} · {} 人日 · 按 ${}/小时", fmt_usd(o.total_usd), fmt_pd(o.total_pd), fmt_short(o.hourly_rate))));
+    let money = if o.hourly_rate > 0.0 { format!(" · ≈{}（按 ${}/小时）", fmt_usd(o.total_usd), fmt_short(o.hourly_rate)) } else { String::new() };
+    out.push(row("总产出", format!("{} · {} 人日{money}", fmt_hours(o.total_hours), fmt_pd(o.total_pd))));
     let next = match (o.rank.xp_to_next(), o.rank.next_label()) {
         (Some(n), Some(l)) => format!(" · 还差 {} XP 升 {l}", fmt_int(n as i64)),
         _ => " · 已是最高段位".to_string(),
     };
     out.push(row("段位", format!("{} · {} XP{next}", o.rank.label(), fmt_int(o.rank.xp as i64))));
-    out.push(row("今日", format!("{} · 本周 {}", fmt_usd(o.today_usd), fmt_usd(o.week_usd))));
+    out.push(row("今日", format!("{} · 本周 {}", fmt_hours(o.today_hours), fmt_hours(o.week_hours))));
     let mut stage = format!("Lv.{} {} · {} 位员工", c.stage.level, c.stage.name, c.stage.employees);
     if let Some(n) = c.next {
         stage += &format!(" · 距「{}」还差 {} 人日", n.name, fmt_pd(n.threshold - c.total_pd));

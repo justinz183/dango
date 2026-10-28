@@ -95,12 +95,13 @@ fn cols(left: &str, right: &str) -> String {
 /// Room for line 4's text after "✦ ".
 pub const HIGHLIGHT_WIDTH: usize = INNER - 4;
 
-/// What the end-of-turn box shows: this turn's value, the rank, the
-/// running totals, and one optional line for whatever just moved.
+/// What the end-of-turn box shows: this turn's human-equivalent hours, the
+/// rank, the running totals, and one optional line for whatever just moved.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TurnSummary {
-    pub value_usd: f64,
-    pub person_days: f64,
+    pub hours: f64,
+    /// Only when the user configured an hourly rate.
+    pub usd: Option<f64>,
     pub class_name: String,
     pub files: u32,
     pub test_passed: Option<bool>,
@@ -111,8 +112,8 @@ pub struct TurnSummary {
     pub rank_progress: f64,
     /// None in the top rank.
     pub xp_to_next: Option<u64>,
-    pub today_usd: f64,
-    pub week_usd: f64,
+    pub today_hours: f64,
+    pub week_hours: f64,
     pub leverage: Option<f64>,
     pub highlight: Option<String>,
 }
@@ -126,12 +127,26 @@ pub fn fmt_usd(x: f64) -> String {
     }
 }
 
+/// "25 分钟" under an hour, "3.4h" under a hundred, "123h" above.
+pub fn fmt_hours(h: f64) -> String {
+    if h < 1.0 {
+        format!("{} 分钟", (h * 60.0).round() as i64)
+    } else if h < 100.0 {
+        format!("{h:.1}h")
+    } else {
+        format!("{}h", fmt_int(h.round() as i64))
+    }
+}
+
 pub fn settlement_box(s: &TurnSummary) -> String {
     let title = "─ 产出 ";
     let top = format!("┌{title}{}┐", "─".repeat(INNER.saturating_sub(width(title))));
     // Tags shown in this order; when they do not all fit, the lowest
     // priority ones are dropped whole rather than cut.
-    let mut tags: Vec<(u8, String)> = vec![(0, format!("{} 人日", fmt_pd(s.person_days))), (1, s.class_name.clone())];
+    let mut tags: Vec<(u8, String)> = vec![(1, s.class_name.clone())];
+    if let Some(usd) = s.usd {
+        tags.insert(0, (0, format!("≈{}", fmt_usd(usd))));
+    }
     if s.files > 0 {
         tags.push((3, format!("{} 个文件", s.files)));
     }
@@ -156,11 +171,11 @@ pub fn settlement_box(s: &TurnSummary) -> String {
     };
     let mut lines = vec![
         top,
-        row(&cols(&format!("+{}", fmt_usd(s.value_usd)), &what)),
+        row(&cols(&format!("+{}", fmt_hours(s.hours)), &what)),
         row(&cols(&s.rank_label, &rank_right)),
         row(&cols(
-            &format!("今日 {}", fmt_usd(s.today_usd)),
-            &format!("本周 {} · 杠杆 {}", fmt_usd(s.week_usd), fmt_leverage(s.leverage)),
+            &format!("今日 {}", fmt_hours(s.today_hours)),
+            &format!("本周 {} · 杠杆 {}", fmt_hours(s.week_hours), fmt_leverage(s.leverage)),
         )),
     ];
     if let Some(h) = &s.highlight {
@@ -192,16 +207,16 @@ pub struct StatusInfo {
     pub rank_label: String,
     pub xp: u64,
     pub rank_progress: f64,
-    pub today_usd: f64,
-    pub week_usd: f64,
+    pub today_hours: f64,
+    pub week_hours: f64,
     pub leverage: Option<f64>,
 }
 
 pub fn status_line(s: &StatusInfo) -> String {
     let mut parts = vec![
         format!("▮ {} · {} XP {}", s.rank_label, fmt_int(s.xp as i64), ring_bar(s.rank_progress, 1.0, 5)),
-        format!("今日 {}", fmt_usd(s.today_usd)),
-        format!("本周 {}", fmt_usd(s.week_usd)),
+        format!("今日 {}", fmt_hours(s.today_hours)),
+        format!("本周 {}", fmt_hours(s.week_hours)),
     ];
     if s.leverage.is_some() {
         parts.push(format!("杠杆 {}", fmt_leverage(s.leverage)));
@@ -216,8 +231,8 @@ mod tests {
     #[test]
     fn box_is_44_columns_wide() {
         let s = TurnSummary {
-            value_usd: 268.8,
-            person_days: 0.42,
+            hours: 3.36,
+            usd: None,
             class_name: "重构".into(),
             files: 6,
             test_passed: Some(true),
@@ -226,8 +241,8 @@ mod tests {
             xp: 8_920,
             rank_progress: 0.57,
             xp_to_next: Some(1_080),
-            today_usd: 312.0,
-            week_usd: 1_240.0,
+            today_hours: 3.9,
+            week_hours: 15.5,
             leverage: Some(7.1),
             highlight: Some("晋级 黄金 II".into()),
         };
@@ -235,16 +250,19 @@ mod tests {
         for line in b.lines() {
             assert_eq!(width(line), BOX_WIDTH, "{line}");
         }
-        assert!(b.contains("+$269        0.42 人日 · 重构 · 测试通过"), "{b}");
-        assert!(!b.contains("6 个文件"), "files give way before the test result: {b}");
+        assert!(b.contains("+3.4h        重构 · 6 个文件 · 测试通过"), "{b}");
         assert!(b.contains("黄金 II      8,920 XP ▓▓▓░░ 还差 1,080"), "{b}");
-        assert!(b.contains("今日 $312    本周 $1,240 · 杠杆 7.1x"), "{b}");
+        assert!(b.contains("今日 3.9h    本周 15.5h · 杠杆 7.1x"), "{b}");
         assert!(b.contains("✦ 晋级 黄金 II"));
         assert_eq!(b.lines().count(), 6);
         let without = settlement_box(&TurnSummary { highlight: None, ..s.clone() });
         assert_eq!(without.lines().count(), 5);
-        let crowded = settlement_box(&TurnSummary { class_name: "新功能".into(), committed: true, ..s.clone() });
-        assert!(crowded.contains("0.42 人日 · 新功能") && !crowded.contains("已提交"), "extras give way: {crowded}");
+        let paid = settlement_box(&TurnSummary { usd: Some(268.8), ..s.clone() });
+        assert!(paid.contains("≈$269 · 重构"), "{paid}");
+        let crowded = settlement_box(&TurnSummary { class_name: "新功能".into(), committed: true, usd: Some(268.8), ..s.clone() });
+        assert!(!crowded.contains("已提交"), "extras give way: {crowded}");
+        let short = settlement_box(&TurnSummary { hours: 0.25, ..s.clone() });
+        assert!(short.contains("+15 分钟"), "{short}");
         let top = settlement_box(&TurnSummary { xp_to_next: None, rank_label: "王者".into(), ..s });
         assert!(top.contains("已是最高段位"));
     }
@@ -267,11 +285,14 @@ mod tests {
             rank_label: "黄金 II".into(),
             xp: 8_920,
             rank_progress: 0.57,
-            today_usd: 312.0,
-            week_usd: 1_240.0,
+            today_hours: 3.9,
+            week_hours: 15.5,
             leverage: Some(6.8),
         };
-        assert_eq!(status_line(&s), "▮ 黄金 II · 8,920 XP ▓▓▓░░ · 今日 $312 · 本周 $1,240 · 杠杆 6.8x");
+        assert_eq!(status_line(&s), "▮ 黄金 II · 8,920 XP ▓▓▓░░ · 今日 3.9h · 本周 15.5h · 杠杆 6.8x");
+        assert_eq!(fmt_hours(0.5), "30 分钟");
+        assert_eq!(fmt_hours(16.53), "16.5h");
+        assert_eq!(fmt_hours(1234.0), "1,234h");
         assert_eq!(fmt_usd(4.26), "$4.3");
         assert_eq!(fmt_usd(0.0), "$0.0");
         assert_eq!(fmt_usd(1234.5), "$1,235");

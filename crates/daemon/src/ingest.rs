@@ -980,9 +980,10 @@ impl Processor {
 
         if end.is_some() && self.live() {
             let rate = self.cfg.value.hourly_rate_usd;
+            let hours = |pd: f64| pd * self.k.caps.minutes_per_day / 60.0;
             let summary = TurnSummary {
-                value_usd: value_usd(self.k, credited, rate),
-                person_days: credited,
+                hours: hours(credited),
+                usd: (rate > 0.0).then(|| value_usd(self.k, credited, rate)),
                 class_name: class.name_zh().to_string(),
                 files: sig.files,
                 test_passed: agg.test_run.then_some(agg.test_last == Some(true)),
@@ -991,8 +992,8 @@ impl Processor {
                 xp: new_rank.xp,
                 rank_progress: new_rank.progress,
                 xp_to_next: new_rank.xp_to_next(),
-                today_usd: value_usd(self.k, self.ctr("person_days", &dkey), rate),
-                week_usd: value_usd(self.k, self.ctr("person_days", &wkey), rate),
+                today_hours: hours(self.ctr("person_days", &dkey)),
+                week_hours: hours(self.ctr("person_days", &wkey)),
                 leverage: leverage(self.ctr("human_minutes", &skey), self.ctr("active_minutes", &skey)),
                 highlight: self.take_highlight(),
             };

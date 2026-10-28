@@ -4,7 +4,7 @@
 
 ## 2026-10-29 第二次调整（用户决定，见 docs/DESIGN.md）
 
-00. **$ 退居二线，角色和日报上位。** 头条改为人类等价工时；`hourly_rate_usd` 默认 0 = 不显示。新增价值分类（core/value.rs）、会话标题与项目名查找（daemon/titles.rs，读 transcript 的 ai-title / custom-title / cwd，缓存进 `session_meta`，**本地存会话标题和项目文件夹名是对 SPEC §14 的有意放宽**：只存本机、分享卡默认不带、永不上传）、日报数据与卡片（`shadowcorp report` / `card`）。**待定**：角色台词是模板拼数字，想要更有灵气的文案要开 `claude -p`（未做）；周报、月报未做；小部件还显示 $ 和徽章，待换成工时和角色。
+00. **$ 退居二线，角色和日报上位。** 头条改为人类等价工时；`hourly_rate_usd` 默认 0 = 不显示。新增价值分类（core/value.rs）、会话标题与项目名查找（daemon/titles.rs，读 transcript 的 ai-title / custom-title / cwd，缓存进 `session_meta`，**本地存会话标题和项目文件夹名是对 SPEC §14 的有意放宽**：只存本机、分享卡默认不带、永不上传）、日报数据与卡片（`shadowcorp report` / `card`）。**待定**：角色台词是模板拼数字，想要更有灵气的文案要开 `claude -p`（未做）。周报、月报、小部件换角色与工时已于同日完成。
 
 ## 2026-10-28 方向调整（用户决定）
 

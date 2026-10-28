@@ -4,13 +4,23 @@
 
 设计稿：[docs/DESIGN.md](docs/DESIGN.md)（2026-10-29，替代原规格书 [docs/SPEC.md](docs/SPEC.md) 的"影子公司"设定；计分引擎沿用）。取舍与待定：[docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)。
 
-## 日报卡
+## 日报 / 周报 / 月报卡
 
 ```bash
 shadowcorp card --day yesterday --names
 ```
 
-生成 1080×1350 的 PNG 到 `~/Pictures/ShadowCorp/`，复制到剪贴板，并打开。内容：角色当天的表情和一句话、人类等价工时与杠杆、24 小时时间线、做得最多的三个会话、四类工作（建造 / 修缮 / 守护 / 沉淀）的工时占比、回合 / 文件 / 测试 / 一次过、段位进度。`--names` 才会带上会话标题和项目名（它们只存本机，默认不上卡）；`--day` 接 `YYYY-MM-DD`、`today`、`yesterday`。文字版：`shadowcorp report --day …`。
+```bash
+shadowcorp card --week --names
+```
+
+```bash
+shadowcorp card --month --names
+```
+
+生成 1080 宽的竖图 PNG 到 `~/Pictures/ShadowCorp/`，复制到剪贴板，并打开（高度随内容，介于 4:5 和 9:16 之间）。也可以在仪表盘底部点「生成今日日报」，或右键小部件。日报：内容：角色当天的表情和一句话、人类等价工时与杠杆、24 小时时间线、做得最多的三个会话、四类工作（建造 / 修缮 / 守护 / 沉淀）的工时占比、回合 / 文件 / 测试 / 一次过、段位进度。`--names` 才会带上会话标题和项目名（它们只存本机，默认不上卡）；`--day` 接 `YYYY-MM-DD`、`today`、`yesterday`。
+
+周报：每天一根按四类工作堆叠的柱子、四类占比、花时间最多的三件事、活跃天数 / 回合 / 测试 / 杠杆、段位从周一到周日的变化。月报：日历热力图（颜色越深这天干得越多）、24 小时作息分布（「你最常在 14–17 点开工」）、四类占比、三件事、段位变化。文字版：`shadowcorp report [--week|--month] …`。
 
 ## 产出怎么算
 
@@ -30,6 +40,8 @@ shadowcorp widget
 打包：`apps/widget/bundle.sh` 生成 `target/release/ShadowCorp.app`（含图标，ad-hoc 签名），复制到 /Applications 即可。重复打开不会出现第二个面板。
 
 一个 256×78 的悬浮面板停在屏幕右下角，置顶、不占 Dock、不抢焦点：总产出 $、今日 $、段位徽章、XP 和距下一小段的差距、进度条；agent 干活时右上角有绿点在闪；晋级时徽章发光并显示"晋级 → 黄金 IV"。可以拖到任何位置，右键菜单：打开仪表盘 / 登录时自动启动 / 回到右下角 / 退出。
+
+小部件左边是"你的 Claude"，表情跟着真实状态变：干活时专注、凌晨还在干时犯困、刚晋级时星星眼、一小时没动静就在等你。鼠标停在小部件上，它会说一句话。
 
 **单击小部件**展开成仪表盘（从右下角向左上长出来）：
 
