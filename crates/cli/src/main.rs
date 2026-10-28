@@ -31,6 +31,7 @@ const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
   shadowcorp status [--claude]     一行状态；--claude 供 statusLine 使用
   shadowcorp stats                 公司页
   shadowcorp badges                成就与职业图鉴
+  shadowcorp panel [--no-open]     生成并打开本地可视化面板（办公室、成就、周报）
   shadowcorp backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
   shadowcorp daemon                前台运行守护进程
@@ -66,6 +67,7 @@ fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
         "stats" => with_fresh_db(paths, |c, cfg| pages::stats(c, Tz::from_env(), cfg.general.weekly_target, now_ms())),
         "badges" => with_fresh_db(paths, |c, _| pages::badges(c)),
         "backfill" => run_backfill(paths, args),
+        "panel" => panel(paths, args.iter().any(|a| a == "--no-open")),
         "daemon" => server::run(paths).map(|_| 0),
         "replay" => replay(paths, args),
         "rebuild" => rebuild(paths),
@@ -117,6 +119,19 @@ fn status(paths: &Paths, claude: bool) -> Result<i32> {
             let _ = daemon::paths::write_private(&paths.status_cache, line.as_bytes());
         }
         None => println!("{}", fs::read_to_string(&paths.status_cache).unwrap_or_else(|_| "▮ 影子公司".into())),
+    }
+    Ok(0)
+}
+
+/// Writes the local panel and opens it in the default browser.
+fn panel(paths: &Paths, no_open: bool) -> Result<i32> {
+    let mut page = PathBuf::new();
+    with_fresh_db(paths, |c, cfg| {
+        page = daemon::panel::write(paths, c, Tz::from_env(), cfg.general.weekly_target, now_ms())?;
+        Ok(format!("面板：{}", page.display()))
+    })?;
+    if !no_open {
+        std::process::Command::new("open").arg(&page).status()?;
     }
     Ok(0)
 }

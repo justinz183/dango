@@ -123,3 +123,30 @@ fn crash_mid_batch_and_duplicates_change_nothing() {
     p2.ingest_spool(&crashy).unwrap();
     assert_eq!(state(&p2.conn), want);
 }
+
+#[test]
+fn panel_data_hides_secrets_and_writes_files() {
+    let paths = home("panel");
+    for e in &events(&paths) {
+        spool::append(&paths, e).unwrap();
+    }
+    let mut p = processor(&paths);
+    p.ingest_spool(&paths).unwrap();
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let d = daemon::panel::data(&p.conn, tz, 0.0, 1_793_200_000_000).unwrap();
+    let ach = d["achievements"].as_array().unwrap();
+    assert_eq!(ach.len(), shadowcorp_core::achievements::Catalog::builtin().achievements.len());
+    for a in ach {
+        if a["hidden"] == true {
+            assert!(a["name"].is_null() && a["unlock_line"].is_null(), "{} leaks a hidden name", a["id"]);
+        }
+    }
+    assert_eq!(d["weeks"].as_array().unwrap().len(), 8);
+    assert_eq!(d["roles"].as_array().unwrap().len(), 12);
+    let page = daemon::panel::write(&paths, &p.conn, tz, 0.0, 1_793_200_000_000).unwrap();
+    let html = fs::read_to_string(&page).unwrap();
+    assert!(html.contains("window.SHADOWCORP_DATA = {") && !html.contains("/*INLINE_DATA*/"), "data is inlined");
+    let js = fs::read_to_string(paths.home.join("panel-data.js")).unwrap();
+    assert!(js.starts_with("window.SHADOWCORP_DATA = {"));
+    assert!(!js.contains("/Users") && !js.contains("/w/repo"), "no paths in panel data");
+}

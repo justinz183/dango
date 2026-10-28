@@ -51,6 +51,14 @@ SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp badges
 
 守护进程没运行时事件照样落盘，下次启动补算；结算框只在守护进程运行时出现。
 
+## 可视化面板
+
+```bash
+shadowcorp panel
+```
+
+在浏览器打开 `~/.shadowcorp/panel.html`：像素办公室（员工随 agent 工作打字、子 agent 起身、闲时喝咖啡、久了打盹、夜里只亮台灯）、累计人日与阶段、周环、连续、纪录、成就墙（点开看详情）、职业图鉴、最近 8 周人日。守护进程在有新活动时重写数据，页面每 2 秒刷新；新解锁的成就会弹出庆祝。纯本地文件，不联网、不开端口。这是 SPEC 第 9–10 节桌面面板的网页预览版，菜单栏 App 属于 M3。
+
 ## 命令
 
 | 命令 | 作用 |
@@ -58,6 +66,7 @@ SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp badges
 | `shadowcorp hook` | 所有 hook 的入口：读 stdin，写 spool，永远 exit 0 |
 | `shadowcorp status [--claude]` | 一行状态 |
 | `shadowcorp stats` / `badges` | 公司页 / 成就与职业图鉴 |
+| `shadowcorp panel` | 生成并在浏览器打开本地可视化面板 |
 | `shadowcorp backfill` | 导入安装前的历史（可重复运行，不会重复计） |
 | `shadowcorp daemon` | 守护进程：tail spool，Unix socket 应答 |
 | `shadowcorp replay PATH…` | 回放 hook fixtures |

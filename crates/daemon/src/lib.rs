@@ -5,6 +5,7 @@ pub mod capture;
 pub mod config;
 pub mod db;
 pub mod ingest;
+pub mod panel;
 pub mod paths;
 pub mod server;
 pub mod snapshot;

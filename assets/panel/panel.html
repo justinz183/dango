@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>影子公司</title>
+<style>
+:root {
+  --bg: #f3eee3; --surface: #fbf8f1; --surface-2: #f0e9db; --ink: #2b2a28; --ink-2: #5e5a53;
+  --muted: #8a8378; --line: #e3dacb; --bar: #5b8c7e; --bar-strong: #3c6b5f; --focus: #3c6b5f;
+  --common: #e9dfc8; --common-edge: #c4b693; --rare: #7fb2e5; --epic: #ae95dd; --legendary: #e3b04f;
+  --shadow: 0 1px 0 rgba(43, 42, 40, .04), 0 8px 24px rgba(43, 42, 40, .06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #181715; --surface: #22211e; --surface-2: #2a2925; --ink: #eee7da; --ink-2: #c2baab;
+    --muted: #8f887b; --line: #36342f; --bar: #7aac9e; --bar-strong: #a6d3c6; --focus: #a6d3c6;
+    --common: #d9cfb8; --common-edge: #9d917a; --rare: #79a6d2; --epic: #a28ccc; --legendary: #d6a64c;
+    --shadow: 0 1px 0 rgba(0, 0, 0, .2), 0 8px 24px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body {
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; padding: 24px 16px 40px;
+}
+.num { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+.panel { max-width: 420px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; position: relative; }
+.top { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 6px; }
+.brand { font-weight: 650; letter-spacing: .02em; display: flex; align-items: center; gap: 8px; }
+.brand .mark { width: 10px; height: 14px; background: var(--ink); border-radius: 3px; display: inline-block; }
+.title-chip { font-size: 12px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line);
+  padding: 2px 8px; border-radius: 999px; margin-left: 4px; font-weight: 500; }
+.coins { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.coin { width: 12px; height: 12px; border-radius: 50%; background: var(--legendary); box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+.tabs { display: flex; gap: 2px; padding: 4px 12px 0; border-bottom: 1px solid var(--line); }
+.tab { appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px;
+  padding: 8px 10px 10px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.tab:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+section { padding: 16px 18px 20px; }
+section[hidden] { display: none; }
+.office { display: block; width: 100%; aspect-ratio: 128 / 72; image-rendering: pixelated; image-rendering: crisp-edges;
+  border-radius: 12px; border: 1px solid var(--line); background: #e9dfcc; }
+.caption { font-size: 12px; color: var(--muted); margin: 8px 2px 0; min-height: 18px; }
+.hero { margin: 18px 2px 4px; }
+.label { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+.big { font-size: 44px; line-height: 1.1; font-weight: 600; letter-spacing: -.02em; margin-top: 2px; }
+.big small { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 6px; letter-spacing: 0;
+  font-family: -apple-system, "PingFang SC", system-ui, sans-serif; }
+.stage { margin-top: 6px; color: var(--ink-2); }
+.meter { height: 6px; background: var(--surface-2); border-radius: 999px; margin: 10px 0 6px; overflow: hidden; border: 1px solid var(--line); }
+.meter > i { display: block; height: 100%; background: var(--ink); border-radius: 999px; }
+.sub { font-size: 12px; color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px; }
+.card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+.card .k { font-size: 11px; color: var(--muted); }
+.card .v { font-size: 20px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+.card .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.ring { display: flex; align-items: center; gap: 8px; }
+.ring svg { flex: none; }
+.list { margin-top: 16px; }
+.list h3, .group h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 8px; letter-spacing: .04em; }
+.records { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.records div { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.records b { display: block; font-size: 15px; }
+.records span { font-size: 11px; color: var(--muted); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tags span { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); }
+.chips { display: flex; gap: 6px; margin-bottom: 14px; }
+.chip { appearance: none; font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.group { margin-bottom: 18px; }
+.badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 6px; }
+.badge { appearance: none; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; padding: 4px 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; border-radius: 10px; }
+.badge:hover { background: var(--surface-2); }
+.medal { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; position: relative;
+  font-size: 18px; font-weight: 650; color: #2b2a28; }
+.medal .t { position: absolute; bottom: -4px; right: -4px; font-size: 9px; background: var(--surface); color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0 4px; line-height: 14px; font-weight: 600; }
+.medal.common { background: var(--common); box-shadow: inset 0 0 0 2px var(--common-edge); }
+.medal.rare { background: var(--rare); }
+.medal.epic { background: var(--epic); }
+.medal.legendary { background: var(--legendary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--legendary) 35%, transparent); }
+.medal.locked { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 2px var(--line); }
+.medal.secret { background: repeating-linear-gradient(45deg, var(--surface-2) 0 4px, transparent 4px 8px); color: var(--muted); box-shadow: inset 0 0 0 2px var(--line); }
+.bname { font-size: 11px; color: var(--ink-2); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+.bbar { width: 40px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.bbar i { display: block; height: 100%; background: var(--ink-2); }
+.roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.role { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 8px; text-align: center; }
+.role canvas { width: 64px; height: 64px; image-rendering: pixelated; display: block; margin: 0 auto;
+  background: #efe6d4; border-radius: 10px; }
+.role.t0 { border-style: dashed; background: transparent; }
+.role.t3 { border: 2px solid var(--legendary); }
+.role b { display: block; font-size: 12px; margin-top: 4px; }
+.role span { font-size: 10px; color: var(--muted); }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px;
+  padding: 4px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%); opacity: 0; transition: opacity .1s; }
+details { margin-top: 12px; font-size: 12px; color: var(--ink-2); }
+table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); font-weight: 400; }
+th { color: var(--muted); }
+.sheet { position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); width: min(420px, 100%); z-index: 5;
+  background: var(--surface); border: 1px solid var(--line); border-bottom: 0;
+  border-radius: 16px 16px 0 0; padding: 18px 20px 22px; box-shadow: 0 -8px 30px rgba(0,0,0,.12); }
+.sheet[hidden] { display: none; }
+.sheet .close { position: absolute; top: 10px; right: 12px; appearance: none; border: 0; background: none; font-size: 18px; color: var(--muted); cursor: pointer; }
+.sheet h2 { font-size: 18px; margin: 0 0 4px; }
+.sheet q { display: block; margin: 10px 0; font-size: 15px; quotes: "「" "」"; }
+.celebrate { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(20, 18, 16, .45); z-index: 10; }
+.celebrate[hidden] { display: none; }
+.celebrate .card2 { background: var(--surface); border-radius: 20px; padding: 26px 30px; text-align: center; min-width: 260px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3); animation: pop .6s cubic-bezier(.2, 1.6, .4, 1); }
+.celebrate .medal { width: 72px; height: 72px; font-size: 28px; margin: 0 auto 12px; }
+.celebrate h2 { margin: 4px 0; font-size: 20px; }
+.celebrate .line { min-height: 22px; color: var(--ink-2); }
+#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 11; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .celebrate .card2 { animation: none; } }
+.empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+footer { max-width: 420px; margin: 12px auto 0; font-size: 11px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<main class="panel" aria-label="影子公司面板">
+  <header class="top">
+    <div class="brand"><span class="mark" aria-hidden="true"></span>影子公司<span class="title-chip" id="title"></span></div>
+    <div class="coins" title="金币"><span class="coin" aria-hidden="true"></span><b class="num" id="coins">0</b></div>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="company">公司</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="badges">成就</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="roles">职业图鉴</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="weeks">周报</button>
+  </nav>
+
+  <section id="tab-company" role="tabpanel">
+    <canvas class="office" id="office" width="128" height="72" aria-label="影子办公室"></canvas>
+    <p class="caption" id="caption"></p>
+    <div class="hero">
+      <div class="label">累计产出</div>
+      <div class="big num"><span id="total">0.00</span><small>人日</small></div>
+      <div class="stage" id="stage"></div>
+      <div class="meter" aria-hidden="true"><i id="stage-bar"></i></div>
+      <div class="sub" id="stage-next"></div>
+    </div>
+    <div class="cards">
+      <div class="card ring"><svg id="ring" width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"></svg>
+        <div><div class="k">本周</div><div class="v num" id="week" style="font-size:15px"></div><div class="s" id="week-s"></div></div></div>
+      <div class="card"><div class="k">连续</div><div class="v num" id="streak"></div><div class="s" id="streak-s"></div></div>
+      <div class="card"><div class="k">本周杠杆</div><div class="v num" id="lev"></div><div class="s">人类等价 ÷ 活跃</div></div>
+    </div>
+    <div class="list"><h3>个人纪录</h3><div class="records" id="records"></div></div>
+    <div class="list"><h3>办公室里的东西</h3><div class="tags" id="items"></div></div>
+  </section>
+
+  <section id="tab-badges" role="tabpanel" hidden>
+    <div class="chips" role="group" aria-label="筛选">
+      <button class="chip" data-f="all" aria-pressed="true">全部</button>
+      <button class="chip" data-f="progress" aria-pressed="false">进行中</button>
+      <button class="chip" data-f="done" aria-pressed="false">已解锁</button>
+    </div>
+    <div id="badge-groups"></div>
+  </section>
+
+  <section id="tab-roles" role="tabpanel" hidden>
+    <p class="sub" style="margin:0 0 12px">每张卡三档（1 / 10 / 50 个回合）：线稿 → 上色 → 金边。</p>
+    <div class="roles" id="roles"></div>
+  </section>
+
+  <section id="tab-weeks" role="tabpanel" hidden>
+    <div class="label">最近 8 周人日</div>
+    <div class="big num" style="font-size:28px;margin:2px 0 12px"><span id="wk-now"></span><small id="wk-now-s"></small></div>
+    <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
+    <details><summary>查看数据表</summary><table id="wk-table"></table></details>
+  </section>
+
+  <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true">
+    <button class="close" id="sheet-close" aria-label="关闭">×</button>
+    <div id="sheet-body"></div>
+  </div>
+</main>
+<footer>数据只在本机 · 每 2 秒刷新 · 按 IMF / Anthropic Economic Index 方法估算</footer>
+
+<div class="celebrate" id="celebrate" hidden role="dialog" aria-live="polite"><div class="card2" id="cel-card"></div></div>
+<canvas id="confetti"></canvas>
+
+<script>/*INLINE_DATA*/</script>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const RARITY = {
+  common: { name: "普通", icon: "○" }, rare: { name: "稀有", icon: "◇" },
+  epic: { name: "史诗", icon: "◆" }, legendary: { name: "传说", icon: "★" },
+};
+const ROMAN = ["", "I", "II", "III", "IV"];
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let D = null;
+let lastGen = 0;
+let filter = "all";
+
+const fmt2 = (x) => (x ?? 0).toFixed(2);
+const fmt1 = (x) => { const s = (x ?? 0).toFixed(1); return s.endsWith(".0") ? s.slice(0, -2) : s; };
+const fmtInt = (n) => Math.round(n ?? 0).toLocaleString("en-US");
+const fmtLev = (l) => (l == null ? "—" : l > 50 ? "50x+" : l.toFixed(1) + "x");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ---- data -------------------------------------------------------------
+function load() {
+  const s = document.createElement("script");
+  s.src = "panel-data.js?t=" + Date.now();
+  s.onload = () => { s.remove(); if (window.SHADOWCORP_DATA) render(window.SHADOWCORP_DATA); };
+  s.onerror = () => { s.remove(); if (!D) empty(); };
+  document.head.appendChild(s);
+}
+function empty() {
+  $("#caption").textContent = "还没有数据：在终端运行 shadowcorp panel。";
+}
+function render(d) {
+  if (d.generated_at === lastGen) return;
+  lastGen = d.generated_at;
+  D = d;
+  renderCompany(d);
+  renderBadges(d);
+  renderRoles(d);
+  renderWeeks(d);
+  maybeCelebrate(d);
+}
+
+// ---- company ----------------------------------------------------------
+function renderCompany(d) {
+  const c = d.company;
+  $("#title").textContent = c.title;
+  $("#coins").textContent = fmtInt(c.coins);
+  $("#total").textContent = fmt2(c.total_pd);
+  $("#stage").textContent = `Lv.${c.stage.level} ${c.stage.name} · ${c.stage.employees} 位员工`;
+  if (c.next_stage) {
+    const cur = STAGE_T[c.stage.level - 1];
+    const pct = Math.max(0, Math.min(1, (c.total_pd - cur) / (c.next_stage.threshold - cur)));
+    $("#stage-bar").style.width = (pct * 100).toFixed(1) + "%";
+    $("#stage-next").textContent = `距「${c.next_stage.name}」还差 ${fmt2(c.next_stage.threshold - c.total_pd)} 人日`;
+  } else {
+    $("#stage-bar").style.width = "100%";
+    $("#stage-next").textContent = "已经是帝国了。";
+  }
+  const p = c.week_target > 0 ? Math.min(1, c.week_pd / c.week_target) : 1;
+  const r = 18, L = 2 * Math.PI * r;
+  $("#ring").innerHTML =
+    `<circle cx="22" cy="22" r="${r}" fill="none" stroke="var(--line)" stroke-width="5"/>` +
+    `<circle cx="22" cy="22" r="${r}" fill="none" stroke="var(--ink)" stroke-width="5" stroke-linecap="round"` +
+    ` stroke-dasharray="${(L * p).toFixed(2)} ${L.toFixed(2)}" transform="rotate(-90 22 22)"/>`;
+  $("#week").textContent = `${fmt1(c.week_pd)} / ${fmt1(c.week_target)}`;
+  $("#week-s").textContent = c.week_pd >= c.week_target ? "已合环 ✓" : "人日";
+  const st = c.streak;
+  $("#streak").textContent = `🔥 ${st.current} 天`;
+  $("#streak-s").textContent = st.current <= 1 && st.previous > 0
+    ? `上一段 ${st.previous} 天 · 新的一段从今天开始`
+    : `最长 ${st.longest} 天 · 冻结券 ${c.freeze_tokens}`;
+  $("#lev").textContent = fmtLev(c.week_leverage);
+  const fmtRec = (k, v) => k === "max_leverage" ? fmtLev(v) : k === "max_streak" ? `${v} 天` : `${fmt2(v)} 人日`;
+  $("#records").innerHTML = c.records.length
+    ? c.records.map((r) => `<div><b class="num">${fmtRec(r.key, r.value)}</b><span>${esc(r.label)}</span></div>`).join("")
+    : '<span class="sub">完成几个回合后出现。</span>';
+  $("#items").innerHTML = d.items.length
+    ? d.items.map((i) => `<span>${esc(i)}</span>`).join("")
+    : '<span class="sub">解锁成就会送来装饰。</span>';
+}
+const STAGE_T = [0, 5, 22, 100, 250, 1000, 5000];
+
+// ---- badges -----------------------------------------------------------
+function badgeState(a) {
+  if (a.hidden) return "secret";
+  if (a.tier === 0) return "locked";
+  return a.tier < a.tiers ? "progress" : "done";
+}
+function renderBadges(d) {
+  const groups = [];
+  for (const a of d.achievements) {
+    const st = badgeState(a);
+    const inProgress = st === "progress" || (st === "locked" && a.progress && a.progress[0] > 0);
+    if (filter === "done" && a.tier === 0) continue;
+    if (filter === "progress" && !inProgress) continue;
+    let g = groups.find((x) => x.name === a.category);
+    if (!g) groups.push((g = { name: a.category, items: [] }));
+    g.items.push(a);
+  }
+  const done = d.achievements.filter((a) => a.tier > 0).length;
+  $("#badge-groups").innerHTML = `<p class="sub" style="margin:-4px 0 12px">已解锁 ${done} / ${d.achievements.length}</p>` +
+    groups.map((g) => `<div class="group"><h3>${esc(g.name)}</h3><div class="badges">${g.items.map(badgeTile).join("")}</div></div>`).join("") ||
+    '<div class="empty">这里还没有。</div>';
+  document.querySelectorAll(".badge").forEach((b) => b.addEventListener("click", () => openSheet(b.dataset.id)));
+}
+function badgeTile(a) {
+  const st = badgeState(a);
+  const glyph = st === "secret" ? "?" : esc((a.name || "").charAt(0));
+  const cls = st === "secret" ? "secret" : st === "locked" ? "locked" : a.rarity;
+  const tier = a.tiers > 1 && a.tier > 0 ? `<span class="t">${ROMAN[a.tier]}</span>` : "";
+  const label = st === "secret" ? "???" : esc(a.name);
+  let bar = "";
+  if (a.progress && st !== "done" && st !== "secret") {
+    const pct = Math.min(100, (a.progress[0] / a.progress[1]) * 100);
+    bar = `<span class="bbar"><i style="width:${pct.toFixed(0)}%"></i></span>`;
+  }
+  const r = RARITY[a.rarity] || RARITY.common;
+  const aria = st === "secret" ? `隐藏成就：${a.hint || ""}` : `${a.name}，${r.name}${a.tier ? "，已解锁" : "，未解锁"}`;
+  return `<button class="badge" data-id="${a.id}" aria-label="${esc(aria)}"><span class="medal ${cls}">${glyph}${tier}</span><span class="bname">${label}</span>${bar}</button>`;
+}
+function openSheet(id) {
+  const a = D.achievements.find((x) => x.id === id);
+  if (!a) return;
+  const r = RARITY[a.rarity] || RARITY.common;
+  let body;
+  if (a.hidden) {
+    body = `<h2>???</h2><p class="sub">隐藏成就 · 解锁前只有一句提示</p><q>${esc(a.hint)}</q>`;
+  } else {
+    const prog = a.progress && a.next_threshold != null
+      ? `<p>进度 <b class="num">${fmt1(Math.min(a.progress[0], a.progress[1]))} / ${fmt1(a.progress[1])}</b> ${esc(a.unit)} · 还差 ${fmt1(Math.max(0, a.progress[1] - a.progress[0]))} ${esc(a.unit)}</p>`
+      : a.next_threshold != null ? `<p>下一档：<b class="num">${fmt1(a.next_threshold)}</b> ${esc(a.unit)}</p>` : "";
+    const when = a.unlocked_at ? `<p class="sub">解锁于 ${new Date(a.unlocked_at).toLocaleDateString("zh-CN")}</p>` : "";
+    const pct = a.global_pct != null ? `<p class="sub">${a.global_pct < 10 ? "只有 " : ""}${a.global_pct}% 的创始人拥有（设计值）</p>` : "";
+    body = `<h2>${esc(a.name)}</h2><p class="sub">${r.icon} ${r.name}${a.tiers > 1 ? ` · 共 ${a.tiers} 档` : ""}</p>` +
+      `<q>${esc(a.unlock_line)}</q><p>${esc(a.codex_line)}</p>${prog}${when}${pct}`;
+  }
+  $("#sheet-body").innerHTML = body;
+  $("#sheet").hidden = false;
+  $("#sheet-close").focus();
+}
+$("#sheet-close").addEventListener("click", () => ($("#sheet").hidden = true));
+document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
+  filter = c.dataset.f;
+  document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", String(x === c)));
+  if (D) renderBadges(D);
+}));
+
+// ---- pixel art --------------------------------------------------------
+const P = {
+  wall: "#e9dfcc", wall2: "#e2d6bf", floor: "#d6c4a6", floor2: "#cbb796", base: "#b9a37f",
+  deskTop: "#c39466", desk: "#a77a4f", deskShade: "#8c6440", mon: "#3a3f4a", screenOn: "#a8dccd", screenOff: "#2c313a",
+  ink: "#34323a", inkHi: "#4c4955", edge: "rgba(52,50,58,.55)", white: "#ffffff", pupil: "#17161a",
+  skyDay: "#bfe0ee", skyDay2: "#d8edf4", skyNight: "#28304a", moon: "#f3e9c6", frame: "#f7f2e8",
+  lamp: "#f2c66d", plant: "#7fa36b", plantDark: "#5f8450", pot: "#c97f5d", paper: "#fbf8f1", mug: "#efe7d6",
+  gold: "#e3b04f", blue: "#7fb2e5", lilac: "#ae95dd", red: "#df7f6f",
+};
+const BLOB = [
+  "...OOOOOO...",
+  "..OXXXXXXO..",
+  ".OXHHXXXXXO.",
+  "OXXHXXXXXXXO",
+  "OXXWWXXWWXXO",
+  "OXXWPXXWPXXO",
+  "OXXXXXXXXXXO",
+  "OXXXXXXXXXXO",
+  ".OXXXXXXXXO.",
+  "..OXXXXXXO..",
+  "...OO..OO...",
+];
+const BLINK = { 4: "OXXXXXXXXXXO", 5: "OXX--XX--XXO" };
+const PAL = { O: P.edge, X: P.ink, H: P.inkHi, W: P.white, P: P.pupil, "-": P.pupil };
+function px(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); }
+function blob(ctx, x, y, opt = {}) {
+  const pal = opt.pal || PAL;
+  BLOB.forEach((row, j) => {
+    if (opt.sleep && j < 2) return;
+    let r = row;
+    if ((opt.blink || opt.sleep) && BLINK[j]) r = BLINK[j];
+    for (let i = 0; i < r.length; i++) {
+      const c = pal[r[i]];
+      if (c) px(ctx, x + i, y + j, 1, 1, c);
+    }
+  });
+}
+
+// Decorations drawn at fixed anchors; anything else is listed under the scene.
+const DECOR = {
+  "白板": (c) => { px(c, 32, 6, 20, 13, P.frame); px(c, 33, 7, 18, 11, P.white); px(c, 35, 9, 9, 1, P.blue); px(c, 35, 12, 13, 1, P.red); px(c, 35, 15, 7, 1, P.plantDark); px(c, 40, 19, 4, 1, P.base); },
+  "员工合影相框": (c) => { px(c, 56, 9, 8, 7, P.deskShade); px(c, 57, 10, 6, 5, P.skyDay2); px(c, 58, 12, 2, 2, P.ink); px(c, 61, 12, 1, 2, P.ink); },
+  "集体合照": (c) => { px(c, 66, 8, 13, 8, P.deskShade); px(c, 67, 9, 11, 6, P.skyDay2); for (let i = 0; i < 4; i++) px(c, 68 + i * 3, 11, 2, 3, P.ink); },
+  "书架": (c) => { px(c, 84, 5, 14, 36, P.deskShade); for (let i = 0; i < 4; i++) { px(c, 85, 7 + i * 8, 12, 6, P.desk); px(c, 86, 8 + i * 8, 2, 5, [P.blue, P.red, P.lilac, P.gold][i]); px(c, 89, 9 + i * 8, 2, 4, P.paper); } },
+  "咖啡机": (c) => { px(c, 99, 37, 8, 4, P.desk); px(c, 100, 30, 6, 7, P.mon); px(c, 101, 31, 4, 2, P.red); px(c, 102, 34, 2, 3, P.mug); },
+  "大绿植": (c) => { px(c, 1, 60, 7, 7, P.pot); px(c, 0, 47, 9, 13, P.plant); px(c, 2, 44, 5, 4, P.plantDark); px(c, 0, 52, 2, 4, P.plantDark); },
+  "小盆栽": (c) => { px(c, 12, 22, 4, 3, P.pot); px(c, 12, 19, 4, 3, P.plant); },
+  "月亮夜灯": (c) => { px(c, 27, 34, 3, 3, P.moon); px(c, 28, 37, 1, 4, P.deskShade); },
+  "躺椅": (c) => { px(c, 94, 64, 14, 2, P.blue); px(c, 105, 60, 3, 4, P.blue); px(c, 95, 66, 1, 3, P.deskShade); px(c, 106, 66, 1, 3, P.deskShade); },
+  "睡袋": (c) => { px(c, 70, 66, 15, 4, P.lilac); px(c, 70, 66, 4, 4, P.paper); },
+  "碎纸机": (c) => { px(c, 87, 62, 5, 7, P.mon); px(c, 88, 61, 3, 1, P.paper); },
+  "绿色小交通灯": (c) => { px(c, 110, 60, 3, 7, P.mon); px(c, 111, 64, 1, 1, "#7fd08a"); },
+  "吊床": (c) => { px(c, 113, 44, 1, 12, P.deskShade); px(c, 126, 44, 1, 12, P.deskShade); px(c, 114, 53, 12, 2, P.gold); px(c, 116, 55, 8, 1, P.gold); },
+  "恐龙化石摆件": (c) => { px(c, 56, 67, 7, 1, P.paper); px(c, 57, 65, 4, 2, P.paper); px(c, 61, 63, 2, 2, P.paper); },
+  "泡面": (c, s) => { if (!s.desks[0]) return; const d = s.desks[0]; px(c, d.x + 1, d.y - 3, 4, 3, P.red); px(c, d.x + 1, d.y - 4, 4, 1, P.paper); },
+};
+
+const scene = { desks: [], t: 0, jumpUntil: 0, blinkAt: [] };
+function layout(n) {
+  const desks = [];
+  const shown = Math.min(n, 8);
+  const rows = shown <= 4 ? [shown] : [Math.ceil(shown / 2), Math.floor(shown / 2)];
+  rows.forEach((k, ri) => {
+    const y = rows.length === 1 ? 54 : ri === 0 ? 50 : 63;
+    const span = 96, start = 10;
+    for (let i = 0; i < k; i++) {
+      const slot = span / k;
+      desks.push({ x: Math.round(start + slot * i + (slot - 26) / 2), y, row: ri });
+    }
+  });
+  return desks;
+}
+function officeState(d, now) {
+  const a = d.activity;
+  const since = a.last_event ? now - a.last_event : Infinity;
+  const hour = new Date(now).getHours();
+  const night = hour >= 22 || hour < 6;
+  let mode = "idle";
+  if (a.working > 0 && since < 20 * 60e3) mode = "working";
+  else if (since > 24 * 3600e3) mode = "away";
+  else if (since > 60 * 60e3) mode = "sleeping";
+  return { mode, night, working: a.working, subagents: a.subagents };
+}
+function drawOffice(ctx, d, now) {
+  const W = 128, H = 72;
+  const st = officeState(d, now);
+  const n = d.company.stage.employees;
+  scene.desks = layout(n);
+  const t = scene.t;
+  // room
+  px(ctx, 0, 0, W, 41, P.wall);
+  for (let x = 0; x < W; x += 12) px(ctx, x, 0, 6, 41, P.wall2);
+  px(ctx, 0, 40, W, 2, P.base);
+  px(ctx, 0, 42, W, H - 42, P.floor);
+  for (let y = 48; y < H; y += 7) px(ctx, 0, y, W, 1, P.floor2);
+  // window
+  px(ctx, 4, 5, 22, 20, P.frame);
+  px(ctx, 5, 6, 20, 18, st.night ? P.skyNight : P.skyDay);
+  if (!st.night) { px(ctx, 5, 6, 20, 6, P.skyDay2); px(ctx, 8, 15, 5, 1, P.white); px(ctx, 17, 10, 4, 1, P.white); }
+  else { px(ctx, 18, 8, 4, 4, P.moon); px(ctx, 20, 8, 2, 2, P.skyNight); px(ctx, 8, 9, 1, 1, P.moon); px(ctx, 11, 18, 1, 1, P.moon); px(ctx, 22, 20, 1, 1, P.moon); }
+  px(ctx, 14, 6, 2, 18, P.frame); px(ctx, 5, 14, 20, 2, P.frame);
+  // door
+  px(ctx, 108, 12, 15, 29, P.deskShade); px(ctx, 110, 14, 11, 27, P.desk); px(ctx, 118, 28, 2, 2, P.gold);
+  if (st.mode === "away") px(ctx, 113, 8, 5, 2, P.lamp);
+  const items = new Set(d.items);
+  for (const [name, fn] of Object.entries(DECOR)) if (items.has(name) && name !== "泡面") fn(ctx, scene);
+
+  const jumping = now < scene.jumpUntil;
+  scene.desks.forEach((desk, i) => {
+    const typing = st.mode === "working" && i < st.working;
+    const standing = st.mode === "working" && !typing && i < st.working + st.subagents;
+    const present = st.mode !== "away";
+    let bx = desk.x + 2, by = desk.y - 9;
+    if (present) {
+      if (!scene.blinkAt[i] || scene.blinkAt[i] < t - 40) scene.blinkAt[i] = t + 20 + Math.floor(Math.random() * 60);
+      const blink = t >= scene.blinkAt[i] && t < scene.blinkAt[i] + 2;
+      if (jumping) by -= Math.round(Math.abs(Math.sin((t + i * 3) / 2)) * 5);
+      else if (typing) by += (t + i) % 6 < 3 ? 0 : 1;
+      else if (standing) { by -= 5; bx += 0; by -= (t + i * 2) % 8 < 4 ? 1 : 0; }
+      else if (st.mode === "idle") bx += Math.floor((t + i * 37) / 48) % 2;
+      const sleep = st.mode === "sleeping";
+      blob(ctx, bx, sleep ? by + 3 : by, { blink, sleep });
+      if (sleep && (t + i * 5) % 24 < 16) { px(ctx, bx + 11, by - 2 - ((t / 6) | 0) % 3, 2, 1, P.ink); }
+      if (st.mode === "idle" && i === 0 && !jumping) { // coffee
+        px(ctx, bx + 11, by + 6, 3, 3, P.mug); px(ctx, bx + 14, by + 7, 1, 1, P.mug);
+        if (t % 12 < 6) px(ctx, bx + 12, by + 3 - ((t / 4) | 0) % 2, 1, 2, "rgba(255,255,255,.7)");
+      }
+      if (jumping) { px(ctx, bx - 1, by + 3, 1, 3, P.ink); px(ctx, bx + 12, by + 3, 1, 3, P.ink); }
+    }
+    // desk in front of the character
+    px(ctx, desk.x, desk.y, 26, 3, P.deskTop);
+    px(ctx, desk.x + 1, desk.y + 3, 24, 7, P.desk);
+    px(ctx, desk.x + 1, desk.y + 9, 24, 1, P.deskShade);
+    // monitor
+    px(ctx, desk.x + 15, desk.y - 9, 10, 8, P.mon);
+    const on = typing || standing;
+    px(ctx, desk.x + 16, desk.y - 8, 8, 6, on ? P.screenOn : P.screenOff);
+    if (on) for (let k = 0; k < 3; k++) px(ctx, desk.x + 17, desk.y - 7 + k * 2, 2 + ((t + k * 3 + i) % 5), 1, "#3c6b5f");
+    px(ctx, desk.x + 19, desk.y - 1, 2, 1, P.mon);
+    if (typing) px(ctx, desk.x + 4 + ((t + i) % 4 < 2 ? 0 : 2), desk.y - 1, 3, 1, P.ink);
+    if (st.night && on) { // desk lamp glow
+      ctx.fillStyle = "rgba(242,198,109,.18)"; ctx.fillRect(desk.x - 4, desk.y - 18, 34, 30);
+    }
+  });
+  if (items.has("泡面")) DECOR["泡面"](ctx, scene);
+  if (n > 8) { ctx.fillStyle = P.ink; ctx.font = "6px ui-monospace, monospace"; ctx.fillText(`+${n - 8}`, 96, 70); }
+  if (st.night) {
+    ctx.fillStyle = "rgba(14,16,32,.42)"; ctx.fillRect(0, 0, W, H);
+    scene.desks.forEach((desk, i) => {
+      if (st.mode === "working" && i < st.working + st.subagents) { ctx.fillStyle = "rgba(242,198,109,.22)"; ctx.fillRect(desk.x - 2, desk.y - 14, 30, 26); }
+    });
+  }
+  return st;
+}
+function captionFor(st, d) {
+  const n = d.company.stage.employees;
+  let s;
+  if (st.mode === "working") {
+    s = `${Math.min(st.working, n)} 位员工正在敲键盘`;
+    if (st.subagents > 0) s += ` · ${st.subagents} 个子 agent 在跑，更多人起身了`;
+  } else if (st.mode === "idle") s = "回合刚结束，大家在喝咖啡、转椅子";
+  else if (st.mode === "sleeping") s = "一小时没动静了，大家趴在桌上打盹";
+  else s = "办公室空着，门口留了一盏灯";
+  return st.night ? s + " · 夜里，只有干活的桌上亮着台灯" : s;
+}
+const office = $("#office").getContext("2d");
+let lastFrame = 0;
+function tick(ts) {
+  requestAnimationFrame(tick);
+  if (!D || document.hidden) return;
+  const celebrating = Date.now() < scene.jumpUntil;
+  const fps = celebrating ? 24 : 12;
+  if (ts - lastFrame < 1000 / fps) return;
+  lastFrame = ts;
+  scene.t++;
+  const st = drawOffice(office, D, Date.now());
+  const cap = captionFor(st, D);
+  if ($("#caption").textContent !== cap) $("#caption").textContent = cap;
+}
+requestAnimationFrame(tick);
+
+// ---- role cards -------------------------------------------------------
+const ACC = {
+  frontend: (c) => { px(c, 23, 18, 6, 4, P.paper); px(c, 24, 19, 1, 1, P.red); px(c, 26, 19, 1, 1, P.blue); px(c, 25, 20, 1, 1, P.gold); },
+  backend: (c) => { px(c, 23, 17, 6, 6, "#9aa0a8"); px(c, 25, 16, 2, 8, "#9aa0a8"); px(c, 22, 19, 8, 2, "#9aa0a8"); px(c, 25, 19, 2, 2, P.mon); },
+  dba: (c) => { px(c, 7, 23, 18, 8, "#9aa0a8"); px(c, 9, 25, 14, 1, P.mon); px(c, 9, 28, 14, 1, P.mon); },
+  devops: (c) => { px(c, 10, 9, 12, 3, P.gold); px(c, 9, 12, 14, 1, P.gold); },
+  qa: (c) => { px(c, 23, 15, 5, 5, P.skyDay); px(c, 23, 15, 5, 1, P.mon); px(c, 23, 19, 5, 1, P.mon); px(c, 27, 20, 2, 3, P.deskShade); },
+  writer: (c) => { px(c, 25, 10, 2, 10, P.paper); px(c, 24, 12, 1, 5, P.paper); px(c, 25, 20, 1, 3, P.deskShade); },
+  security: (c) => { px(c, 22, 15, 7, 8, P.blue); px(c, 23, 23, 5, 1, P.blue); px(c, 25, 16, 1, 6, P.paper); },
+  data: (c) => { px(c, 22, 22, 8, 1, P.mon); px(c, 23, 18, 2, 4, P.blue); px(c, 26, 16, 2, 6, P.plant); },
+  mobile: (c) => { px(c, 23, 13, 6, 10, P.mon); px(c, 24, 14, 4, 7, P.skyDay); },
+  architect: (c) => { px(c, 21, 16, 9, 7, P.blue); px(c, 22, 18, 7, 1, P.paper); px(c, 24, 17, 1, 5, P.paper); },
+  pm: (c) => { px(c, 23, 14, 4, 4, P.gold); px(c, 25, 19, 4, 4, P.red); },
+  ml: (c) => { px(c, 9, 14, 14, 1, P.mon); px(c, 10, 14, 4, 3, P.lilac); px(c, 17, 14, 4, 3, P.lilac); },
+};
+function renderRoles(d) {
+  const el = $("#roles");
+  el.innerHTML = d.roles.map((r) => {
+    const face = ["未解锁", "线稿", "上色", "金边"][r.tier];
+    const next = r.next != null ? ` · 下一档 ${r.next}` : "";
+    return `<div class="role t${r.tier}" title="${esc(r.face)}"><canvas width="32" height="32" data-role="${r.id}" data-tier="${r.tier}"></canvas>` +
+      `<b>${esc(r.name)} ${ROMAN[r.tier] || ""}</b><span>${fmtInt(r.turns)} 回合${next}</span><br><span>${face}</span></div>`;
+  }).join("");
+  el.querySelectorAll("canvas").forEach((cv) => {
+    const c = cv.getContext("2d");
+    const tier = +cv.dataset.tier;
+    const ghost = { O: "rgba(140,133,122,.35)", X: "rgba(140,133,122,.18)", H: "rgba(140,133,122,.18)", W: "rgba(140,133,122,.3)", P: "rgba(140,133,122,.45)" };
+    const line = { O: P.ink, W: P.white, P: P.pupil, "-": P.pupil };
+    blob(c, 10, 12, { pal: tier === 0 ? ghost : tier === 1 ? line : PAL });
+    if (tier >= 1) ACC[cv.dataset.role]?.(c);
+  });
+}
+
+// ---- weekly chart -----------------------------------------------------
+function renderWeeks(d) {
+  const w = d.weeks, c = d.company;
+  $("#wk-now").textContent = fmt2(c.week_pd);
+  $("#wk-now-s").textContent = ` 人日 · 目标 ${fmt1(c.week_target)} · 杠杆 ${fmtLev(c.week_leverage)}`;
+  const W = 384, H = 170, top = 14, bottom = 22, left = 4;
+  const max = Math.max(c.week_target, ...w.map((x) => x.pd), 1) * 1.15;
+  const step = (W - left) / w.length, bw = Math.min(26, step - 10);
+  const peak = w.reduce((b, x, i) => (x.pd > w[b].pd ? i : b), 0);
+  const y = (v) => top + (H - top - bottom) * (1 - v / max);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="最近 8 周每周人日">`;
+  const ty = y(c.week_target).toFixed(1);
+  svg += `<line x1="0" x2="${W}" y1="${ty}" y2="${ty}" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3"/>` +
+    `<text x="2" y="${(ty - 4)}" font-size="10" fill="var(--ink-2)">目标 ${fmt1(c.week_target)}</text>`;
+  svg += `<line x1="0" x2="${W}" y1="${H - bottom}" y2="${H - bottom}" stroke="var(--line)" stroke-width="1"/>`;
+  w.forEach((x, i) => {
+    const cx = left + step * i + step / 2;
+    const h = Math.max(0, (H - bottom) - y(x.pd));
+    const last = i === w.length - 1;
+    const bx = cx - bw / 2, by = H - bottom - h;
+    if (h > 0) {
+      const r = Math.min(4, h);
+      svg += `<path d="M${bx},${H - bottom} V${by + r} Q${bx},${by} ${bx + r},${by} H${bx + bw - r} Q${bx + bw},${by} ${bx + bw},${by + r} V${H - bottom} Z" fill="${last ? "var(--bar-strong)" : "var(--bar)"}"/>`;
+    }
+    svg += `<rect x="${cx - step / 2}" y="0" width="${step}" height="${H}" fill="transparent" data-i="${i}"/>`;
+    svg += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="10" fill="${last ? "var(--ink)" : "var(--muted)"}">${x.week.split("-")[1]}</text>`;
+    // Direct labels only on this week and the best week.
+    if ((last || i === peak) && x.pd > 0) svg += `<text x="${cx}" y="${Math.min(by, H - bottom) - 4}" text-anchor="middle" font-size="11" font-weight="${last ? 600 : 400}" fill="${last ? "var(--ink)" : "var(--ink-2)"}">${fmt1(x.pd)}</text>`;
+  });
+  svg += "</svg>";
+  const chart = $("#chart");
+  chart.innerHTML = svg + '<div class="tip" id="tip"></div>';
+  const tip = $("#tip");
+  chart.querySelectorAll("rect[data-i]").forEach((r) => {
+    r.addEventListener("mouseenter", () => {
+      const x = w[+r.dataset.i];
+      const box = chart.getBoundingClientRect();
+      const cx = (left + step * +r.dataset.i + step / 2) / W * box.width;
+      tip.textContent = `${x.week} · ${fmt2(x.pd)} 人日`;
+      tip.style.left = cx + "px";
+      tip.style.top = (y(x.pd) / H * box.height - 6) + "px";
+      tip.style.opacity = 1;
+    });
+    r.addEventListener("mouseleave", () => (tip.style.opacity = 0));
+  });
+  $("#wk-table").innerHTML = "<tr><th>周</th><th>人日</th></tr>" + w.map((x) => `<tr><td>${x.week}</td><td class="num">${fmt2(x.pd)}</td></tr>`).join("");
+}
+
+// ---- celebration ------------------------------------------------------
+let celebrateQueue = [];
+function maybeCelebrate(d) {
+  const seen = new Set(store.get("sc-celebrated") || []);
+  const fresh = d.recent.filter((r) => !seen.has(r.key) && Date.now() - r.at < 15 * 60e3);
+  if (!fresh.length) return;
+  fresh.forEach((r) => seen.add(r.key));
+  store.set("sc-celebrated", [...seen].slice(-200));
+  const order = { legendary: 3, epic: 2, rare: 1, common: 0 };
+  fresh.sort((a, b) => order[b.rarity] - order[a.rarity]);
+  celebrateQueue.push(fresh[0]);
+  if ($("#celebrate").hidden) showNext();
+}
+function showNext() {
+  const r = celebrateQueue.shift();
+  if (!r) return;
+  const R = RARITY[r.rarity] || RARITY.common;
+  $("#cel-card").innerHTML = `<div class="medal ${r.rarity}">${esc(r.name.charAt(0))}</div><div class="sub">${R.icon} ${R.name}成就解锁</div>` +
+    `<h2>${esc(r.name)}</h2><div class="line" id="cel-line"></div><p class="sub" style="margin-top:14px">点击任意处关闭</p>`;
+  $("#celebrate").hidden = false;
+  scene.jumpUntil = Date.now() + 3000;
+  const line = $("#cel-line");
+  if (reduceMotion) line.textContent = r.line;
+  else [...r.line].forEach((ch, i) => setTimeout(() => (line.textContent += ch), 300 + i * 40));
+  if (!reduceMotion) confetti(getComputedStyle(document.documentElement).getPropertyValue("--" + r.rarity).trim() || P.gold);
+  clearTimeout(showNext.timer);
+  showNext.timer = setTimeout(closeCelebrate, r.rarity === "legendary" ? 5000 : 3500);
+}
+function closeCelebrate() { $("#celebrate").hidden = true; showNext(); }
+$("#celebrate").addEventListener("click", closeCelebrate);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { if (!$("#celebrate").hidden) closeCelebrate(); $("#sheet").hidden = true; }
+});
+function confetti(color) {
+  const cv = $("#confetti"), c = cv.getContext("2d");
+  cv.width = innerWidth; cv.height = innerHeight;
+  const colors = [color, P.paper, P.ink];
+  const parts = Array.from({ length: 90 }, () => ({
+    x: innerWidth / 2, y: innerHeight / 2, vx: (Math.random() - .5) * 9, vy: -Math.random() * 9 - 2,
+    s: 3 + Math.random() * 4, c: colors[(Math.random() * colors.length) | 0],
+  }));
+  const end = Date.now() + 2200;
+  (function step() {
+    c.clearRect(0, 0, cv.width, cv.height);
+    for (const p of parts) { p.vy += 0.25; p.x += p.vx; p.y += p.vy; c.fillStyle = p.c; c.fillRect(p.x, p.y, p.s, p.s); }
+    if (Date.now() < end) requestAnimationFrame(step); else c.clearRect(0, 0, cv.width, cv.height);
+  })();
+}
+
+// ---- tabs -------------------------------------------------------------
+const tabs = [...document.querySelectorAll(".tab")];
+function selectTab(t) {
+  tabs.forEach((x) => {
+    const on = x === t;
+    x.setAttribute("aria-selected", String(on));
+    x.tabIndex = on ? 0 : -1;
+    $("#tab-" + x.dataset.tab).hidden = !on;
+  });
+  store.set("sc-tab", t.dataset.tab);
+}
+tabs.forEach((t, i) => {
+  t.addEventListener("click", () => selectTab(t));
+  t.addEventListener("keydown", (e) => {
+    const k = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (k) { const n = tabs[(i + k + tabs.length) % tabs.length]; selectTab(n); n.focus(); }
+  });
+});
+const saved = tabs.find((t) => t.dataset.tab === store.get("sc-tab"));
+if (saved) selectTab(saved);
+
+// Data written into the page renders even where a local page may not load
+// sibling files; polling then keeps it live where it can.
+if (window.SHADOWCORP_DATA) render(window.SHADOWCORP_DATA);
+load();
+setInterval(load, 2000);
+</script>
+</body>
+</html>

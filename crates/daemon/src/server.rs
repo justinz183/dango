@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 use crate::config::Config;
 use crate::db;
 use crate::ingest::{Mode, Processor, Result, Tz};
+use crate::panel;
 use crate::paths::Paths;
 use crate::snapshot;
 
@@ -41,9 +42,19 @@ pub fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
+/// Ingests new spool lines and, when anything changed, rewrites the local
+/// panel's data so an open panel follows along.
+pub fn ingest_and_refresh(p: &mut Processor, paths: &Paths) -> Result<usize> {
+    let n = p.ingest_spool(paths)?;
+    if n > 0 {
+        panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())?;
+    }
+    Ok(n)
+}
+
 /// Handles one request against an exclusive processor.
 pub fn respond(p: &mut Processor, paths: &Paths, req: &Value) -> Value {
-    if let Err(e) = p.ingest_spool(paths) {
+    if let Err(e) = ingest_and_refresh(p, paths) {
         return json!({ "ok": false, "error": e.to_string() });
     }
     let sid = req.get("session_id").and_then(Value::as_str);
@@ -101,10 +112,16 @@ pub fn run(paths: &Paths) -> Result<()> {
         });
     }
     eprintln!("shadowcorp daemon: watching {}", paths.spool.display());
+    {
+        let p = shared.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms()) {
+            eprintln!("shadowcorp daemon: panel write failed: {e}");
+        }
+    }
     loop {
         {
             let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
-            if let Err(e) = p.ingest_spool(paths) {
+            if let Err(e) = ingest_and_refresh(&mut p, paths) {
                 eprintln!("shadowcorp daemon: ingest failed: {e}");
             }
         }
