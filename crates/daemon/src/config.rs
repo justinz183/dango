@@ -22,6 +22,9 @@ git_hook = false
 version = "1.0"
 classifier_v2 = false
 
+[value]
+hourly_rate_usd = 80       # 产出按人类等价小时 × 这个费率折算成美元；改成你所在市场的全包时薪
+
 [ceremony]
 sound = true
 volume = 0.6
@@ -39,6 +42,19 @@ pub struct Config {
     pub general: General,
     pub sources: Sources,
     pub ceremony: Ceremony,
+    pub value: ValueCfg,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ValueCfg {
+    pub hourly_rate_usd: f64,
+}
+
+impl Default for ValueCfg {
+    fn default() -> ValueCfg {
+        ValueCfg { hourly_rate_usd: 80.0 }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,7 +77,7 @@ pub struct Ceremony {
 
 impl Default for Config {
     fn default() -> Config {
-        Config { general: General::default(), sources: Sources::default(), ceremony: Ceremony::default() }
+        Config { general: General::default(), sources: Sources::default(), ceremony: Ceremony::default(), value: ValueCfg::default() }
     }
 }
 impl Default for General {
@@ -104,5 +120,6 @@ mod tests {
         assert_eq!(c.general.weekly_target, 0.0);
         assert!(c.sources.claude_code);
         assert_eq!(c.ceremony.grand_cooldown_hours, 4.0);
+        assert_eq!(c.value.hourly_rate_usd, 80.0);
     }
 }

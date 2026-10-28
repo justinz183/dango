@@ -1,9 +1,11 @@
-# ShadowCorp（影子公司）
+# ShadowCorp — 衡量 AI 编码产出
 
-衡量产出的 AI 编码成就系统。需求唯一来源：docs/SPEC.md。成就目录唯一来源：assets/achievements.json。未决问题与已做的取舍：docs/OPEN_QUESTIONS.md。
+把 Claude Code 的回合折算成 $ 产出、XP 和段位（青铜 → 王者），桌面右下角小部件常驻显示。原规格书 docs/SPEC.md 的"影子公司 / 办公室 / 徽章"设定已于 2026-10-28 收起（见 docs/OPEN_QUESTIONS.md 第 0 条）：计分引擎沿用 SPEC §5，展示层只讲产出。成就目录 assets/achievements.json 仍在，但不是主界面。
 
 ## 命令
 - 构建：`cargo build --workspace`（发布：`cargo build --release`，二进制 `target/release/shadowcorp`）
+- 小部件：`apps/widget/build.sh`（Swift/AppKit → `target/release/shadowcorp-widget`；`--snapshot out.png` 离屏渲染用于验证）
+- 安装到本机：`install -m 0755 target/release/shadowcorp target/release/shadowcorp-widget ~/.local/bin/`，然后 `launchctl kickstart -k gui/$(id -u)/com.shadowcorp.daemon`
 - 测试：`cargo test --workspace`（黄金用例 fixtures/scoring/golden.toml；成就用例 crates/daemon/tests/achievements.rs）
 - 回放：`SHADOWCORP_HOME=/tmp/sc SHADOWCORP_TZ=+08:00 cargo run -p cli -- replay fixtures/hooks/claude_code`
 - 隐私扫描：`cargo run -p cli -- privacy-scan`（提交前必跑）
@@ -19,7 +21,8 @@
 - crates/core 不做任何 IO；所有计分、进度、成就逻辑只在这里。
 - 事件表只追加；任何让用户历史总数变少的改动都不允许（SPEC 5.5）。
 - 不落盘、不上传 prompt / 代码 / 路径 / 仓库名 / token / 费用（SPEC 14）。
-- 改计分常数或成就阈值前先问我，并同步更新 golden.toml。
+- 改计分常数、段位阈值（core/rank.rs）或成就阈值前先问我，并同步更新 golden.toml。
+- $ 只是 H × 时薪的展示；XP 只增不减，不随时薪变。
 - 新增成就 = 改 achievements.json + achievements.rs 里一对用例（刚好解锁 / 差一点）+ 一句解锁语（≤ 18 字），不改引擎代码。
 - 文案遵守 SPEC 8.5：说产出不说节省，永远向上，不提 token。
 - Claude Code hooks / statusline / 插件清单的字段名，每次使用前核对官方文档，不凭记忆。

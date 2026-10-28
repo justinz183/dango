@@ -10,3 +10,4 @@ pub mod paths;
 pub mod server;
 pub mod snapshot;
 pub mod spool;
+pub mod widget;

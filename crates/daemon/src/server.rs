@@ -15,6 +15,7 @@ use crate::config::Config;
 use crate::db;
 use crate::ingest::{Mode, Processor, Result, Tz};
 use crate::panel;
+use crate::widget;
 use crate::paths::Paths;
 use crate::snapshot;
 
@@ -48,6 +49,7 @@ pub fn ingest_and_refresh(p: &mut Processor, paths: &Paths) -> Result<usize> {
     let n = p.ingest_spool(paths)?;
     if n > 0 {
         panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())?;
+        widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms())?;
     }
     Ok(n)
 }
@@ -69,7 +71,7 @@ pub fn respond(p: &mut Processor, paths: &Paths, req: &Value) -> Value {
             }
             json!({ "ok": true, "text": text })
         }
-        "status" => match snapshot::status(&p.conn, p.tz, p.cfg.general.weekly_target, now, sid) {
+        "status" => match snapshot::status(&p.conn, p.tz, &p.cfg, now, sid) {
             Ok(t) => json!({ "ok": true, "text": t }),
             Err(e) => json!({ "ok": false, "error": e.to_string() }),
         },
@@ -114,7 +116,9 @@ pub fn run(paths: &Paths) -> Result<()> {
     eprintln!("shadowcorp daemon: watching {}", paths.spool.display());
     {
         let p = shared.lock().unwrap_or_else(|e| e.into_inner());
-        if let Err(e) = panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms()) {
+        if let Err(e) = panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())
+            .and_then(|_| widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms()))
+        {
             eprintln!("shadowcorp daemon: panel write failed: {e}");
         }
     }

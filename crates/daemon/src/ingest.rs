@@ -14,8 +14,9 @@ use shadowcorp_core::classify::{final_class, turn_role};
 use shadowcorp_core::event::{Event, Kind, Role, Source, TaskClass};
 use shadowcorp_core::expr::Val;
 use shadowcorp_core::progress::{self, coins_for_pd, stage_for, Streak, ACTIVE_DAY_PD, DEFAULT_WEEKLY_TARGET};
+use shadowcorp_core::rank::{standing, xp_from_pd, Standing};
 use shadowcorp_core::render::{fmt_pd, fmt_short, width, TurnSummary, HIGHLIGHT_WIDTH};
-use shadowcorp_core::scoring::{self, credit, human_minutes, leverage, ScoringConstants, TurnSignals};
+use shadowcorp_core::scoring::{self, credit, human_minutes, leverage, value_usd, ScoringConstants, TurnSignals};
 
 use crate::config::Config;
 use crate::db::{get_meta, set_meta};
@@ -144,7 +145,7 @@ struct TurnRow {
 
 #[derive(Debug, Clone)]
 enum Highlight {
-    Stage(u8),
+    Rank(Standing),
     Unlock { id: String, tier: u32 },
     Ring { pd: f64, target: f64 },
     Record { key: String, new: f64, old: f64 },
@@ -162,7 +163,6 @@ pub struct Processor {
     unlocked: Option<HashMap<String, u32>>,
     /// Finished-turn summaries waiting for the Stop hook, by session.
     pub settlements: HashMap<String, TurnSummary>,
-    pending_coins: i64,
     pending: Vec<Highlight>,
     now: i64,
     source: Source,
@@ -193,7 +193,6 @@ impl Processor {
             dirty: HashSet::new(),
             unlocked: None,
             settlements: HashMap::new(),
-            pending_coins: 0,
             pending: Vec::new(),
             now: 0,
             source: Source::ClaudeCode,
@@ -920,8 +919,14 @@ impl Processor {
         self.give_coins(coins_for_pd(old_total, new_total))?;
         let (old_stage, new_stage) = (stage_for(old_total), stage_for(new_total));
         if new_stage.level > old_stage.level && self.live() {
-            self.pending.push(Highlight::Stage(new_stage.level));
             self.ceremony("grand", "stage_up", &new_stage.level.to_string())?;
+        }
+        let mpd = self.k.caps.minutes_per_day;
+        let (old_rank, new_rank) = (standing(xp_from_pd(old_total, mpd)), standing(xp_from_pd(new_total, mpd)));
+        if new_rank.level() > old_rank.level() && self.live() {
+            let level = if new_rank.index > old_rank.index { "grand" } else { "mid" };
+            self.ceremony(level, "rank_up", &new_rank.label())?;
+            self.pending.push(Highlight::Rank(new_rank.clone()));
         }
         let day = self.tz.date(end_ts);
         if day_pd + 1e-9 < ACTIVE_DAY_PD && day_pd + credited + 1e-9 >= ACTIVE_DAY_PD {
@@ -961,17 +966,21 @@ impl Processor {
         self.eval_day(end_ts)?;
 
         if end.is_some() && self.live() {
+            let rate = self.cfg.value.hourly_rate_usd;
             let summary = TurnSummary {
+                value_usd: value_usd(self.k, credited, rate),
                 person_days: credited,
                 class_name: class.name_zh().to_string(),
                 files: sig.files,
                 test_passed: agg.test_run.then_some(agg.test_last == Some(true)),
                 committed: sig.merged,
+                rank_label: new_rank.label(),
+                xp: new_rank.xp,
+                rank_progress: new_rank.progress,
+                xp_to_next: new_rank.xp_to_next(),
+                today_usd: value_usd(self.k, self.ctr("person_days", &dkey), rate),
+                week_usd: value_usd(self.k, self.ctr("person_days", &wkey), rate),
                 leverage: leverage(self.ctr("human_minutes", &skey), self.ctr("active_minutes", &skey)),
-                week_pd: self.ctr("person_days", &wkey),
-                week_target: target,
-                coins: std::mem::take(&mut self.pending_coins),
-                streak: self.streak()?.as_of(day).current,
                 highlight: self.take_highlight(),
             };
             self.settlements.insert(sid.to_string(), summary);
@@ -1015,9 +1024,6 @@ impl Processor {
     fn give_coins(&mut self, n: i64) -> Result<()> {
         if n > 0 {
             self.conn.execute("UPDATE wallet SET coins = coins + ?1 WHERE id = 1", [n])?;
-            if self.live() {
-                self.pending_coins += n;
-            }
         }
         Ok(())
     }
@@ -1203,7 +1209,7 @@ impl Processor {
 
     fn highlight_rank(&self, h: &Highlight) -> u32 {
         match h {
-            Highlight::Stage(_) => 100,
+            Highlight::Rank(_) => 110,
             Highlight::Unlock { id, tier } => {
                 let r = self.cat.get(id).and_then(|a| a.tier(*tier)).map(|t| t.rarity).unwrap_or(Rarity::Common);
                 40 + 15 * r as u32
@@ -1220,10 +1226,7 @@ impl Processor {
         all.sort_by_key(|h| std::cmp::Reverse(self.highlight_rank(h)));
         let best = all.first()?.clone();
         let mut text = match best {
-            Highlight::Stage(level) => {
-                let s = &progress::STAGES[level as usize - 1];
-                format!("升阶：{} · 新称号「{}」", s.name, s.title)
-            }
+            Highlight::Rank(st) => format!("晋级 {}", st.label()),
             Highlight::Unlock { id, tier } => {
                 let a = self.cat.get(&id)?;
                 let mut t = format!("{} 解锁", display_name(a, tier));

@@ -95,39 +95,53 @@ fn cols(left: &str, right: &str) -> String {
 /// Room for line 4's text after "✦ ".
 pub const HIGHLIGHT_WIDTH: usize = INNER - 4;
 
-/// What the end-of-turn box shows.
+/// What the end-of-turn box shows: this turn's value, the rank, the
+/// running totals, and one optional line for whatever just moved.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TurnSummary {
+    pub value_usd: f64,
     pub person_days: f64,
     pub class_name: String,
     pub files: u32,
     pub test_passed: Option<bool>,
     pub committed: bool,
+    pub rank_label: String,
+    pub xp: u64,
+    /// 0‥1 through the current division.
+    pub rank_progress: f64,
+    /// None in the top rank.
+    pub xp_to_next: Option<u64>,
+    pub today_usd: f64,
+    pub week_usd: f64,
     pub leverage: Option<f64>,
-    pub week_pd: f64,
-    pub week_target: f64,
-    pub coins: i64,
-    pub streak: u32,
-    /// The one progress line (line 4), if anything moved this turn.
     pub highlight: Option<String>,
 }
 
+/// "$4.3" under ten dollars, "$1,240" above.
+pub fn fmt_usd(x: f64) -> String {
+    if x.abs() < 10.0 {
+        format!("${x:.1}")
+    } else {
+        format!("${}", fmt_int(x.round() as i64))
+    }
+}
+
 pub fn settlement_box(s: &TurnSummary) -> String {
-    let title = "─ 影子公司 ";
+    let title = "─ 产出 ";
     let top = format!("┌{title}{}┐", "─".repeat(INNER.saturating_sub(width(title))));
     // Tags shown in this order; when they do not all fit, the lowest
     // priority ones are dropped whole rather than cut.
-    let mut tags: Vec<(u8, String)> = vec![(0, s.class_name.clone())];
+    let mut tags: Vec<(u8, String)> = vec![(0, format!("{} 人日", fmt_pd(s.person_days))), (1, s.class_name.clone())];
     if s.files > 0 {
-        tags.push((2, format!("{} 个文件", s.files)));
+        tags.push((3, format!("{} 个文件", s.files)));
     }
     match s.test_passed {
-        Some(true) => tags.push((1, "测试通过".into())),
-        Some(false) => tags.push((1, "测试未过".into())),
+        Some(true) => tags.push((2, "测试通过".into())),
+        Some(false) => tags.push((2, "测试未过".into())),
         None => {}
     }
     if s.committed {
-        tags.push((3, "已提交".into()));
+        tags.push((4, "已提交".into()));
     }
     let room = INNER - 2 - 13;
     let join = |t: &[(u8, String)]| t.iter().map(|(_, x)| x.as_str()).collect::<Vec<_>>().join(" · ");
@@ -136,19 +150,18 @@ pub fn settlement_box(s: &TurnSummary) -> String {
         tags.remove(lowest);
     }
     let what = join(&tags);
+    let rank_right = match s.xp_to_next {
+        Some(n) => format!("{} XP {} 还差 {}", fmt_int(s.xp as i64), ring_bar(s.rank_progress, 1.0, 5), fmt_int(n as i64)),
+        None => format!("{} XP · 已是最高段位", fmt_int(s.xp as i64)),
+    };
     let mut lines = vec![
         top,
-        row(&cols(&format!("+{} 人日", fmt_pd(s.person_days)), &what)),
+        row(&cols(&format!("+{}", fmt_usd(s.value_usd)), &what)),
+        row(&cols(&s.rank_label, &rank_right)),
         row(&cols(
-            &format!("杠杆 {}", fmt_leverage(s.leverage)),
-            &format!(
-                "本周 {} / {} {}",
-                fmt_short(s.week_pd),
-                fmt_short(s.week_target),
-                ring_bar(s.week_pd, s.week_target, 5)
-            ),
+            &format!("今日 {}", fmt_usd(s.today_usd)),
+            &format!("本周 {} · 杠杆 {}", fmt_usd(s.week_usd), fmt_leverage(s.leverage)),
         )),
-        row(&cols(&format!("+{} 金币", fmt_int(s.coins)), &format!("🔥 {} 天", s.streak))),
     ];
     if let Some(h) = &s.highlight {
         lines.push(row(&format!("✦ {h}")));
@@ -176,31 +189,22 @@ pub fn grand_badge(heading: &str, name: &str, line: &str, reward: &str) -> Strin
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StatusInfo {
-    pub stage_level: u8,
-    pub title: String,
-    pub week_pd: f64,
-    pub week_target: f64,
+    pub rank_label: String,
+    pub xp: u64,
+    pub rank_progress: f64,
+    pub today_usd: f64,
+    pub week_usd: f64,
     pub leverage: Option<f64>,
-    pub streak: u32,
-    pub hint: Option<String>,
 }
 
 pub fn status_line(s: &StatusInfo) -> String {
     let mut parts = vec![
-        format!("▮ 影子公司 Lv.{} {}", s.stage_level, s.title),
-        format!(
-            "本周 {}/{} 人日 {}",
-            fmt_short(s.week_pd),
-            fmt_short(s.week_target),
-            ring_bar(s.week_pd, s.week_target, 5)
-        ),
+        format!("▮ {} · {} XP {}", s.rank_label, fmt_int(s.xp as i64), ring_bar(s.rank_progress, 1.0, 5)),
+        format!("今日 {}", fmt_usd(s.today_usd)),
+        format!("本周 {}", fmt_usd(s.week_usd)),
     ];
     if s.leverage.is_some() {
         parts.push(format!("杠杆 {}", fmt_leverage(s.leverage)));
-    }
-    parts.push(format!("🔥 {} 天", s.streak));
-    if let Some(h) = &s.hint {
-        parts.push(h.clone());
     }
     parts.join(" · ")
 }
@@ -212,30 +216,37 @@ mod tests {
     #[test]
     fn box_is_44_columns_wide() {
         let s = TurnSummary {
+            value_usd: 268.8,
             person_days: 0.42,
             class_name: "重构".into(),
             files: 6,
             test_passed: Some(true),
             committed: false,
+            rank_label: "黄金 II".into(),
+            xp: 8_920,
+            rank_progress: 0.57,
+            xp_to_next: Some(1_080),
+            today_usd: 312.0,
+            week_usd: 1_240.0,
             leverage: Some(7.1),
-            week_pd: 3.6,
-            week_target: 5.0,
-            coins: 42,
-            streak: 9,
-            highlight: Some("绿灯 II 解锁 · 还差 90 次到 III".into()),
+            highlight: Some("晋级 黄金 II".into()),
         };
         let b = settlement_box(&s);
         for line in b.lines() {
             assert_eq!(width(line), BOX_WIDTH, "{line}");
         }
-        assert!(b.contains("+0.42 人日   重构 · 6 个文件 · 测试通过"));
-        assert!(b.contains("杠杆 7.1x    本周 3.6 / 5 ▓▓▓▓░"));
-        assert!(b.contains("+42 金币     🔥 9 天"));
+        assert!(b.contains("+$269        0.42 人日 · 重构 · 测试通过"), "{b}");
+        assert!(!b.contains("6 个文件"), "files give way before the test result: {b}");
+        assert!(b.contains("黄金 II      8,920 XP ▓▓▓░░ 还差 1,080"), "{b}");
+        assert!(b.contains("今日 $312    本周 $1,240 · 杠杆 7.1x"), "{b}");
+        assert!(b.contains("✦ 晋级 黄金 II"));
         assert_eq!(b.lines().count(), 6);
         let without = settlement_box(&TurnSummary { highlight: None, ..s.clone() });
         assert_eq!(without.lines().count(), 5);
-        let crowded = settlement_box(&TurnSummary { class_name: "新功能".into(), committed: true, ..s });
-        assert!(crowded.contains("新功能 · 测试通过"), "files and commit give way to the test result");
+        let crowded = settlement_box(&TurnSummary { class_name: "新功能".into(), committed: true, ..s.clone() });
+        assert!(crowded.contains("0.42 人日 · 新功能") && !crowded.contains("已提交"), "extras give way: {crowded}");
+        let top = settlement_box(&TurnSummary { xp_to_next: None, rank_label: "王者".into(), ..s });
+        assert!(top.contains("已是最高段位"));
     }
 
     #[test]
@@ -244,7 +255,7 @@ mod tests {
         for line in settlement_box(&s).lines() {
             assert_eq!(width(line), BOX_WIDTH);
         }
-        let g = grand_badge("★ 传说成就 ★", "千人日", "一千个人日，灯火通明。", "+2,000 金币 · 霓虹招牌");
+        let g = grand_badge("★ 晋级 ★", "黄金 IV", "一千个人日，灯火通明。", "+2,000 金币 · 霓虹招牌");
         for line in g.lines() {
             assert_eq!(width(line), BOX_WIDTH, "{line}");
         }
@@ -253,15 +264,17 @@ mod tests {
     #[test]
     fn status() {
         let s = StatusInfo {
-            stage_level: 4,
-            title: "成长期 CEO".into(),
-            week_pd: 3.2,
-            week_target: 5.0,
+            rank_label: "黄金 II".into(),
+            xp: 8_920,
+            rank_progress: 0.57,
+            today_usd: 312.0,
+            week_usd: 1_240.0,
             leverage: Some(6.8),
-            streak: 9,
-            hint: None,
         };
-        assert_eq!(status_line(&s), "▮ 影子公司 Lv.4 成长期 CEO · 本周 3.2/5 人日 ▓▓▓░░ · 杠杆 6.8x · 🔥 9 天");
+        assert_eq!(status_line(&s), "▮ 黄金 II · 8,920 XP ▓▓▓░░ · 今日 $312 · 本周 $1,240 · 杠杆 6.8x");
+        assert_eq!(fmt_usd(4.26), "$4.3");
+        assert_eq!(fmt_usd(0.0), "$0.0");
+        assert_eq!(fmt_usd(1234.5), "$1,235");
     }
 
     #[test]

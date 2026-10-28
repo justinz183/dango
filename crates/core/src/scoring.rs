@@ -98,6 +98,12 @@ pub fn credit(k: &ScoringConstants, h_minutes: f64, day_so_far: f64, week_so_far
     pd.min(day_room).min(week_room)
 }
 
+/// Market value of credited output: person-days × hours per day × the
+/// configured hourly rate (a fully loaded engineer cost; SPEC pivot).
+pub fn value_usd(k: &ScoringConstants, person_days: f64, hourly_rate: f64) -> f64 {
+    person_days * k.caps.minutes_per_day / 60.0 * hourly_rate
+}
+
 pub fn leverage(human_minutes: f64, active_minutes: f64) -> Option<f64> {
     if active_minutes < LEVERAGE_MIN_ACTIVE {
         None
@@ -176,6 +182,13 @@ mod tests {
         assert_eq!(credit(k, 360.0, 6.0, 0.0), 0.0);
         assert!((credit(k, 360.0, 0.0, 29.9) - 0.1).abs() < 1e-9);
         assert_eq!(credit(k, 360.0, 0.0, 30.0), 0.0);
+    }
+
+    #[test]
+    fn value_is_hours_times_rate() {
+        let k = ScoringConstants::builtin();
+        assert!((value_usd(k, 1.0, 80.0) - 640.0).abs() < 1e-9);
+        assert!((value_usd(k, 0.42, 80.0) - 268.8).abs() < 1e-9);
     }
 
     #[test]

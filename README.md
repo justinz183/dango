@@ -1,19 +1,35 @@
-# 影子公司（ShadowCorp）
+# ShadowCorp — 衡量 AI 编码产出
 
-衡量产出的 AI 编码成就系统：把 Claude Code 每个回合完成的工作折算成**人日**，配上徽章、连续天数、公司阶段和回合结束时的结算框。不统计 token，不存 prompt、代码或路径。
+把 Claude Code 每个回合完成的工作折算成**产出价值（$）**和 **XP**，段位从青铜一路升到王者；屏幕右下角一个小部件常驻显示，回合结束时终端里打印一个结算框。不统计 token，不存 prompt、代码或路径。
 
-需求：[docs/SPEC.md](docs/SPEC.md)。实现取舍与待定问题：[docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)。
+> 2026-10-28 方向调整：原规格书（[docs/SPEC.md](docs/SPEC.md)）的"影子公司 / 像素办公室 / 徽章"设定收起，产品只回答一个问题——你产出了多少。公司阶段、成就、网页面板的代码仍在仓库里，但不再是主界面。取舍与待定见 [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)。
+
+## 产出怎么算
+
+1. 每个回合估一个"人类工程师做同样的事要多少分钟"H（规格书 §5.3 的公式：任务类型基础分钟 + 文件数 + 改动行数 + 跑了测试 + 子 agent 数 + 提交/合并，单回合封顶 360 分钟，每日 6 人日、每周 30 人日封顶）。
+2. **$ = H ÷ 60 × 时薪**。时薪在 `~/.shadowcorp/config.toml` 的 `[value] hourly_rate_usd` 里，默认 80（按美国软件工程师全包成本粗估，请改成你所在市场的数字）。
+3. **XP = 封顶后的人类等价分钟数**，只增不减，不受时薪影响。
+4. **段位**按累计 XP：青铜 0 · 白银 1,000 · 黄金 5,000 · 铂金 15,000 · 钻石 40,000 · 大师 100,000 · 王者 250,000。每个段位分 IV → I 四个小段，王者不分段。一周重度使用约 4,000–10,000 XP，所以黄金在第一两周、铂金在第一个月、王者大约一年。
+
+## 桌面小部件
+
+```bash
+shadowcorp widget
+```
+
+一个 256×78 的悬浮面板停在屏幕右下角，置顶、不占 Dock、不抢焦点：总产出 $、今日 $、段位徽章、XP 和距下一小段的差距、进度条；agent 干活时右上角有绿点在闪；晋级时徽章发光并显示"晋级 → 黄金 IV"。可以拖到任何位置，右键菜单：登录时自动启动 / 回到右下角 / 退出。纯本地：读 `~/.shadowcorp/widget.json`（守护进程有新活动就重写），每 2 秒刷新。
+
+原生 Swift（AppKit），150 KB，构建：`apps/widget/build.sh`。
 
 ## 当前进度
 
-| 里程碑 | 状态 |
+| 部分 | 状态 |
 | --- | --- |
-| M0 骨架：事件 schema、spool、`shadowcorp hook`、SQLite、插件清单 | ✅ |
-| M1 计分与回填：分类器 v1、人日公式、sessions / turns / daily、transcript 回填、`stats` | ✅ |
-| M2 成就与进度：53 个成就 + 引擎、四作用域计数器、阶段 / 金币 / 周环 / 连续 / 纪录、状态栏、结算框 | ✅ |
-| M3–M8（桌面应用、办公室、分享卡、Codex/git、社交、安装发布） | 未开始 |
-
-M0–M2 是纯终端产品（SPEC 16）。
+| 采集：Claude Code 插件 hooks、spool、SQLite、历史回填 | ✅ |
+| 计分：分类器 v1、人日公式、$ 价值、XP 与段位 | ✅ |
+| 展示：桌面小部件、终端结算框、状态栏、`stats` | ✅ |
+| 旧设定（成就、公司阶段、网页面板 `shadowcorp panel`） | 仍可用，不再是主界面 |
+| Codex / git 接入、安装脚本、Windows / Linux | 未开始 |
 
 ## 构建与试用
 
@@ -51,7 +67,7 @@ SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp badges
 
 守护进程没运行时事件照样落盘，下次启动补算；结算框只在守护进程运行时出现。
 
-## 可视化面板
+## 网页面板（旧）
 
 ```bash
 shadowcorp panel
@@ -65,8 +81,9 @@ shadowcorp panel
 | --- | --- |
 | `shadowcorp hook` | 所有 hook 的入口：读 stdin，写 spool，永远 exit 0 |
 | `shadowcorp status [--claude]` | 一行状态 |
-| `shadowcorp stats` / `badges` | 公司页 / 成就与职业图鉴 |
-| `shadowcorp panel` | 生成并在浏览器打开本地可视化面板 |
+| `shadowcorp widget` | 启动桌面小部件（右下角） |
+| `shadowcorp stats` / `badges` | 产出总览 / 旧的成就图鉴 |
+| `shadowcorp panel` | 旧的网页面板 |
 | `shadowcorp backfill` | 导入安装前的历史（可重复运行，不会重复计） |
 | `shadowcorp daemon` | 守护进程：tail spool，Unix socket 应答 |
 | `shadowcorp replay PATH…` | 回放 hook fixtures |

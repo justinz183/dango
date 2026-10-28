@@ -31,7 +31,8 @@ const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
   shadowcorp status [--claude]     一行状态；--claude 供 statusLine 使用
   shadowcorp stats                 公司页
   shadowcorp badges                成就与职业图鉴
-  shadowcorp panel [--no-open]     生成并打开本地可视化面板（办公室、成就、周报）
+  shadowcorp widget                启动桌面小部件（屏幕右下角：产出 $、段位、XP）
+  shadowcorp panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   shadowcorp backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
   shadowcorp daemon                前台运行守护进程
@@ -64,10 +65,11 @@ fn main() {
 fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
     match cmd {
         "status" => status(paths, args.iter().any(|a| a == "--claude")),
-        "stats" => with_fresh_db(paths, |c, cfg| pages::stats(c, Tz::from_env(), cfg.general.weekly_target, now_ms())),
+        "stats" => with_fresh_db(paths, |c, cfg| pages::stats(c, Tz::from_env(), cfg, now_ms())),
         "badges" => with_fresh_db(paths, |c, _| pages::badges(c)),
         "backfill" => run_backfill(paths, args),
         "panel" => panel(paths, args.iter().any(|a| a == "--no-open")),
+        "widget" => widget(paths),
         "daemon" => server::run(paths).map(|_| 0),
         "replay" => replay(paths, args),
         "rebuild" => rebuild(paths),
@@ -86,26 +88,51 @@ fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
 
 /// Runs `f` on an up-to-date database: asks a running daemon to flush the
 /// spool, or ingests it here when no daemon holds the processor lock.
-fn with_fresh_db(paths: &Paths, f: impl FnOnce(&Connection, &Config) -> Result<String>) -> Result<i32> {
-    let text = match server::try_lock(paths)? {
+fn fresh_db<T>(paths: &Paths, f: impl FnOnce(&Connection, &Config) -> Result<T>) -> Result<T> {
+    match server::try_lock(paths)? {
         Some(_lock) => {
             let mut p = server::open_processor(paths, Mode::Live)?;
             p.ingest_spool(paths)?;
-            f(&p.conn, &p.cfg)?
+            f(&p.conn, &p.cfg)
         }
         None => {
             let _ = server::request(paths, &json!({ "op": "flush" }), Duration::from_secs(5));
             let conn = db::open(&paths.db)?;
-            f(&conn, &Config::load(paths))?
+            f(&conn, &Config::load(paths))
         }
-    };
-    println!("{text}");
+    }
+}
+
+fn with_fresh_db(paths: &Paths, f: impl FnOnce(&Connection, &Config) -> Result<String>) -> Result<i32> {
+    println!("{}", fresh_db(paths, f)?);
+    Ok(0)
+}
+
+/// Starts the native desktop widget (built by apps/widget/build.sh and
+/// installed next to this binary) with fresh data to show.
+fn widget(paths: &Paths) -> Result<i32> {
+    let exe = std::env::current_exe()?.with_file_name("shadowcorp-widget");
+    if !exe.exists() {
+        return Err(format!("没有找到 {}，先运行 apps/widget/build.sh", exe.display()).into());
+    }
+    let running = std::process::Command::new("pgrep").args(["-x", "shadowcorp-widget"]).output().map(|o| o.status.success()).unwrap_or(false);
+    if running {
+        println!("小部件已经在运行。");
+        return Ok(0);
+    }
+    fresh_db(paths, |c, cfg| daemon::widget::write(paths, c, Tz::from_env(), cfg, now_ms()))?;
+    std::process::Command::new(exe)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    println!("小部件已启动，在屏幕右下角。右键可退出或设置登录时自动启动。");
     Ok(0)
 }
 
 fn status(paths: &Paths, claude: bool) -> Result<i32> {
     if !claude {
-        return with_fresh_db(paths, |c, cfg| snapshot::status(c, Tz::from_env(), cfg.general.weekly_target, now_ms(), None));
+        return with_fresh_db(paths, |c, cfg| snapshot::status(c, Tz::from_env(), cfg, now_ms(), None));
     }
     // statusLine mode: session_id from stdin, answer from the daemon or the
     // last cached line (SPEC 4.2). Never slower than the hook budget.

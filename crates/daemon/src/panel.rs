@@ -18,8 +18,6 @@ use crate::snapshot::{self, counter, DbStore};
 
 pub const TEMPLATE: &str = include_str!("../../../assets/panel/panel.html");
 
-/// A turn with no activity for this long is not "being worked on" any more.
-const WORKING_WINDOW_MS: i64 = 20 * 60_000;
 /// Unlocks this recent get the celebration when the panel opens.
 const RECENT_MS: i64 = 15 * 60_000;
 
@@ -84,25 +82,7 @@ pub fn data(conn: &Connection, tz: Tz, cfg_target: f64, now: i64) -> Result<Valu
         })
         .collect();
 
-    // Agents at work right now: open turns with recent activity.
-    let mut working = 0;
-    let mut subagents = 0;
-    let mut st = conn.prepare(
-        "SELECT json_extract(t.agg, '$.last_activity'), json_extract(t.agg, '$.agent_calls'),
-                json_extract(t.agg, '$.subagent_stops')
-         FROM sessions s JOIN turns t ON t.id = json_extract(s.state, '$.open_turn') WHERE t.ended_at IS NULL",
-    )?;
-    let rows = st.query_map([], |r| {
-        Ok((r.get::<_, Option<i64>>(0)?.unwrap_or(0), r.get::<_, Option<i64>>(1)?.unwrap_or(0), r.get::<_, Option<i64>>(2)?.unwrap_or(0)))
-    })?;
-    for (last, calls, stops) in rows.flatten() {
-        if now - last < WORKING_WINDOW_MS {
-            working += 1;
-            subagents += (calls - stops).max(0);
-        }
-    }
-    let last_event: Option<i64> =
-        conn.query_row("SELECT MAX(ts) FROM events WHERE source != 'backfill'", [], |r| r.get(0)).unwrap_or(None);
+    let (working, subagents, last_event) = snapshot::activity(conn, now)?;
 
     let mut recent = Vec::new();
     let mut st = conn.prepare(

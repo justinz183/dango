@@ -6,5 +6,6 @@ pub mod classify;
 pub mod event;
 pub mod expr;
 pub mod progress;
+pub mod rank;
 pub mod render;
 pub mod scoring;

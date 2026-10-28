@@ -6,8 +6,10 @@ use rusqlite::{params, Connection, OptionalExtension};
 use shadowcorp_core::achievements::{self, display_name, Catalog, Category, Rarity, Store};
 use shadowcorp_core::progress::{self, stage_for, Stage, Streak};
 use shadowcorp_core::render::{fmt_int, fmt_short, grand_badge, StatusInfo};
-use shadowcorp_core::scoring::leverage;
+use shadowcorp_core::rank::{standing, xp_from_pd, Standing};
+use shadowcorp_core::scoring::{leverage, value_usd, ScoringConstants};
 
+use crate::config::Config;
 use crate::db::{get_meta, set_meta};
 use crate::ingest::{day_key, week_key, Result, Tz, PERMISSION_QUIET_MS};
 
@@ -146,38 +148,81 @@ pub fn near_hint(conn: &Connection) -> Option<String> {
     best.map(|(_, t)| t)
 }
 
-/// One status line. A near-unlock hint shows for ten minutes, once a day
-/// (SPEC 7.7).
-pub fn status(conn: &Connection, tz: Tz, cfg_target: f64, now_ms: i64, session: Option<&str>) -> Result<String> {
-    let c = company(conn, tz, cfg_target, now_ms)?;
+/// The numbers the widget, status line and box share.
+pub struct Output {
+    pub total_pd: f64,
+    pub today_pd: f64,
+    pub week_pd: f64,
+    pub total_usd: f64,
+    pub today_usd: f64,
+    pub week_usd: f64,
+    pub week_leverage: Option<f64>,
+    pub rank: Standing,
+    pub hourly_rate: f64,
+}
+
+pub fn output(conn: &Connection, tz: Tz, cfg: &Config, now_ms: i64) -> Output {
+    let k = ScoringConstants::builtin();
+    let d = tz.date(now_ms);
+    let (dk, wk) = (format!("day:{}", day_key(d)), format!("week:{}", week_key(d)));
+    let rate = cfg.value.hourly_rate_usd;
+    let (total_pd, today_pd, week_pd) =
+        (counter(conn, "person_days", "all"), counter(conn, "person_days", &dk), counter(conn, "person_days", &wk));
+    Output {
+        total_pd,
+        today_pd,
+        week_pd,
+        total_usd: value_usd(k, total_pd, rate),
+        today_usd: value_usd(k, today_pd, rate),
+        week_usd: value_usd(k, week_pd, rate),
+        week_leverage: leverage(counter(conn, "human_minutes", &wk), counter(conn, "active_minutes", &wk)),
+        rank: standing(xp_from_pd(total_pd, k.caps.minutes_per_day)),
+        hourly_rate: rate,
+    }
+}
+
+/// Agents at work right now: open turns with activity in the last 20
+/// minutes, how many subagents they have running, and the last live event.
+pub fn activity(conn: &Connection, now_ms: i64) -> Result<(i64, i64, Option<i64>)> {
+    const WORKING_WINDOW_MS: i64 = 20 * 60_000;
+    let mut working = 0;
+    let mut subagents = 0;
+    let mut st = conn.prepare(
+        "SELECT json_extract(t.agg, '$.last_activity'), json_extract(t.agg, '$.agent_calls'),
+                json_extract(t.agg, '$.subagent_stops')
+         FROM sessions s JOIN turns t ON t.id = json_extract(s.state, '$.open_turn') WHERE t.ended_at IS NULL",
+    )?;
+    let rows = st.query_map([], |r| {
+        Ok((r.get::<_, Option<i64>>(0)?.unwrap_or(0), r.get::<_, Option<i64>>(1)?.unwrap_or(0), r.get::<_, Option<i64>>(2)?.unwrap_or(0)))
+    })?;
+    for (last, calls, stops) in rows.flatten() {
+        if now_ms - last < WORKING_WINDOW_MS {
+            working += 1;
+            subagents += (calls - stops).max(0);
+        }
+    }
+    let last_event: Option<i64> =
+        conn.query_row("SELECT MAX(ts) FROM events WHERE source != 'backfill'", [], |r| r.get(0)).unwrap_or(None);
+    Ok((working, subagents, last_event))
+}
+
+/// One status line: rank, XP, today's and this week's value, leverage.
+pub fn status(conn: &Connection, tz: Tz, cfg: &Config, now_ms: i64, session: Option<&str>) -> Result<String> {
+    let o = output(conn, tz, cfg, now_ms);
     let lev = session
         .map(|s| {
             let k = format!("session:{s}");
             leverage(counter(conn, "human_minutes", &k), counter(conn, "active_minutes", &k))
         })
         .unwrap_or(None)
-        .or(c.week_leverage);
-    let today = day_key(tz.date(now_ms));
-    let mut hint = None;
-    let until: i64 = get_meta(conn, "hint_until")?.and_then(|v| v.parse().ok()).unwrap_or(0);
-    if now_ms < until {
-        hint = get_meta(conn, "hint_text")?;
-    } else if get_meta(conn, "hint_day")?.as_deref() != Some(today.as_str()) {
-        if let Some(h) = near_hint(conn) {
-            set_meta(conn, "hint_day", &today)?;
-            set_meta(conn, "hint_until", &(now_ms + 10 * 60_000).to_string())?;
-            set_meta(conn, "hint_text", &h)?;
-            hint = Some(h);
-        }
-    }
+        .or(o.week_leverage);
     Ok(shadowcorp_core::render::status_line(&StatusInfo {
-        stage_level: c.stage.level,
-        title: c.title,
-        week_pd: c.week_pd,
-        week_target: c.week_target,
+        rank_label: o.rank.label(),
+        xp: o.rank.xp,
+        rank_progress: o.rank.progress,
+        today_usd: o.today_usd,
+        week_usd: o.week_usd,
         leverage: lev,
-        streak: c.streak.current,
-        hint,
     }))
 }
 
