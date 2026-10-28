@@ -394,7 +394,17 @@ final class DashboardView: NSView {
         if draw { office.needsDisplay = true }
         y += OfficeView.height + 22
 
-        // Four headline numbers.
+        // Four headline numbers; a caption when they are one agent's.
+        if filter != "all" {
+            let name = boardNames[filter] ?? filter
+            let dot = base.tools.first { $0.name == name }?.color ?? secondary
+            if draw {
+                dot.setFill()
+                NSBezierPath(ovalIn: NSRect(x: pad, y: y + 4, width: 7, height: 7)).fill()
+                put(text("只看 \(name) 的", size: 11, weight: .semibold, color: dot), pad + 13, y)
+            }
+            y += 20
+        }
         let tiles: [(String, Double, Double)] = [("今日", m.todayUSD, m.todayHours), ("本周", m.weekUSD, m.weekHours),
                                                   ("本月", m.monthUSD, m.monthHours), ("总计", m.totalUSD, m.totalHours)]
         let gap: CGFloat = 8
@@ -469,7 +479,8 @@ final class DashboardView: NSView {
         }
         let total = bars.map(\.usd).reduce(0, +)
         let rightLabel = range == 1 ? "共 " + fmtUSD(total) : "日均 " + fmtUSD(bars.isEmpty ? 0 : total / Double(bars.count))
-        section(range == 1 ? "今天每小时产出" : "最近 \(range) 天每日产出", y, right: rightLabel, draw: draw)
+        let agent = filter == "all" ? "" : (boardNames[filter] ?? filter) + " · "
+        section(agent + (range == 1 ? "今天每小时产出" : "最近 \(range) 天每日产出"), y, right: rightLabel, draw: draw)
         y += 22
         let chartH: CGFloat = 112
         chartRect = NSRect(x: pad, y: y, width: inner, height: chartH)
@@ -478,10 +489,10 @@ final class DashboardView: NSView {
         y += chartH + 20
 
         // Who the window's work would have needed.
-        section("都当了谁（\(window)）", y, draw: draw)
+        section(agent + "都当了谁（\(window)）", y, draw: draw)
         y += 22
         if jobsSel.isEmpty {
-            if draw { put(text("还没有回合", size: 11, color: secondary), pad, y) }
+            if draw { put(text(filter == "all" ? "还没有回合" : "\(boardNames[filter] ?? filter)\(range == 1 ? "今天" : "这 \(range) 天")还没有回合", size: 11, color: secondary), pad, y) }
             y += 18
         } else {
             let maxU = max(jobsSel.map(\.usd).max() ?? 1, 0.01)
@@ -562,7 +573,7 @@ final class DashboardView: NSView {
         }
         if let hv = hover, bars.indices.contains(hv) {
             put(text(bars[hv].tip, size: 10, weight: .medium, mono: true), r.maxX, r.minY - 2, align: 2)
-            label(hv, true)
+            if bars[hv].usd > 0 { label(hv, true) }
         } else {
             if bars[peak].usd > 0 { label(peak, peak == current) }
             if peak != current, bars.indices.contains(current), bars[current].usd > 0 { label(current, true) }
@@ -1010,7 +1021,7 @@ final class OfficeView: NSView {
                 NSBezierPath(roundedRect: NSRect(x: c.midX - 4.5, y: c.minY + 12, width: 9, height: 14), xRadius: 1, yRadius: 1).fill()
                 state = "刷手机"
             case .sleep:
-                drawWorker(c, job: o.job, mood: "sleepy", t: phase * 0.5, blink: false, working: false, helpers: 0, desk: true, slump: 5)
+                drawWorker(c, job: o.job, mood: "sleepy", t: phase * 0.5, blink: true, working: false, helpers: 0, desk: true, slump: 5)
                 state = "睡着了"
             case .window:
                 drawWorker(c, job: o.job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
@@ -1387,7 +1398,7 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
     let pupil = NSColor(calibratedWhite: 0.08, alpha: 1)
     for fx in [CGFloat(0.28), CGFloat(0.55)] {
         let e = box(fx, 0.32, 0.17, 0.22)
-        if blink && mood != "sleepy" {
+        if blink {
             // A closed eye: a short soft line where the eye was.
             white.setStroke()
             let l = NSBezierPath()
