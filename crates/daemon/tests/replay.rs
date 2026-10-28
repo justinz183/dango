@@ -150,3 +150,28 @@ fn panel_data_hides_secrets_and_writes_files() {
     assert!(js.starts_with("window.SHADOWCORP_DATA = {"));
     assert!(!js.contains("/Users") && !js.contains("/w/repo"), "no paths in panel data");
 }
+
+#[test]
+fn widget_data_carries_history_without_paths() {
+    let paths = home("widget");
+    for e in &events(&paths) {
+        spool::append(&paths, e).unwrap();
+    }
+    let mut p = processor(&paths);
+    p.ingest_spool(&paths).unwrap();
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let now = 1_793_200_000_000; // 2026-10-28, local
+    let d = daemon::widget::data(&p.conn, tz, &Config::default(), now).unwrap();
+    assert_eq!(d["days"].as_array().unwrap().len(), 30);
+    assert_eq!(d["ranks"].as_array().unwrap().len(), 7);
+    assert_eq!(d["days"][29]["day"], "2026-10-28");
+    assert!(d["today"]["usd"].as_f64().unwrap() > 0.0, "{}", d["today"]);
+    assert!(d["month"]["usd"].as_f64().unwrap() >= d["today"]["usd"].as_f64().unwrap());
+    assert!(!d["classes"].as_array().unwrap().is_empty());
+    let turns = d["turns"].as_array().unwrap();
+    assert!(turns.len() <= 10 && !turns.is_empty());
+    assert!(turns[0]["usd"].as_f64().unwrap() >= 0.0);
+    assert_eq!(d["rank"]["label"], "青铜 III");
+    let js = d.to_string();
+    assert!(!js.contains("/Users") && !js.contains("/w/repo") && !js.contains("acme"), "no paths or repo names");
+}
