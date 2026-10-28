@@ -1,0 +1,16 @@
+{
+  "name": "shadowcorp",
+  "owner": {
+    "name": "ShadowCorp"
+  },
+  "metadata": {
+    "description": "影子公司：衡量产出的 AI 编码成就系统。"
+  },
+  "plugins": [
+    {
+      "name": "shadowcorp",
+      "source": "./plugins/claude-code",
+      "description": "影子公司：衡量产出的 AI 编码成就系统（人日、徽章、结算框、状态栏）。"
+    }
+  ]
+}

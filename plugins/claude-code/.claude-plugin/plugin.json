@@ -1,0 +1,7 @@
+{
+  "name": "shadowcorp",
+  "version": "0.1.0",
+  "description": "影子公司：把 agent 完成的工作折算成人日、徽章和一间会长大的像素办公室。需要 PATH 上有 shadowcorp 二进制。",
+  "author": { "name": "ShadowCorp" },
+  "keywords": ["gamification", "achievements", "productivity"]
+}

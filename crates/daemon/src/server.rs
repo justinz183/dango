@@ -1,0 +1,124 @@
+//! The daemon: tails the spool and answers a JSON-lines protocol on a Unix
+//! socket (SPEC 3). Requests: {"op":"ping"|"flush"|"settle"|"status", "session_id"?}.
+
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::fs::PermissionsExt;
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+use serde_json::{json, Value};
+
+use crate::config::Config;
+use crate::db;
+use crate::ingest::{Mode, Processor, Result, Tz};
+use crate::paths::Paths;
+use crate::snapshot;
+
+pub const POLL: Duration = Duration::from_millis(250);
+
+/// Takes the processor lock without waiting. Ok(None) means another process
+/// (normally the daemon) holds it.
+pub fn try_lock(paths: &Paths) -> Result<Option<File>> {
+    paths.ensure()?;
+    let f = OpenOptions::new().create(true).truncate(false).write(true).open(&paths.lock)?;
+    match f.try_lock() {
+        Ok(()) => Ok(Some(f)),
+        Err(fs::TryLockError::WouldBlock) => Ok(None),
+        Err(fs::TryLockError::Error(e)) => Err(e.into()),
+    }
+}
+
+pub fn open_processor(paths: &Paths, mode: Mode) -> Result<Processor> {
+    let cfg = Config::load(paths);
+    let conn = db::open(&paths.db)?;
+    Ok(Processor::new(conn, mode, Tz::from_env(), cfg))
+}
+
+pub fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+/// Handles one request against an exclusive processor.
+pub fn respond(p: &mut Processor, paths: &Paths, req: &Value) -> Value {
+    if let Err(e) = p.ingest_spool(paths) {
+        return json!({ "ok": false, "error": e.to_string() });
+    }
+    let sid = req.get("session_id").and_then(Value::as_str);
+    let now = now_ms();
+    match req.get("op").and_then(Value::as_str).unwrap_or("") {
+        "ping" | "flush" => json!({ "ok": true }),
+        "settle" => {
+            let Some(summary) = sid.and_then(|s| p.settlements.remove(s)) else { return json!({ "ok": true }) };
+            let mut text = shadowcorp_core::render::settlement_box(&summary);
+            if let Ok(Some(badge)) = snapshot::take_grand(&p.conn, now, p.cfg.ceremony.grand_cooldown_hours) {
+                text = format!("{text}\n{badge}");
+            }
+            json!({ "ok": true, "text": text })
+        }
+        "status" => match snapshot::status(&p.conn, p.tz, p.cfg.general.weekly_target, now, sid) {
+            Ok(t) => json!({ "ok": true, "text": t }),
+            Err(e) => json!({ "ok": false, "error": e.to_string() }),
+        },
+        op => json!({ "ok": false, "error": format!("unknown op {op:?}") }),
+    }
+}
+
+fn serve_client(stream: UnixStream, shared: &Mutex<Processor>, paths: &Paths) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
+    let mut line = String::new();
+    if BufReader::new(&stream).read_line(&mut line).is_err() {
+        return;
+    }
+    let req: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
+    let resp = {
+        let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+        respond(&mut p, paths, &req)
+    };
+    let mut w = &stream;
+    let _ = writeln!(w, "{resp}");
+}
+
+/// Runs in the foreground until killed. A kill at any point loses nothing:
+/// the spool offset only advances in the same transaction as the work.
+pub fn run(paths: &Paths) -> Result<()> {
+    let Some(_lock) = try_lock(paths)? else {
+        return Err("another shadowcorp daemon is already running".into());
+    };
+    let shared = Arc::new(Mutex::new(open_processor(paths, Mode::Live)?));
+    let _ = fs::remove_file(&paths.sock);
+    let listener = UnixListener::bind(&paths.sock)?;
+    fs::set_permissions(&paths.sock, fs::Permissions::from_mode(0o600))?;
+    {
+        let shared = Arc::clone(&shared);
+        let paths = paths.clone();
+        thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                serve_client(stream, &shared, &paths);
+            }
+        });
+    }
+    eprintln!("shadowcorp daemon: watching {}", paths.spool.display());
+    loop {
+        {
+            let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+            if let Err(e) = p.ingest_spool(paths) {
+                eprintln!("shadowcorp daemon: ingest failed: {e}");
+            }
+        }
+        thread::sleep(POLL);
+    }
+}
+
+/// Sends one request; None if no daemon answers within `timeout`.
+pub fn request(paths: &Paths, req: &Value, timeout: Duration) -> Option<Value> {
+    let mut s = UnixStream::connect(&paths.sock).ok()?;
+    s.set_read_timeout(Some(timeout)).ok()?;
+    s.set_write_timeout(Some(timeout)).ok()?;
+    writeln!(s, "{req}").ok()?;
+    let mut line = String::new();
+    BufReader::new(&s).read_line(&mut line).ok()?;
+    serde_json::from_str(&line).ok()
+}

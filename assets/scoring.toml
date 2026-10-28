@@ -1,0 +1,34 @@
+# Scoring constants (SPEC 5.3). Changing them may only keep or raise a user's
+# historical total (SPEC 5.5); `shadowcorp rebuild` refuses otherwise.
+version = "1.0"
+
+# Base human-equivalent minutes per task class (SPEC 5.1).
+[base]
+feature = 40
+bugfix = 30
+refactor = 25
+test = 20
+docs = 15
+infra = 30
+data = 25
+review = 10
+migration = 35
+config = 8
+research = 15
+other = 12
+
+# H = clamp(base + file*F + line_coef*L^line_exp + test*T + subagent*S + merge*M, turn_min, turn_max)
+[weights]
+file = 2.5
+line_coef = 0.45
+line_exp = 0.8
+test = 10
+subagent = 12
+merge = 20
+
+[caps]
+turn_min = 2
+turn_max = 360
+minutes_per_day = 480
+daily_person_days = 6
+weekly_person_days = 30

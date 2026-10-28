@@ -1,0 +1,552 @@
+{
+  "version": "1.0",
+  "role_card_tiers": [1, 10, 50],
+  "role_cards": [
+    { "id": "frontend", "name": "前端", "name_en": "Frontend", "face": "举着调色板的小影" },
+    { "id": "backend", "name": "后端", "name_en": "Backend", "face": "抱着齿轮的小影" },
+    { "id": "dba", "name": "DBA", "name_en": "DBA", "face": "坐在数据柜上的小影" },
+    { "id": "devops", "name": "DevOps", "name_en": "DevOps", "face": "戴安全帽推集装箱的小影" },
+    { "id": "qa", "name": "测试工程师", "name_en": "QA Engineer", "face": "拿放大镜的小影" },
+    { "id": "writer", "name": "技术写手", "name_en": "Tech Writer", "face": "握羽毛笔的小影" },
+    { "id": "security", "name": "安全工程师", "name_en": "Security Engineer", "face": "举盾牌的小影" },
+    { "id": "data", "name": "数据工程", "name_en": "Data Engineer", "face": "推着图表小车的小影" },
+    { "id": "mobile", "name": "移动端", "name_en": "Mobile", "face": "抱着大手机的小影" },
+    { "id": "architect", "name": "架构师", "name_en": "Architect", "face": "看蓝图的小影" },
+    { "id": "pm", "name": "产品经理", "name_en": "Product Manager", "face": "贴便利贴的小影" },
+    { "id": "ml", "name": "ML 工程", "name_en": "ML Engineer", "face": "戴护目镜调旋钮的小影" }
+  ],
+  "items": [
+    { "id": "photo_frame", "name": "员工合影相框", "name_en": "Team photo frame" },
+    { "id": "whiteboard", "name": "白板", "name_en": "Whiteboard" },
+    { "id": "coffee_machine", "name": "咖啡机", "name_en": "Coffee machine" },
+    { "id": "big_plant", "name": "大绿植", "name_en": "Big plant" },
+    { "id": "floor_window", "name": "落地窗", "name_en": "Floor-to-ceiling window" },
+    { "id": "neon_sign", "name": "霓虹招牌", "name_en": "Neon sign" },
+    { "id": "rooftop_garden", "name": "天台花园", "name_en": "Rooftop garden" },
+    { "id": "lounge_chair", "name": "躺椅", "name_en": "Lounge chair" },
+    { "id": "combo_sound", "name": "连击音效", "name_en": "Combo sound" },
+    { "id": "command_desk", "name": "指挥台", "name_en": "Command desk" },
+    { "id": "moon_lamp", "name": "月亮夜灯", "name_en": "Moon lamp" },
+    { "id": "sunrise_curtain", "name": "日出窗帘", "name_en": "Sunrise curtain" },
+    { "id": "instant_noodles", "name": "泡面", "name_en": "Instant noodles" },
+    { "id": "sleeping_bag", "name": "睡袋", "name_en": "Sleeping bag" },
+    { "id": "traffic_light", "name": "绿色小交通灯", "name_en": "Little green traffic light" },
+    { "id": "fossil", "name": "恐龙化石摆件", "name_en": "Dinosaur fossil" },
+    { "id": "fire_extinguisher", "name": "灭火器", "name_en": "Fire extinguisher" },
+    { "id": "stamp", "name": "印章", "name_en": "Seal stamp" },
+    { "id": "hard_hat", "name": "安全帽", "name_en": "Hard hat" },
+    { "id": "magnifier", "name": "放大镜", "name_en": "Magnifying glass" },
+    { "id": "bookshelf", "name": "书架", "name_en": "Bookshelf" },
+    { "id": "hammock", "name": "吊床", "name_en": "Hammock" },
+    { "id": "small_plant", "name": "小盆栽", "name_en": "Small plant" },
+    { "id": "loveseat", "name": "双人沙发", "name_en": "Loveseat" },
+    { "id": "trophy_case", "name": "奖杯柜", "name_en": "Trophy case" },
+    { "id": "early_bird_wall", "name": "早鸟徽章墙", "name_en": "Early-bird badge wall" },
+    { "id": "street_lamp", "name": "路灯", "name_en": "Street lamp" },
+    { "id": "shredder", "name": "碎纸机", "name_en": "Shredder" },
+    { "id": "fireworks_view", "name": "烟花窗景", "name_en": "Fireworks view" },
+    { "id": "jester_hat", "name": "小丑帽", "name_en": "Jester hat" },
+    { "id": "golden_keyboard", "name": "金色键盘", "name_en": "Golden keyboard" },
+    { "id": "anniversary_cake", "name": "周年蛋糕", "name_en": "Anniversary cake" },
+    { "id": "group_photo", "name": "集体合照", "name_en": "Group photo" },
+    { "id": "night_light", "name": "小夜灯", "name_en": "Night light" },
+    { "id": "skill_wall", "name": "办公室技能墙", "name_en": "Skill wall" },
+    { "id": "golden_doorplate", "name": "金色门牌", "name_en": "Golden door plate" },
+    { "id": "night_mode", "name": "夜间模式常驻", "name_en": "Permanent night mode" },
+    { "id": "four_seasons", "name": "窗外四季变化", "name_en": "Four-seasons window" },
+    { "id": "display_case", "name": "成就展示柜", "name_en": "Badge display case" }
+  ],
+  "achievements": [
+    {
+      "id": "M01", "name": "第一位员工", "name_en": "First Hire", "category": "milestone",
+      "unlock_line": "办公室来了第一位员工。", "unlock_line_en": "Your first employee walks in.",
+      "codex_line": "累计完成 1 人日的工作。", "codex_line_en": "Reach 1 person-day in total.",
+      "unit": "人日", "global_pct": 72,
+      "trigger": { "type": "counter", "metric": "person_days" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common", "reward": { "item": "photo_frame" } }]
+    },
+    {
+      "id": "M02", "name": "一个人周", "name_en": "One-Person Week", "category": "milestone",
+      "unlock_line": "一个人一周的活，干完了。", "unlock_line_en": "A whole person-week, done.",
+      "codex_line": "累计 5 人日。", "codex_line_en": "Reach 5 person-days in total.",
+      "unit": "人日", "global_pct": 55,
+      "trigger": { "type": "counter", "metric": "person_days" },
+      "tiers": [{ "tier": 1, "threshold": 5, "rarity": "common", "reward": { "item": "whiteboard" } }]
+    },
+    {
+      "id": "M03", "name": "一个人月", "name_en": "One-Person Month", "category": "milestone",
+      "unlock_line": "整整一个月的工作量。", "unlock_line_en": "A full month of work.",
+      "codex_line": "累计 22 人日。", "codex_line_en": "Reach 22 person-days in total.",
+      "unit": "人日", "global_pct": 28,
+      "trigger": { "type": "counter", "metric": "person_days" },
+      "tiers": [{ "tier": 1, "threshold": 22, "rarity": "rare", "reward": { "item": "coffee_machine" } }]
+    },
+    {
+      "id": "M04", "name": "百人日", "name_en": "Hundred Days", "category": "milestone",
+      "unlock_line": "一百个人日，公司在长大。", "unlock_line_en": "A hundred person-days. You're growing.",
+      "codex_line": "累计 100 人日。", "codex_line_en": "Reach 100 person-days in total.",
+      "unit": "人日", "global_pct": 12,
+      "trigger": { "type": "counter", "metric": "person_days" },
+      "tiers": [{ "tier": 1, "threshold": 100, "rarity": "rare", "reward": { "item": "big_plant" } }]
+    },
+    {
+      "id": "M05", "name": "周年庆", "name_en": "Year in Review", "category": "milestone",
+      "unlock_line": "一个人的一整年，你做到了。", "unlock_line_en": "One person's whole year. Done.",
+      "codex_line": "累计 250 人日，一个人干了一整年。", "codex_line_en": "Reach 250 person-days: one person, one year.",
+      "unit": "人日", "global_pct": 4,
+      "trigger": { "type": "counter", "metric": "person_days" },
+      "tiers": [{ "tier": 1, "threshold": 250, "rarity": "epic", "reward": { "item": "floor_window", "title": "一个人的一年" } }]
+    },
+    {
+      "id": "M06", "name": "千人日", "name_en": "Thousand Days", "category": "milestone",
+      "unlock_line": "一千个人日，灯火通明。", "unlock_line_en": "A thousand person-days. Lights everywhere.",
+      "codex_line": "累计 1000 人日。", "codex_line_en": "Reach 1,000 person-days in total.",
+      "unit": "人日", "global_pct": 1.2,
+      "trigger": { "type": "counter", "metric": "person_days" },
+      "tiers": [{ "tier": 1, "threshold": 1000, "rarity": "legendary", "reward": { "item": "neon_sign" } }]
+    },
+    {
+      "id": "M07", "name": "万人日", "name_en": "Ten Thousand Days", "category": "milestone", "hidden": true,
+      "hint": "比一千多得多", "hint_en": "Far more than a thousand",
+      "unlock_line": "一万个人日，帝国成形。", "unlock_line_en": "Ten thousand person-days. An empire.",
+      "codex_line": "累计 10000 人日。", "codex_line_en": "Reach 10,000 person-days in total.",
+      "unit": "人日", "global_pct": 0.1,
+      "trigger": { "type": "counter", "metric": "person_days" },
+      "tiers": [{ "tier": 1, "threshold": 10000, "rarity": "legendary", "reward": { "item": "rooftop_garden" } }]
+    },
+
+    {
+      "id": "L01", "name": "四两拨千斤", "name_en": "Light Touch", "category": "leverage",
+      "unlock_line": "一句话，一屋子人在干活。", "unlock_line_en": "One sentence, a room full of work.",
+      "codex_line": "单会话杠杆率达到 5x / 10x / 20x。", "codex_line_en": "Session leverage of 5x / 10x / 20x.",
+      "unit": "x", "global_pct": 38,
+      "trigger": { "type": "counter", "metric": "leverage", "scope": "session" },
+      "tiers": [
+        { "tier": 1, "threshold": 5, "rarity": "common" },
+        { "tier": 2, "threshold": 10, "rarity": "rare" },
+        { "tier": 3, "threshold": 20, "rarity": "epic", "reward": { "title": "杠杆玩家" } }
+      ]
+    },
+    {
+      "id": "L02", "name": "甩手掌柜", "name_en": "Hands Off", "category": "leverage",
+      "unlock_line": "你喝咖啡，它在干活。", "unlock_line_en": "You sip coffee. It keeps working.",
+      "codex_line": "单回合 agent 自主运行 15/30/60 分钟。", "codex_line_en": "One turn runs on its own for 15 / 30 / 60 min.",
+      "unit": "分钟", "global_pct": 30,
+      "trigger": { "type": "event", "on": ["turn_end"], "value": "duration_min" },
+      "tiers": [
+        { "tier": 1, "threshold": 15, "rarity": "common" },
+        { "tier": 2, "threshold": 30, "rarity": "rare", "reward": { "item": "lounge_chair" } },
+        { "tier": 3, "threshold": 60, "rarity": "epic" }
+      ]
+    },
+    {
+      "id": "L03", "name": "一次过", "name_en": "First Try", "category": "leverage",
+      "unlock_line": "说一次就够了。", "unlock_line_en": "Once was enough.",
+      "codex_line": "连续 5 / 20 / 50 个回合没有被纠正。", "codex_line_en": "5 / 20 / 50 turns in a row without a correction.",
+      "unit": "个回合", "global_pct": 46,
+      "trigger": { "type": "counter", "metric": "clean_streak" },
+      "tiers": [
+        { "tier": 1, "threshold": 5, "rarity": "common" },
+        { "tier": 2, "threshold": 20, "rarity": "rare" },
+        { "tier": 3, "threshold": 50, "rarity": "epic", "reward": { "title": "说一次就行" } }
+      ]
+    },
+    {
+      "id": "L04", "name": "连击", "name_en": "Combo", "category": "leverage",
+      "unlock_line": "五连击，手感正热。", "unlock_line_en": "Five in a row. You're on fire.",
+      "codex_line": "单会话连续 5 个回合一次过。", "codex_line_en": "5 clean turns in a row in one session.",
+      "unit": "个回合", "global_pct": 24,
+      "trigger": { "type": "counter", "metric": "clean_streak", "scope": "session" },
+      "tiers": [{ "tier": 1, "threshold": 5, "rarity": "rare", "reward": { "item": "combo_sound" } }]
+    },
+    {
+      "id": "L05", "name": "指挥官", "name_en": "Commander", "category": "leverage",
+      "unlock_line": "你在指挥一支小队。", "unlock_line_en": "You're commanding a squad.",
+      "codex_line": "单会话调度 3 / 6 / 10 个子 agent。", "codex_line_en": "Dispatch 3 / 6 / 10 subagents in one session.",
+      "unit": "个", "global_pct": 15,
+      "trigger": { "type": "counter", "metric": "subagents", "scope": "session" },
+      "tiers": [
+        { "tier": 1, "threshold": 3, "rarity": "rare" },
+        { "tier": 2, "threshold": 6, "rarity": "epic" },
+        { "tier": 3, "threshold": 10, "rarity": "legendary", "reward": { "item": "command_desk" } }
+      ]
+    },
+
+    {
+      "id": "T01", "name": "夜猫子", "name_en": "Night Owl", "category": "moment",
+      "unlock_line": "凌晨的办公室只有你的灯亮着。", "unlock_line_en": "At this hour, only your light is on.",
+      "codex_line": "在 0 点到 5 点之间开始的会话。", "codex_line_en": "Sessions started between midnight and 5 a.m.",
+      "unit": "次", "global_pct": 35,
+      "trigger": { "type": "event", "on": ["session_start"], "where": "new_session && hour < 5" },
+      "tiers": [
+        { "tier": 1, "threshold": 1, "rarity": "common" },
+        { "tier": 2, "threshold": 10, "rarity": "rare", "reward": { "item": "moon_lamp" } },
+        { "tier": 3, "threshold": 50, "rarity": "epic" }
+      ]
+    },
+    {
+      "id": "T02", "name": "晨鸟", "name_en": "Early Bird", "category": "moment",
+      "unlock_line": "城市醒来前，你已开工。", "unlock_line_en": "At work before the city wakes.",
+      "codex_line": "在清晨 5 点到 6 点之间开始的会话。", "codex_line_en": "Sessions started between 5 and 6 a.m.",
+      "unit": "次", "global_pct": 14,
+      "trigger": { "type": "event", "on": ["session_start"], "where": "new_session && hour == 5" },
+      "tiers": [
+        { "tier": 1, "threshold": 1, "rarity": "common" },
+        { "tier": 2, "threshold": 10, "rarity": "rare", "reward": { "item": "sunrise_curtain" } }
+      ]
+    },
+    {
+      "id": "T03", "name": "周末战士", "name_en": "Weekend Warrior", "category": "moment",
+      "unlock_line": "周末的办公室也有人。", "unlock_line_en": "Someone's in on the weekend.",
+      "codex_line": "周末开始的会话 5 / 25 次。", "codex_line_en": "Start 5 / 25 sessions on weekends.",
+      "unit": "次", "global_pct": 33,
+      "trigger": { "type": "event", "on": ["session_start"], "where": "new_session && weekday >= 6" },
+      "tiers": [
+        { "tier": 1, "threshold": 5, "rarity": "common" },
+        { "tier": 2, "threshold": 25, "rarity": "rare" }
+      ]
+    },
+    {
+      "id": "T04", "name": "一口气", "name_en": "In One Go", "category": "moment",
+      "unlock_line": "一口气干了三个小时。", "unlock_line_en": "Three hours in one go.",
+      "codex_line": "单会话活跃时长达到 3 小时。", "codex_line_en": "3 active hours in a single session.",
+      "unit": "分钟", "global_pct": 22,
+      "trigger": { "type": "event", "on": ["turn_end", "session_end"], "value": "session.active_minutes" },
+      "tiers": [{ "tier": 1, "threshold": 180, "rarity": "rare", "reward": { "item": "instant_noodles" } }]
+    },
+    {
+      "id": "T05", "name": "马拉松", "name_en": "Marathon", "category": "moment",
+      "unlock_line": "六个小时，你跑完了全程。", "unlock_line_en": "Six hours. You ran the whole course.",
+      "codex_line": "单会话活跃时长达到 6 小时。", "codex_line_en": "6 active hours in a single session.",
+      "unit": "分钟", "global_pct": 6,
+      "trigger": { "type": "event", "on": ["turn_end", "session_end"], "value": "session.active_minutes" },
+      "tiers": [{ "tier": 1, "threshold": 360, "rarity": "epic", "reward": { "item": "sleeping_bag" } }]
+    },
+    {
+      "id": "T06", "name": "首次合并", "name_en": "First Merge", "category": "moment",
+      "unlock_line": "第一次把成果合进主线。", "unlock_line_en": "Your first work lands on main.",
+      "codex_line": "第一次在 agent 回合内 commit 或 merge。", "codex_line_en": "First commit or merge inside an agent turn.",
+      "unit": "次", "global_pct": 64,
+      "trigger": { "type": "event", "on": ["tool", "commit"], "where": "agent && (git_action == \"commit\" || git_action == \"merge\")" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common" }]
+    },
+    {
+      "id": "T07", "name": "绿灯", "name_en": "Green Light", "category": "moment",
+      "unlock_line": "一次就全绿。", "unlock_line_en": "All green on the first run.",
+      "codex_line": "测试一次通过 1 / 10 / 100 次。", "codex_line_en": "Tests pass on the first run 1 / 10 / 100 times.",
+      "unit": "次", "global_pct": 58,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "test_first_pass" },
+      "tiers": [
+        { "tier": 1, "threshold": 1, "rarity": "common" },
+        { "tier": 2, "threshold": 10, "rarity": "rare" },
+        { "tier": 3, "threshold": 100, "rarity": "epic", "reward": { "item": "traffic_light" } }
+      ]
+    },
+
+    {
+      "id": "S01", "name": "清道夫", "name_en": "Sweeper", "category": "style",
+      "unlock_line": "删掉的每一行都是轻松。", "unlock_line_en": "Every deleted line is a relief.",
+      "codex_line": "单会话净删除 500 / 5000 行。", "codex_line_en": "Net-delete 500 / 5,000 lines in one session.",
+      "unit": "行", "global_pct": 18,
+      "trigger": { "type": "event", "on": ["turn_end"], "value": "session.lines_removed - session.lines_added" },
+      "tiers": [
+        { "tier": 1, "threshold": 500, "rarity": "rare" },
+        { "tier": 2, "threshold": 5000, "rarity": "epic", "reward": { "title": "减法大师" } }
+      ]
+    },
+    {
+      "id": "S02", "name": "考古学家", "name_en": "Archaeologist", "category": "style",
+      "unlock_line": "你唤醒了一份古老的文件。", "unlock_line_en": "You woke up an ancient file.",
+      "codex_line": "修改了一个 3 年没人碰过的文件。", "codex_line_en": "Edit a file nobody touched for 3 years.",
+      "unit": "次", "global_pct": 11,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "file_age_days_max >= 1095" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "rare", "reward": { "item": "fossil" } }]
+    },
+    {
+      "id": "S03", "name": "多语者", "name_en": "Polyglot", "category": "style",
+      "unlock_line": "又多会了一种语言。", "unlock_line_en": "One more language under your belt.",
+      "codex_line": "累计在 5 / 10 种语言里改过代码。", "codex_line_en": "Edit code in 5 / 10 languages in total.",
+      "unit": "种", "global_pct": 26,
+      "trigger": { "type": "counter", "metric": "languages" },
+      "tiers": [
+        { "tier": 1, "threshold": 5, "rarity": "rare" },
+        { "tier": 2, "threshold": 10, "rarity": "epic", "reward": { "title": "巴别塔" } }
+      ]
+    },
+    {
+      "id": "S04", "name": "拆弹专家", "name_en": "Bomb Squad", "category": "style",
+      "unlock_line": "红灯变绿，警报解除。", "unlock_line_en": "Red to green. All clear.",
+      "codex_line": "测试或 CI 从失败变为通过 1 / 10 次。", "codex_line_en": "Tests or CI go from failing to passing 1 / 10 times.",
+      "unit": "次", "global_pct": 31,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "test_fixed" },
+      "tiers": [
+        { "tier": 1, "threshold": 1, "rarity": "rare" },
+        { "tier": 2, "threshold": 10, "rarity": "epic", "reward": { "item": "fire_extinguisher" } }
+      ]
+    },
+    {
+      "id": "S05", "name": "把关人", "name_en": "Gatekeeper", "category": "style",
+      "unlock_line": "有判断的老板。", "unlock_line_en": "A boss with judgment.",
+      "codex_line": "纠正 agent 10 / 50 次。", "codex_line_en": "Correct the agent 10 / 50 times.",
+      "unit": "次", "global_pct": 42,
+      "trigger": { "type": "counter", "metric": "corrections" },
+      "tiers": [
+        { "tier": 1, "threshold": 10, "rarity": "common" },
+        { "tier": 2, "threshold": 50, "rarity": "rare", "reward": { "item": "stamp" } }
+      ]
+    },
+    {
+      "id": "S06", "name": "拆迁队", "name_en": "Demolition Crew", "category": "style",
+      "unlock_line": "一口气动了五十个文件。", "unlock_line_en": "Fifty files in one sitting.",
+      "codex_line": "单会话触碰 50 个以上文件。", "codex_line_en": "Touch 50+ files in one session.",
+      "unit": "个文件", "global_pct": 16,
+      "trigger": { "type": "event", "on": ["turn_end"], "value": "session.files_touched" },
+      "tiers": [{ "tier": 1, "threshold": 50, "rarity": "rare", "reward": { "item": "hard_hat" } }]
+    },
+    {
+      "id": "S07", "name": "外科医生", "name_en": "Surgeon", "category": "style",
+      "unlock_line": "一刀下去，干净利落。", "unlock_line_en": "One clean cut.",
+      "codex_line": "只改 1 个文件 ≤5 行且测试通过，累计 10 次。", "codex_line_en": "10 turns: one file, ≤5 lines, tests passing.",
+      "unit": "次", "global_pct": 13,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "files_touched == 1 && lines_added <= 5 && lines_removed <= 5 && test_passed" },
+      "tiers": [{ "tier": 1, "threshold": 10, "rarity": "rare", "reward": { "item": "magnifier" } }]
+    },
+    {
+      "id": "S08", "name": "文档控", "name_en": "Doc Lover", "category": "style",
+      "unlock_line": "写给未来的自己。", "unlock_line_en": "Notes for your future self.",
+      "codex_line": "文档类回合累计 20 次。", "codex_line_en": "20 documentation turns in total.",
+      "unit": "次", "global_pct": 40,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "task_class == \"docs\"" },
+      "tiers": [{ "tier": 1, "threshold": 20, "rarity": "common", "reward": { "item": "bookshelf" } }]
+    },
+
+    {
+      "id": "C01", "name": "习惯", "name_en": "Habit", "category": "rhythm",
+      "unlock_line": "又一天，办公室准时亮灯。", "unlock_line_en": "Another day, lights on right on time.",
+      "codex_line": "连续活跃 7/30/100/365 天（周末不计）。", "codex_line_en": "Active 7 / 30 / 100 / 365 weekdays in a row.",
+      "unit": "天", "global_pct": 48,
+      "trigger": { "type": "counter", "metric": "streak" },
+      "tiers": [
+        { "tier": 1, "threshold": 7, "rarity": "common" },
+        { "tier": 2, "threshold": 30, "rarity": "rare" },
+        { "tier": 3, "threshold": 100, "rarity": "epic" },
+        { "tier": 4, "threshold": 365, "rarity": "legendary", "reward": { "title": "铁打的" } }
+      ]
+    },
+    {
+      "id": "C02", "name": "断电", "name_en": "Unplugged", "category": "rhythm",
+      "unlock_line": "整个周末，你好好休息了。", "unlock_line_en": "A whole weekend, properly off.",
+      "codex_line": "整个周末没有会话（周一判定）。", "codex_line_en": "No sessions all weekend (checked on Monday).",
+      "unit": "次", "global_pct": 52,
+      "trigger": { "type": "window", "on": ["day"], "where": "week_first_day && weekend_sessions_prev == 0 && active_before_weekend" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common", "reward": { "item": "hammock", "freeze_tokens": 1 } }]
+    },
+    {
+      "id": "C03", "name": "深呼吸", "name_en": "Deep Breath", "category": "rhythm",
+      "unlock_line": "张弛有度，才走得远。", "unlock_line_en": "Rest well, go far.",
+      "codex_line": "30 天内休息 4 天以上且总产出 10 人日。", "codex_line_en": "4+ rest days and 10 person-days within 30 days.",
+      "unit": "次", "global_pct": 21,
+      "trigger": { "type": "window", "on": ["day"], "where": "rest_days_30 >= 4 && person_days_30 >= 10" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "rare", "reward": { "item": "small_plant" } }]
+    },
+    {
+      "id": "C04", "name": "回归", "name_en": "Welcome Back", "category": "rhythm",
+      "unlock_line": "欢迎回来，办公室一直亮着灯。", "unlock_line_en": "Welcome back. We kept the lights on.",
+      "codex_line": "休息 14 天以上后回来。", "codex_line_en": "Come back after 14+ days away.",
+      "unit": "次", "global_pct": 19,
+      "trigger": { "type": "event", "on": ["session_start"], "where": "days_since_last_active >= 14" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common" }]
+    },
+
+    {
+      "id": "X01", "name": "双修", "name_en": "Dual Wield", "category": "social",
+      "unlock_line": "两把刀，一样顺手。", "unlock_line_en": "Two blades, equally sharp.",
+      "codex_line": "同一天用了 Claude Code 和 Codex。", "codex_line_en": "Use Claude Code and Codex on the same day.",
+      "unit": "天", "global_pct": 17,
+      "trigger": { "type": "counter", "metric": "dual_days" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common" }]
+    },
+    {
+      "id": "X02", "name": "三叉戟", "name_en": "Trident", "category": "social",
+      "unlock_line": "三路人马都到齐了。", "unlock_line_en": "All three crews reporting in.",
+      "codex_line": "三个不同采集源都有事件。", "codex_line_en": "Events from three different sources.",
+      "unit": "个来源", "global_pct": 7,
+      "trigger": { "type": "counter", "metric": "sources" },
+      "tiers": [{ "tier": 1, "threshold": 3, "rarity": "rare" }]
+    },
+    {
+      "id": "X03", "name": "分享者", "name_en": "Sharer", "category": "social",
+      "unlock_line": "让朋友看看你的公司。", "unlock_line_en": "Show your friends the company.",
+      "codex_line": "第一次导出周卡。", "codex_line_en": "Export your first weekly card.",
+      "unit": "次", "global_pct": 37,
+      "trigger": { "type": "counter", "metric": "cards_exported" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common" }]
+    },
+    {
+      "id": "X04", "name": "有朋自远方来", "name_en": "Friends From Afar", "category": "social",
+      "unlock_line": "第一位朋友来串门了。", "unlock_line_en": "Your first friend drops by.",
+      "codex_line": "添加第一位好友。", "codex_line_en": "Add your first friend.",
+      "unit": "位", "global_pct": 29,
+      "trigger": { "type": "counter", "metric": "friends" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common", "reward": { "item": "loveseat" } }]
+    },
+    {
+      "id": "X05", "name": "榜首", "name_en": "Top of the Board", "category": "social",
+      "unlock_line": "这周，你是第一。", "unlock_line_en": "This week, you're number one.",
+      "codex_line": "好友周榜第一 1 / 5 次。", "codex_line_en": "Top the friends board 1 / 5 times.",
+      "unit": "次", "global_pct": 12,
+      "trigger": { "type": "counter", "metric": "board_wins" },
+      "tiers": [
+        { "tier": 1, "threshold": 1, "rarity": "rare" },
+        { "tier": 2, "threshold": 5, "rarity": "epic", "reward": { "item": "trophy_case" } }
+      ]
+    },
+    {
+      "id": "X06", "name": "送礼人", "name_en": "Gift Giver", "category": "social",
+      "unlock_line": "礼物已经送到。", "unlock_line_en": "Your gift has arrived.",
+      "codex_line": "向好友赠送装饰。", "codex_line_en": "Send a friend a decoration.",
+      "unit": "次", "global_pct": 20,
+      "trigger": { "type": "counter", "metric": "gifts_sent" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common" }]
+    },
+    {
+      "id": "X07", "name": "早鸟", "name_en": "Early Adopter", "category": "social",
+      "unlock_line": "你在最早的那批人里。", "unlock_line_en": "You were here from the start.",
+      "codex_line": "在公测期内安装（限时）。", "codex_line_en": "Install during the public beta (limited).",
+      "unit": "次", "global_pct": 10,
+      "trigger": { "type": "counter", "metric": "early_bird" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "rare", "reward": { "item": "early_bird_wall" } }]
+    },
+
+    {
+      "id": "H01", "name": "凌晨四点", "name_en": "4 A.M.", "category": "hidden", "hidden": true,
+      "hint": "城市还没醒", "hint_en": "The city is still asleep",
+      "unlock_line": "凌晨四点，你还在提交。", "unlock_line_en": "4 a.m., and you're still committing.",
+      "codex_line": "在 4:00 到 4:59 之间 commit。", "codex_line_en": "Commit between 4:00 and 4:59 a.m.",
+      "unit": "次", "global_pct": 5,
+      "trigger": { "type": "calendar", "on": ["tool", "commit"], "where": "git_action == \"commit\" && hour == 4" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "rare", "reward": { "item": "street_lamp" } }]
+    },
+    {
+      "id": "H02", "name": "自我否定", "name_en": "Second Thoughts", "category": "hidden", "hidden": true,
+      "hint": "勇于推翻", "hint_en": "Brave enough to start over",
+      "unlock_line": "推翻重来，需要勇气。", "unlock_line_en": "Starting over takes courage.",
+      "codex_line": "一回合删掉 7 天内 agent 写的 100 行以上。", "codex_line_en": "Delete 100+ agent lines from the past week in one turn.",
+      "unit": "次", "global_pct": 9,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "recent_agent_lines_removed >= 100" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "rare", "reward": { "item": "shredder" } }]
+    },
+    {
+      "id": "H03", "name": "再来一次", "name_en": "One More Time", "category": "hidden", "hidden": true,
+      "hint": "第三次总会成的", "hint_en": "Third time's the charm",
+      "unlock_line": "坚持是美德。", "unlock_line_en": "Persistence is a virtue.",
+      "codex_line": "同一句 prompt 连发 3 次。", "codex_line_en": "Send the same prompt three times in a row.",
+      "unit": "次", "global_pct": 27,
+      "trigger": { "type": "event", "on": ["prompt"], "where": "prompt_repeat >= 3" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common" }]
+    },
+    {
+      "id": "H04", "name": "守岁", "name_en": "New Year's Eve", "category": "hidden", "hidden": true,
+      "hint": "新旧之间", "hint_en": "Between old and new",
+      "unlock_line": "新旧之间，你在写代码。", "unlock_line_en": "Between years, you were building.",
+      "codex_line": "12月31日23点到1月1日1点之间有会话。", "codex_line_en": "Be in a session from 11 p.m. Dec 31 to 1 a.m. Jan 1.",
+      "unit": "次", "global_pct": 3,
+      "trigger": { "type": "calendar", "on": ["session_start", "prompt", "turn_end"], "where": "(month == 12 && day == 31 && hour == 23) || (month == 1 && day == 1 && hour == 0)" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "epic", "reward": { "item": "fireworks_view" } }]
+    },
+    {
+      "id": "H05", "name": "愚人节", "name_en": "April Fools", "category": "hidden", "hidden": true,
+      "hint": "别信今天的 bug", "hint_en": "Don't trust today's bugs",
+      "unlock_line": "今天的 bug 都是玩笑。", "unlock_line_en": "Today's bugs are all jokes.",
+      "codex_line": "4 月 1 日有会话。", "codex_line_en": "Be in a session on April 1.",
+      "unit": "次", "global_pct": 15,
+      "trigger": { "type": "calendar", "on": ["session_start", "prompt", "turn_end"], "where": "month == 4 && day == 1" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common", "reward": { "item": "jester_hat" } }]
+    },
+    {
+      "id": "H06", "name": "一行定乾坤", "name_en": "One-Line Fix", "category": "hidden", "hidden": true,
+      "hint": "一字千金", "hint_en": "Every character counts",
+      "unlock_line": "一行代码，满盘皆绿。", "unlock_line_en": "One line, and everything turns green.",
+      "codex_line": "1 行改动让测试由红变绿。", "codex_line_en": "A one-line change turns tests from red to green.",
+      "unit": "次", "global_pct": 4,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "test_fixed && lines > 0 && lines_added <= 1 && lines_removed <= 1" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "epic", "reward": { "item": "golden_keyboard" } }]
+    },
+    {
+      "id": "H07", "name": "周年纪念", "name_en": "One Year Together", "category": "hidden", "hidden": true,
+      "hint": "时间过得真快", "hint_en": "Time flies",
+      "unlock_line": "一起走过了一整年。", "unlock_line_en": "A whole year together.",
+      "codex_line": "安装满一年。", "codex_line_en": "One year since you installed.",
+      "unit": "天", "global_pct": 6,
+      "trigger": { "type": "window", "on": ["day"], "value": "days_since_install" },
+      "tiers": [{ "tier": 1, "threshold": 365, "rarity": "epic", "reward": { "item": "anniversary_cake" } }]
+    },
+    {
+      "id": "H08", "name": "全员到岗", "name_en": "All Hands", "category": "hidden", "hidden": true,
+      "hint": "今天大家都来了", "hint_en": "Everyone showed up today",
+      "unlock_line": "今天大家都来了。", "unlock_line_en": "Everyone showed up today.",
+      "codex_line": "单日回合数达到可见员工数的两倍。", "codex_line_en": "Turns in a day reach twice your visible staff.",
+      "unit": "次", "global_pct": 36,
+      "trigger": { "type": "event", "on": ["turn_end"], "where": "day.turns >= employees * 2" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "rare", "reward": { "item": "group_photo" } }]
+    },
+    {
+      "id": "H09", "name": "低调", "name_en": "Low Profile", "category": "hidden", "hidden": true,
+      "hint": "默默耕耘", "hint_en": "Quietly getting it done",
+      "unlock_line": "默默耕耘，也是一种节奏。", "unlock_line_en": "Quiet work has its own rhythm.",
+      "codex_line": "连续活跃 7 天且没有任何大庆祝。", "codex_line_en": "7 active days in a row with no grand celebration.",
+      "unit": "次", "global_pct": 25,
+      "trigger": { "type": "window", "on": ["day"], "where": "streak >= 7 && days_since_grand >= 7" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "common", "reward": { "item": "night_light" } }]
+    },
+
+    {
+      "id": "P01", "name": "多面手", "name_en": "Generalist", "category": "set",
+      "unlock_line": "六种角色，你都能胜任。", "unlock_line_en": "Six roles, all yours.",
+      "codex_line": "任意 6 张职业卡达到 I。", "codex_line_en": "Any 6 role cards at tier I.",
+      "unit": "张", "global_pct": 34,
+      "trigger": { "type": "set", "on": ["unlocks"], "value": "role_cards_t1" },
+      "tiers": [{ "tier": 1, "threshold": 6, "rarity": "rare", "reward": { "title": "多面手" } }]
+    },
+    {
+      "id": "P02", "name": "全栈", "name_en": "Full Stack", "category": "set",
+      "unlock_line": "十二个岗位，你都干过。", "unlock_line_en": "Twelve jobs, you've done them all.",
+      "codex_line": "12 张职业卡全部达到 I。", "codex_line_en": "All 12 role cards at tier I.",
+      "unit": "张", "global_pct": 5,
+      "trigger": { "type": "set", "on": ["unlocks"], "value": "role_cards_t1" },
+      "tiers": [{ "tier": 1, "threshold": 12, "rarity": "epic", "reward": { "title": "全栈", "item": "skill_wall" } }]
+    },
+    {
+      "id": "P03", "name": "万能钥匙", "name_en": "Master Key", "category": "set",
+      "unlock_line": "每一扇门你都能打开。", "unlock_line_en": "Every door opens for you.",
+      "codex_line": "12 张职业卡全部达到 III。", "codex_line_en": "All 12 role cards at tier III.",
+      "unit": "张", "global_pct": 0.5,
+      "trigger": { "type": "set", "on": ["unlocks"], "value": "role_cards_t3" },
+      "tiers": [{ "tier": 1, "threshold": 12, "rarity": "legendary", "reward": { "title": "万能钥匙", "item": "golden_doorplate" } }]
+    },
+    {
+      "id": "P04", "name": "夜班组", "name_en": "Night Shift", "category": "set",
+      "unlock_line": "夜班组全员到齐。", "unlock_line_en": "The night shift is all here.",
+      "codex_line": "夜猫子、一口气、马拉松、凌晨四点全部解锁。", "codex_line_en": "Unlock Night Owl, In One Go, Marathon and 4 A.M.",
+      "unit": "个", "global_pct": 2,
+      "trigger": { "type": "set", "on": ["unlocks"], "where": "unlocked.T01 >= 1 && unlocked.T04 >= 1 && unlocked.T05 >= 1 && unlocked.H01 >= 1" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "epic", "reward": { "title": "夜班组长", "item": "night_mode" } }]
+    },
+    {
+      "id": "P05", "name": "作息大师", "name_en": "Rhythm Master", "category": "set",
+      "unlock_line": "工作和休息，你都拿得起。", "unlock_line_en": "Work and rest, both mastered.",
+      "codex_line": "习惯 III、断电、深呼吸全部解锁。", "codex_line_en": "Unlock Habit III, Unplugged and Deep Breath.",
+      "unit": "个", "global_pct": 3,
+      "trigger": { "type": "set", "on": ["unlocks"], "where": "unlocked.C01 >= 3 && unlocked.C02 >= 1 && unlocked.C03 >= 1" },
+      "tiers": [{ "tier": 1, "threshold": 1, "rarity": "epic", "reward": { "title": "作息大师", "item": "four_seasons" } }]
+    },
+    {
+      "id": "P06", "name": "收藏家", "name_en": "Collector", "category": "set",
+      "unlock_line": "你的展示柜快放不下了。", "unlock_line_en": "Your display case is nearly full.",
+      "codex_line": "解锁任意 30 个成就。", "codex_line_en": "Unlock any 30 achievements.",
+      "unit": "个", "global_pct": 8,
+      "trigger": { "type": "set", "on": ["unlocks"], "value": "achievements_unlocked" },
+      "tiers": [{ "tier": 1, "threshold": 30, "rarity": "epic", "reward": { "item": "display_case" } }]
+    }
+  ]
+}

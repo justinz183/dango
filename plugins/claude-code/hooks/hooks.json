@@ -1,0 +1,20 @@
+{
+  "description": "ShadowCorp: turns finished agent work into person-days, badges and a growing office.",
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|MultiEdit|Bash|Agent|Task", "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }
+    ],
+    "PostToolUseFailure": [
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }
+    ],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "timeout": 5 }] }],
+    "Notification": [
+      { "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }
+    ],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "async": true }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "shadowcorp hook", "timeout": 5 }] }]
+  }
+}

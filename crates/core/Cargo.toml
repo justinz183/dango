@@ -1,0 +1,12 @@
+[package]
+name = "shadowcorp-core"
+version.workspace = true
+edition.workspace = true
+description = "Event schema, scoring, progress and achievement engine. Pure logic, no IO."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+chrono.workspace = true
+unicode-width.workspace = true

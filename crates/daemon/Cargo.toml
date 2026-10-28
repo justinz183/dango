@@ -1,0 +1,14 @@
+[package]
+name = "daemon"
+version.workspace = true
+edition.workspace = true
+description = "Capture, spool, SQLite ingest, backfill and the local socket service."
+
+[dependencies]
+shadowcorp-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+chrono.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
