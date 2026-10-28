@@ -8,6 +8,7 @@
 //
 // Build: apps/widget/build.sh (binary) or apps/widget/bundle.sh (ShadowCorp.app)
 // Snapshots (no window): --snapshot out.png, --snapshot-dashboard out.png
+// [--board claude_code|codex] [--open-jobs]
 
 import AppKit
 import Foundation
@@ -71,6 +72,39 @@ struct Model {
     var jobs: [JobShare] = []
     var tools: [ToolShare] = []
     var turns: [TurnRow] = []
+    /// The same dashboard for one agent ("claude_code", "codex"), from
+    /// widget.json `views`: tiles, 30 days, jobs and turns are that agent's.
+    var boards: [String: Model] = [:]
+}
+
+/// Display name of an agent id for the dashboard switch.
+let boardNames = ["all": "全部", "claude_code": "Claude Code", "codex": "Codex"]
+
+/// Reads the dashboard numbers (tiles, 30 days, jobs, turns) from the top
+/// level of widget.json or from one of its `views`.
+func applyBoard(_ m: inout Model, _ j: [String: Any]) {
+    func obj(_ k: String) -> [String: Any] { j[k] as? [String: Any] ?? [:] }
+    func list(_ k: String) -> [[String: Any]] { j[k] as? [[String: Any]] ?? [] }
+    let total = obj("total"), today = obj("today"), week = obj("week"), month = obj("month")
+    m.totalHours = total["hours"] as? Double ?? 0
+    m.totalUSD = total["usd"] as? Double ?? 0
+    m.todayHours = today["hours"] as? Double ?? 0
+    m.todayUSD = today["usd"] as? Double ?? 0
+    m.weekHours = week["hours"] as? Double ?? 0
+    m.weekUSD = week["usd"] as? Double ?? 0
+    m.monthHours = month["hours"] as? Double ?? 0
+    m.monthUSD = month["usd"] as? Double ?? 0
+    m.days = list("days").map {
+        DayPoint(day: $0["day"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0, turns: $0["turns"] as? Int ?? 0)
+    }
+    m.jobs = list("jobs").map {
+        JobShare(name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
+                 rate: $0["rate"] as? Double ?? 0, share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
+    }
+    m.turns = list("turns").map {
+        TurnRow(at: $0["at"] as? Double ?? 0, tool: $0["tool"] as? String ?? "", name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
+                color: color(hex: $0["color"] as? String ?? ""), files: $0["files"] as? Int ?? 0, testPassed: $0["test_passed"] as? Bool)
+    }
 }
 
 func color(hex: String) -> NSColor {
@@ -86,17 +120,9 @@ func loadModel() -> Model? {
     func obj(_ k: String) -> [String: Any] { j[k] as? [String: Any] ?? [:] }
     func list(_ k: String) -> [[String: Any]] { j[k] as? [[String: Any]] ?? [] }
     var m = Model()
-    let total = obj("total"), today = obj("today"), week = obj("week"), month = obj("month")
-    let rank = obj("rank"), act = obj("activity")
-    m.totalHours = total["hours"] as? Double ?? 0
-    m.totalUSD = total["usd"] as? Double ?? 0
-    m.todayHours = today["hours"] as? Double ?? 0
-    m.todayUSD = today["usd"] as? Double ?? 0
-    m.weekHours = week["hours"] as? Double ?? 0
-    m.weekUSD = week["usd"] as? Double ?? 0
-    m.weekLeverage = week["leverage"] as? Double
-    m.monthHours = month["hours"] as? Double ?? 0
-    m.monthUSD = month["usd"] as? Double ?? 0
+    let total = obj("total"), rank = obj("rank"), act = obj("activity")
+    applyBoard(&m, j)
+    m.weekLeverage = obj("week")["leverage"] as? Double
     let ch = obj("character")
     m.name = ch["name"] as? String ?? "Claude"
     m.mood = ch["mood"] as? String ?? "happy"
@@ -114,18 +140,13 @@ func loadModel() -> Model? {
     m.working = act["working"] as? Int ?? 0
     m.subagents = act["subagents"] as? Int ?? 0
     m.generatedAt = j["generated_at"] as? Double ?? 0
-    m.days = list("days").map {
-        DayPoint(day: $0["day"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0, turns: $0["turns"] as? Int ?? 0)
-    }
     m.ranks = list("ranks").map { RankStep(name: $0["name"] as? String ?? "", xp: $0["xp"] as? Int ?? 0, color: color(hex: $0["color"] as? String ?? "")) }
-    m.jobs = list("jobs").map {
-        JobShare(name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
-                 rate: $0["rate"] as? Double ?? 0, share: $0["share"] as? Double ?? 0, color: color(hex: $0["color"] as? String ?? ""))
-    }
     m.tools = toolShares(list("tools"))
-    m.turns = list("turns").map {
-        TurnRow(at: $0["at"] as? Double ?? 0, tool: $0["tool"] as? String ?? "", name: $0["name"] as? String ?? "", hours: $0["hours"] as? Double ?? 0, usd: $0["usd"] as? Double ?? 0,
-                color: color(hex: $0["color"] as? String ?? ""), files: $0["files"] as? Int ?? 0, testPassed: $0["test_passed"] as? Bool)
+    for (id, view) in obj("views") {
+        guard let view = view as? [String: Any] else { continue }
+        var v = m
+        applyBoard(&v, view)
+        m.boards[id] = v
     }
     return m
 }
@@ -314,6 +335,26 @@ final class DashboardView: NSView {
     private var chartRect = NSRect.zero
     private var headerBottom: CGFloat = 0
     private var reportRect = NSRect.zero
+    /// Which agent the dashboard shows: "all", "claude_code" or "codex".
+    private(set) var filter = "all"
+    private var pillRects: [(String, NSRect)] = []
+    /// The "还有 N 种" line under the jobs; clicking it opens the full list.
+    private var jobsOpen = false
+    private var moreRect = NSRect.zero
+    /// Called when the content changes height (switch, jobs list).
+    var onResize: (() -> Void)?
+
+    /// For snapshots: start on one agent and/or with the jobs list open.
+    func preset(filter: String, jobsOpen: Bool) {
+        self.filter = filter
+        self.jobsOpen = jobsOpen
+    }
+
+    /// The model for the selected agent (all of them by default).
+    private var shown: Model? {
+        guard let m = model else { return nil }
+        return filter == "all" ? m : m.boards[filter] ?? m
+    }
     private let pad: CGFloat = 18
 
     override var isFlipped: Bool { true }
@@ -343,7 +384,7 @@ final class DashboardView: NSView {
         let W = bounds.width
         let inner = W - 2 * pad
         var y: CGFloat = 16
-        guard let m = model else {
+        guard let base = model, let m = shown else {
             if draw { put(text("等待数据…", size: 13, weight: .medium, color: secondary), pad, y) }
             return 80
         }
@@ -369,6 +410,26 @@ final class DashboardView: NSView {
         y += 22
         headerBottom = y
 
+        // 全部 · Claude Code · Codex: every block below follows the switch.
+        pillRects = []
+        let ids = ["all"] + base.boards.keys.sorted()
+        if base.boards.count > 1 {
+            var x = pad
+            for id in ids {
+                let on = id == filter
+                let label = text(boardNames[id] ?? id, size: 11, weight: on ? .semibold : .regular, color: on ? primary : secondary)
+                let r = NSRect(x: x, y: y, width: label.size().width + 20, height: 22)
+                if draw {
+                    NSColor.white.withAlphaComponent(on ? 0.16 : 0.05).setFill()
+                    NSBezierPath(roundedRect: r, xRadius: 11, yRadius: 11).fill()
+                    put(label, r.midX, r.minY + 4, align: 1)
+                }
+                pillRects.append((id, r))
+                x = r.maxX + 6
+            }
+            y += 22 + 14
+        }
+
         // Four headline numbers.
         let tiles: [(String, Double, Double)] = [("今日", m.todayUSD, m.todayHours), ("本周", m.weekUSD, m.weekHours),
                                                   ("本月", m.monthUSD, m.monthHours), ("总计", m.totalUSD, m.totalHours)]
@@ -388,7 +449,7 @@ final class DashboardView: NSView {
 
         // Claude Code and Codex side by side over the same 30 days.
         let tools = m.tools.filter { $0.usd > 0 }
-        if !tools.isEmpty {
+        if filter == "all" && !tools.isEmpty {
             section("Claude Code 与 Codex（\(max(m.days.count, 1)) 天）", y, draw: draw)
             y += 22
             if draw {
@@ -439,7 +500,7 @@ final class DashboardView: NSView {
             y += 18
         } else {
             let maxU = max(jobs.map(\.usd).max() ?? 1, 0.01)
-            for c in jobs.prefix(6) {
+            for c in jobs.prefix(jobsOpen ? jobs.count : 6) {
                 if draw {
                     put(text(c.name, size: 11), pad, y)
                     let br = NSRect(x: pad + 66, y: y + 5, width: inner - 66 - 150, height: 6)
@@ -449,10 +510,18 @@ final class DashboardView: NSView {
                 }
                 y += 19
             }
+            moreRect = .zero
             if jobs.count > 6 {
+                // A dropdown: "还有 N 种 ▾" opens the rest, "收起 ▴" closes it.
                 let rest = jobs.dropFirst(6).map(\.usd).reduce(0, +)
-                if draw { put(text("还有 \(jobs.count - 6) 种 · \(fmtUSD(rest))", size: 10, color: secondary), pad, y) }
-                y += 17
+                let label = text(jobsOpen ? "收起 ▴" : "还有 \(jobs.count - 6) 种 · \(fmtUSD(rest))  展开 ▾", size: 10, weight: .medium, color: secondary)
+                moreRect = NSRect(x: pad - 4, y: y - 3, width: label.size().width + 8, height: label.size().height + 6)
+                if draw {
+                    NSColor.white.withAlphaComponent(0.05).setFill()
+                    NSBezierPath(roundedRect: moreRect, xRadius: 5, yRadius: 5).fill()
+                    put(label, pad, y)
+                }
+                y += 19
             }
         }
         y += 14
@@ -618,7 +687,7 @@ final class DashboardView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         var h: Int?
-        if let m = model, !m.days.isEmpty, chartRect.contains(p) {
+        if let m = shown, !m.days.isEmpty, chartRect.contains(p) {
             h = min(m.days.count - 1, max(0, Int((p.x - chartRect.minX) / (chartRect.width / CGFloat(m.days.count)))))
         }
         if h != hover {
@@ -638,8 +707,17 @@ final class DashboardView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         if p.y < headerBottom {
             onCollapse?()
+        } else if let (id, _) = pillRects.first(where: { $0.1.contains(p) }) {
+            guard id != filter else { return }
+            filter = id
+            jobsOpen = false
+            hover = nil
+            onResize?()
+        } else if moreRect.contains(p) {
+            jobsOpen.toggle()
+            onResize?()
         } else if reportRect.contains(p) {
-            (NSApp.delegate as? App)?.makeTodayCard()
+            (NSApp.delegate as? App)?.makeCard(tool: filter)
         }
     }
 
@@ -701,6 +779,7 @@ final class App: NSObject, NSApplicationDelegate {
         scroll.scrollerStyle = .overlay
         dashboard = DashboardView(frame: NSRect(x: 0, y: 0, width: dashboardWidth, height: 600))
         dashboard.onCollapse = { [weak self] in self?.collapse() }
+        dashboard.onResize = { [weak self] in self?.refit() }
         scroll.documentView = dashboard
         expanded.addSubview(scroll)
 
@@ -779,14 +858,31 @@ final class App: NSObject, NSApplicationDelegate {
 
     @objc func toggle() { isExpanded ? collapse() : expand() }
 
-    /// Runs `shadowcorp card --day today`, which renders the day card,
-    /// copies it to the clipboard and opens it.
-    @objc func makeTodayCard() {
+    /// Re-fits the open dashboard after its content changed height,
+    /// keeping its bottom edge where it is.
+    func refit() {
+        dashboard.frame.size.height = dashboard.contentHeight()
+        dashboard.needsDisplay = true
+        guard isExpanded else { return }
+        let vf = (panel.screen ?? NSScreen.main)?.visibleFrame ?? panel.frame
+        var f = panel.frame
+        f.size.height = min(dashboard.frame.height, vf.height - 32)
+        f.origin.y = min(f.minY, vf.maxY - f.height - 8)
+        expanded.frame.size = f.size
+        panel.setFrame(f, display: true)
+    }
+
+    /// Runs `shadowcorp card --day today` (for one agent when the dashboard
+    /// is switched to it), which renders the day card, copies it to the
+    /// clipboard and opens it.
+    @objc func makeTodayCard() { makeCard(tool: "all") }
+
+    func makeCard(tool: String) {
         let candidates = [NSHomeDirectory() + "/.local/bin/shadowcorp", "/usr/local/bin/shadowcorp", "/opt/homebrew/bin/shadowcorp"]
         guard let cli = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else { return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: cli)
-        p.arguments = ["card", "--day", "today"]
+        p.arguments = ["card", "--day", "today"] + (tool == "all" ? [] : ["--tool", tool])
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
         try? p.run()
@@ -1043,7 +1139,7 @@ class CardView: NSView {
         put(text(ch.s("sub"), size: 28, color: ink2, mono: true), tx, 284)
         // Who did it: Claude Code and Codex, each with its dollars and share.
         let tools = toolShares(r.l("tools")).filter { $0.usd > 0 }
-        guard !tools.isEmpty else { return 356 }
+        guard tools.count > 1 else { return 356 }
         var x = tx
         for t in tools {
             t.color.setFill()
@@ -1412,6 +1508,8 @@ if let i = args.firstIndex(of: "--snapshot-dashboard"), args.count > i + 1 {
     let v = DashboardView(frame: NSRect(x: 0, y: 0, width: dashboardWidth, height: 600))
     v.drawBackground = true
     v.model = loadModel()
+    let board = args.firstIndex(of: "--board").flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } ?? "all"
+    v.preset(filter: board, jobsOpen: args.contains("--open-jobs"))
     let h = v.contentHeight()
     snapshot(v, NSSize(width: dashboardWidth, height: h), args[i + 1])
     exit(0)

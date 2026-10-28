@@ -15,7 +15,7 @@ use shadowcorp_core::render::{fmt_hours, fmt_usd};
 use shadowcorp_core::scoring::ScoringConstants;
 
 use crate::config::Config;
-use crate::ingest::{day_key, Result, Tz};
+use crate::ingest::{day_key, week_key, Result, Tz};
 use crate::paths::{write_private, Paths};
 use crate::snapshot::{self, Output};
 
@@ -57,23 +57,24 @@ pub fn tools(conn: &Connection, from: i64, to: i64) -> Result<Vec<Value>> {
         .collect())
 }
 
-/// Dollars per day from the `usd` counters, for days on or after `from`.
-pub fn usd_by_day(conn: &Connection, from: chrono::NaiveDate) -> Result<HashMap<String, f64>> {
-    let mut st = conn.prepare("SELECT substr(scope, 5), value FROM counters WHERE metric = 'usd' AND scope LIKE 'day:%' AND scope >= ?1")?;
-    let rows = st.query_map([format!("day:{}", day_key(from))], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?;
+/// One counter per day (e.g. `usd`, `minutes:codex`), for days on or after `from`.
+pub fn metric_by_day(conn: &Connection, metric: &str, from: chrono::NaiveDate) -> Result<HashMap<String, f64>> {
+    let mut st = conn.prepare("SELECT substr(scope, 5), value FROM counters WHERE metric = ?1 AND scope LIKE 'day:%' AND scope >= ?2")?;
+    let rows = st.query_map([metric.to_string(), format!("day:{}", day_key(from))], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?;
     Ok(rows.flatten().collect())
 }
 
-/// Who did the work of turns that ended in [from, to): one entry per
-/// occupation with hours, dollars and share of the dollars, biggest first.
-pub fn jobs(conn: &Connection, from: i64, to: i64) -> Result<Vec<Value>> {
+/// Who did the work of turns that ended in [from, to), for all agents or
+/// one: one entry per occupation with hours, dollars and share of the
+/// dollars, biggest first.
+pub fn jobs(conn: &Connection, from: i64, to: i64, tool: Option<&str>) -> Result<Vec<Value>> {
     let t = Table::builtin();
     let mut st = conn.prepare(
-        "SELECT j.key, SUM(j.value) FROM turns, json_each(turns.work) j
-         WHERE turns.ended_at >= ?1 AND turns.ended_at < ?2 GROUP BY j.key",
+        "SELECT j.key, SUM(j.value) FROM turns JOIN sessions s ON s.id = turns.session_id, json_each(turns.work) j
+         WHERE turns.ended_at >= ?1 AND turns.ended_at < ?2 AND (?3 IS NULL OR s.source = ?3) GROUP BY j.key",
     )?;
     let mut rows: Vec<(String, f64, f64)> = st
-        .query_map([from, to], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?
+        .query_map(rusqlite::params![from, to, tool], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?
         .flatten()
         .filter(|(_, m)| *m > 0.0)
         .map(|(o, m)| {
@@ -146,64 +147,95 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
     Ok(json!({ "name": cfg.character.name, "mood": mood, "line": line }))
 }
 
-pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> {
-    let o = snapshot::output(conn, tz, now);
-    let (working, subagents, last_event) = snapshot::activity(conn, now)?;
+/// The last ten turns, newest first, for all agents or one.
+fn recent_turns(conn: &Connection, tool: Option<&str>) -> Result<Vec<Value>> {
     let k = ScoringConstants::builtin();
     let t = Table::builtin();
-    let hours = |pd: f64| pd * k.caps.minutes_per_day / 60.0;
-    let today = tz.date(now);
-
-    let month_start = today.with_day(1).unwrap_or(today);
-    let month_pd: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(person_days), 0) FROM daily WHERE day >= ?1",
-        [day_key(month_start)],
-        |r| r.get(0),
-    )?;
-    let month_usd: f64 = usd_by_day(conn, month_start)?.values().sum();
-
-    let from = today - Duration::days(HISTORY_DAYS - 1);
-    let usd_days = usd_by_day(conn, from)?;
-    let mut by_day: HashMap<String, (f64, i64)> = HashMap::new();
-    let mut st = conn.prepare("SELECT day, person_days, turns FROM daily WHERE day >= ?1")?;
-    for (d, pd, t) in st.query_map([day_key(from)], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)?)))?.flatten() {
-        by_day.insert(d, (pd, t));
-    }
-    let days: Vec<Value> = (0..HISTORY_DAYS)
-        .map(|i| {
-            let key = day_key(from + Duration::days(i));
-            let (pd, turns) = by_day.get(&key).copied().unwrap_or((0.0, 0));
-            let usd = usd_days.get(&key).copied().unwrap_or(0.0);
-            json!({ "day": key, "hours": hours(pd), "usd": usd, "person_days": pd, "turns": turns })
-        })
-        .collect();
-
     let mut st = conn.prepare(
         "SELECT t.ended_at, t.work, t.credited_pd, t.files_touched, t.test_run, t.test_passed, t.usd, s.source FROM turns t
-         JOIN sessions s ON s.id = t.session_id WHERE t.ended_at IS NOT NULL ORDER BY t.ended_at DESC LIMIT 10",
+         JOIN sessions s ON s.id = t.session_id WHERE t.ended_at IS NOT NULL AND (?1 IS NULL OR s.source = ?1)
+         ORDER BY t.ended_at DESC LIMIT 10",
     )?;
-    let turns: Vec<Value> = st
-        .query_map([], |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, f64>(2)?,
-                r.get::<_, i64>(3)?,
-                r.get::<_, i64>(4)?,
-                r.get::<_, Option<i64>>(5)?,
-                r.get::<_, f64>(6)?,
-                r.get::<_, String>(7)?,
-            ))
-        })?
+    let rows = st.query_map([tool], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, f64>(2)?,
+            r.get::<_, i64>(3)?,
+            r.get::<_, i64>(4)?,
+            r.get::<_, Option<i64>>(5)?,
+            r.get::<_, f64>(6)?,
+            r.get::<_, String>(7)?,
+        ))
+    })?;
+    Ok(rows
         .flatten()
         .map(|(at, work, pd, files, test_run, passed, usd, src)| {
             let job = occupation::main(&work_of(&work)).unwrap_or_default();
             json!({
-                "at": at, "tool": tool_label(&src).0, "job": job, "name": t.name(&job), "color": t.get(&job).map(|j| j.color.as_str()), "hours": hours(pd),
-                "usd": usd, "person_days": pd, "files": files, "test_passed": (test_run == 1).then(|| passed == Some(1)),
+                "at": at, "tool": tool_label(&src).0, "job": job, "name": t.name(&job), "color": t.get(&job).map(|j| j.color.as_str()),
+                "hours": pd * k.caps.minutes_per_day / 60.0, "usd": usd, "person_days": pd, "files": files,
+                "test_passed": (test_run == 1).then(|| passed == Some(1)),
             })
         })
+        .collect())
+}
+
+/// The dashboard's numbers — today, week, month, total, the last 30 days,
+/// who was hired, recent turns — for all agents (`None`) or one agent.
+pub fn view(conn: &Connection, tz: Tz, now: i64, tool: Option<&str>) -> Result<Value> {
+    let k = ScoringConstants::builtin();
+    let today = tz.date(now);
+    let (usd_m, min_m) = match tool {
+        Some(t) => (format!("usd:{t}"), format!("minutes:{t}")),
+        None => ("usd".to_string(), "person_days".to_string()),
+    };
+    // Credited minutes: per-agent counters hold minutes, the overall one person-days.
+    let to_hours = |v: f64| if tool.is_some() { v / 60.0 } else { v * k.caps.minutes_per_day / 60.0 };
+    let c = |m: &str, scope: String| snapshot::counter(conn, m, &scope);
+    let pair = |scope: String| json!({ "usd": c(&usd_m, scope.clone()), "hours": to_hours(c(&min_m, scope)) });
+
+    let month_start = today.with_day(1).unwrap_or(today);
+    let from = today - Duration::days(HISTORY_DAYS - 1);
+    let first = from.min(month_start);
+    let (usd_days, min_days) = (metric_by_day(conn, &usd_m, first)?, metric_by_day(conn, &min_m, first)?);
+    let mut turns_by_day: HashMap<String, i64> = HashMap::new();
+    let mut st = conn.prepare(
+        "SELECT t.ended_at FROM turns t JOIN sessions s ON s.id = t.session_id WHERE t.ended_at >= ?1 AND (?2 IS NULL OR s.source = ?2)",
+    )?;
+    for at in st.query_map(rusqlite::params![tz.ms(from.and_hms_opt(0, 0, 0).unwrap()), tool], |r| r.get::<_, i64>(0))?.flatten() {
+        *turns_by_day.entry(day_key(tz.date(at))).or_default() += 1;
+    }
+    let get = |m: &HashMap<String, f64>, d: &str| m.get(d).copied().unwrap_or(0.0);
+    let days: Vec<Value> = (0..HISTORY_DAYS)
+        .map(|i| {
+            let key = day_key(from + Duration::days(i));
+            json!({ "day": key, "usd": get(&usd_days, &key), "hours": to_hours(get(&min_days, &key)),
+                    "turns": turns_by_day.get(&key).copied().unwrap_or(0) })
+        })
         .collect();
+    let in_month = |m: &HashMap<String, f64>| m.iter().filter(|(d, _)| **d >= day_key(month_start)).map(|(_, v)| v).sum::<f64>();
+    Ok(json!({
+        "today": pair(format!("day:{}", day_key(today))),
+        "week": pair(format!("week:{}", week_key(today))),
+        "month": { "usd": in_month(&usd_days), "hours": to_hours(in_month(&min_days)) },
+        "total": pair("all".to_string()),
+        "days": days,
+        "jobs": jobs(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX, tool)?,
+        "turns": recent_turns(conn, tool)?,
+    }))
+}
+
+pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> {
+    let o = snapshot::output(conn, tz, now);
+    let (working, subagents, last_event) = snapshot::activity(conn, now)?;
+    let t = Table::builtin();
+    let all = view(conn, tz, now, None)?;
+    let mut views = serde_json::Map::new();
+    let mut st = conn.prepare("SELECT DISTINCT source FROM sessions ORDER BY source")?;
+    for src in st.query_map([], |r| r.get::<_, String>(0))?.flatten().collect::<Vec<_>>() {
+        views.insert(src.clone(), view(conn, tz, now, Some(&src))?);
+    }
 
     let r = &o.rank;
     Ok(json!({
@@ -213,7 +245,7 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         "total": { "hours": o.total_hours, "usd": o.total_usd, "person_days": o.total_pd, "xp": r.xp },
         "today": { "hours": o.today_hours, "usd": o.today_usd, "person_days": o.today_pd },
         "week": { "hours": o.week_hours, "usd": o.week_usd, "person_days": o.week_pd, "leverage": o.week_leverage },
-        "month": { "hours": hours(month_pd), "usd": month_usd, "person_days": month_pd },
+        "month": all["month"],
         "rank": {
             "index": r.index,
             "name": r.rank().name,
@@ -227,11 +259,12 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
             "next_label": r.next_label(),
         },
         "ranks": RANKS.iter().map(|x| json!({ "name": x.name, "name_en": x.name_en, "xp": x.xp, "color": x.color })).collect::<Vec<_>>(),
-        "days": days,
-        "jobs": jobs(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX)?,
+        "days": all["days"],
+        "jobs": all["jobs"],
         "tools": tools(conn, now - HISTORY_DAYS * DAY_MS, i64::MAX)?,
         "tools_all": tools(conn, 0, i64::MAX)?,
-        "turns": turns,
+        "turns": all["turns"],
+        "views": views,
         "activity": { "working": working, "subagents": subagents, "last_event": last_event },
     }))
 }

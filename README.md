@@ -108,7 +108,12 @@ SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp badges
 2. 在 Codex 里用 `/hooks` 审阅并信任这些 hook（Codex 要求非托管 hook 先信任才会运行，改过文件要重新信任）。
 3. `shadowcorp backfill` 会一起导入 `~/.codex/sessions` 的历史。每个工具各有自己的分界点（第一个实时事件），所以重复跑不会重复计。信任 hook 之后再跑一次，可以补上中间那段。
 
-Codex 的每一步按和 Claude Code 一样的规则归给职业：命令（`Bash` / unified exec）、`apply_patch`（按文件拆开）、MCP 工具、子 agent。日报卡、周报卡、月报卡头部、仪表盘和 `stats` 都会分开写出 Claude Code 和 Codex 各自的 $ 和占比。
+Codex 的每一步按和 Claude Code 一样的规则归给职业：命令（`Bash` / unified exec）、`apply_patch`（按文件拆开）、MCP 工具、子 agent。
+
+**分开看**：
+- 仪表盘顶部有「全部 / Claude Code / Codex」切换，今日 / 本周 / 本月 / 总计、30 天柱图、相当于请了谁、最近回合都会跟着切。"相当于请了谁"超过 6 种时，点「还有 N 种 · 展开 ▾」看全部，「收起 ▴」收回。切到某个工具时点「生成今日日报」，生成的就是那个工具的日报。
+- 卡片和文字报告加 `--tool claude` 或 `--tool codex`：`shadowcorp card --week --tool codex`。不加时卡片头部会写出两边各自的 $ 和占比。
+- `shadowcorp stats` 在「请了谁」下面分别列出 Claude 和 Codex 各自请了谁。
 
 已知限制：Codex 的结算框会以提示（warning）的样式出现；Codex 内置的网页搜索不触发 hook，只有回填时能看到；Codex 的电脑操作（`cua_repl` 的点击、滚动）不计钱，和 Claude 里点浏览器一样。
 

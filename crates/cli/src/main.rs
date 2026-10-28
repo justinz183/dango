@@ -31,10 +31,10 @@ const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
   shadowcorp stats                 公司页
   shadowcorp badges                成就与职业图鉴
   shadowcorp widget                启动桌面小部件（屏幕右下角）
-  shadowcorp report [--week|--month] [--day DATE] [--names] [--json]
+  shadowcorp report [--week|--month] [--day DATE] [--tool claude|codex] [--names] [--json]
                                    日报 / 周报 / 月报（DATE = YYYY-MM-DD | today | yesterday，
                                    周报取 DATE 所在的周，月报取所在的月）
-  shadowcorp card [--week|--month] [--day DATE] [--names] [--out PNG] [--no-open]
+  shadowcorp card [--week|--month] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
                                    渲染分享卡到 ~/Pictures/ShadowCorp/ 并复制到剪贴板
   shadowcorp panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   shadowcorp backfill [--claude-dir DIR]
@@ -131,19 +131,30 @@ fn parse_day(args: &[String]) -> Result<chrono::NaiveDate> {
     })
 }
 
+/// `--tool claude|codex`: one agent's work only (sessions.source).
+fn parse_tool(args: &[String]) -> Result<Option<&'static str>> {
+    Ok(match flag(args, "--tool").as_deref() {
+        None | Some("all") => None,
+        Some("claude" | "claude_code" | "claude-code") => Some("claude_code"),
+        Some("codex") => Some("codex"),
+        Some(t) => return Err(format!("--tool 只接 claude 或 codex，收到 {t:?}").into()),
+    })
+}
+
 /// The day, week or month report the arguments ask for.
 fn any_report(paths: &Paths, args: &[String]) -> Result<Value> {
     let date = parse_day(args)?;
+    let tool = parse_tool(args)?;
     let names = args.iter().any(|a| a == "--names");
     let has = |f: &str| args.iter().any(|a| a == f);
     fresh_db(paths, |c, cfg| {
         let (tz, dir, now) = (Tz::from_env(), claude_dir(), now_ms());
         if has("--month") {
-            daemon::report::month(c, tz, cfg, &dir, date, now, names)
+            daemon::report::month(c, tz, cfg, &dir, date, now, names, tool)
         } else if has("--week") {
-            daemon::report::week(c, tz, cfg, &dir, date, now, names)
+            daemon::report::week(c, tz, cfg, &dir, date, now, names, tool)
         } else {
-            daemon::report::day(c, tz, cfg, &dir, date, now, names)
+            daemon::report::day(c, tz, cfg, &dir, date, now, names, tool)
         }
     })
 }
@@ -172,7 +183,8 @@ fn renderer() -> Result<PathBuf> {
 fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     let r = any_report(paths, args)?;
     let kind = r["kind"].as_str().unwrap_or("day").to_string();
-    let date = format!("{kind}-{}", r["date"].as_str().unwrap_or(""));
+    let tool = r["tool"].as_str().map(|t| format!("-{t}")).unwrap_or_default();
+    let date = format!("{kind}-{}{tool}", r["date"].as_str().unwrap_or(""));
     let cards = paths.home.join("cards");
     fs::create_dir_all(&cards)?;
     let json_path = cards.join(format!("{date}.json"));

@@ -98,13 +98,14 @@ fn midnight(tz: Tz, d: NaiveDate) -> i64 {
     tz.ms(d.and_hms_opt(0, 0, 0).unwrap())
 }
 
-fn tally(conn: &Connection, tz: Tz, start: i64, end: i64) -> Result<Tally> {
+fn tally(conn: &Connection, tz: Tz, start: i64, end: i64, tool: Option<&str>) -> Result<Tally> {
     let mut st = conn.prepare(
         "SELECT t.session_id, t.started_at, t.ended_at, t.files_touched, t.test_run, t.test_passed, t.is_correction, t.work, t.usd, s.source
-         FROM turns t JOIN sessions s ON s.id = t.session_id WHERE t.ended_at >= ?1 AND t.ended_at < ?2 ORDER BY t.started_at",
+         FROM turns t JOIN sessions s ON s.id = t.session_id
+         WHERE t.ended_at >= ?1 AND t.ended_at < ?2 AND (?3 IS NULL OR s.source = ?3) ORDER BY t.started_at",
     )?;
     let turns: Vec<Turn> = st
-        .query_map([start, end], |r| {
+        .query_map(rusqlite::params![start, end, tool], |r| {
             let work = crate::widget::work_of(&r.get::<_, String>(7)?);
             Ok(Turn {
                 session: r.get(0)?,
@@ -253,10 +254,19 @@ fn rank_now(conn: &Connection, tz: Tz, now: i64) -> Value {
     })
 }
 
-fn base(kind: &str, t: &Tally, show_names: bool) -> serde_json::Map<String, Value> {
+/// "今天这些活" for everything, "Codex 今天干的活" for one agent.
+fn headline(when: &str, tool: Option<&str>) -> String {
+    match tool {
+        Some(t) => format!("{} {when}干的活，请人来做要花", crate::widget::tool_label(t).0),
+        None => format!("{when}这些活，请人来做要花"),
+    }
+}
+
+fn base(kind: &str, t: &Tally, show_names: bool, tool: Option<&str>) -> serde_json::Map<String, Value> {
     let rates = Table::builtin();
     let v = json!({
         "kind": kind,
+        "tool": tool,
         "show_names": show_names,
         "human_hours": hours(t.human),
         "active_hours": hours(t.active),
@@ -282,10 +292,10 @@ fn character(name: &str, mood: &str, headline: &str, number: String, sub: String
 // ---- day ---------------------------------------------------------------
 
 /// The report for one local day.
-pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool) -> Result<Value> {
+pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
     let start = midnight(tz, date);
     let end = midnight(tz, date.succ_opt().unwrap());
-    let t = tally(conn, tz, start, end)?;
+    let t = tally(conn, tz, start, end, tool)?;
     let sessions = t.sessions(conn, claude_dir, show_names, 10, |s, e| (hhmm(tz, s.max(start)), hhmm(tz, e.min(end - 1))))?;
     let blocks: Vec<Value> = t
         .turns
@@ -318,17 +328,17 @@ pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Nai
     } else {
         ("happy", format!("{n} 个回合，{} 小时的活。", fmt_short(h)))
     };
-    let (headline, number, sub) = if n == 0 {
-        ("今天没开工", String::new(), "休息也是节奏的一部分。".to_string())
+    let (title, number, sub) = if n == 0 {
+        ("今天没开工".to_string(), String::new(), "休息也是节奏的一部分。".to_string())
     } else {
-        ("今天这些活，请人来做要花", fmt_usd(t.usd), t.worth_line())
+        (headline("今天", tool), fmt_usd(t.usd), t.worth_line())
     };
     let streak: Value = crate::db::get_meta(conn, "streak")?.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
 
-    let mut r = base("day", &t, show_names);
+    let mut r = base("day", &t, show_names, tool);
     r.insert("date".into(), json!(day_key(date)));
     r.insert("label".into(), json!(format!("{}月{}日 · {}", date.month(), date.day(), WEEKDAYS[date.weekday().num_days_from_monday() as usize])));
-    r.insert("character".into(), character(&cfg.character.name, mood, headline, number, sub, signoff));
+    r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
     r.insert("sessions".into(), json!(sessions));
     r.insert("blocks".into(), json!(blocks));
     r.insert("rank".into(), rank_now(conn, tz, now));
@@ -364,11 +374,11 @@ fn per_day(t: &Tally, tz: Tz, from: NaiveDate, days: i64) -> Vec<DayTotal> {
 }
 
 /// The report for the ISO week (Monday–Sunday) containing `date`.
-pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool) -> Result<Value> {
+pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
     let monday = date - Duration::days(date.weekday().num_days_from_monday() as i64);
     let next = monday + Duration::days(7);
     let (start, end) = (midnight(tz, monday), midnight(tz, next));
-    let t = tally(conn, tz, start, end)?;
+    let t = tally(conn, tz, start, end, tool)?;
     let sessions = t.sessions(conn, claude_dir, show_names, 3, |s, e| (md(tz.date(s)), md(tz.date(e))))?;
     let today = tz.date(now);
     let days_v = per_day(&t, tz, monday, 7);
@@ -406,18 +416,18 @@ pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Na
     } else {
         ("happy", format!("这周主要当{}，{active_days} 天在干。", t.top_job().unwrap_or("")))
     };
-    let (headline, number, sub) = if t.turns.is_empty() {
-        ("这周没开工", String::new(), "休息也是节奏的一部分。".to_string())
+    let (title, number, sub) = if t.turns.is_empty() {
+        ("这周没开工".to_string(), String::new(), "休息也是节奏的一部分。".to_string())
     } else {
-        ("这周这些活，请人来做要花", fmt_usd(t.usd), t.worth_line())
+        (headline("这周", tool), fmt_usd(t.usd), t.worth_line())
     };
     let iso = monday.iso_week();
     let sunday = next - Duration::days(1);
 
-    let mut r = base("week", &t, show_names);
+    let mut r = base("week", &t, show_names, tool);
     r.insert("date".into(), json!(week_key(monday)));
     r.insert("label".into(), json!(format!("{}月{}日 – {}月{}日 · 第 {} 周", monday.month(), monday.day(), sunday.month(), sunday.day(), iso.week())));
-    r.insert("character".into(), character(&cfg.character.name, mood, headline, number, sub, signoff));
+    r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
     r.insert("sessions".into(), json!(sessions));
     r.insert("days".into(), json!(days));
     r.insert("best_day".into(), json!(best));
@@ -431,7 +441,7 @@ pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Na
 // ---- month -------------------------------------------------------------
 
 /// The report for the calendar month containing `date`.
-pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool) -> Result<Value> {
+pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
     let first = date.with_day(1).unwrap();
     let next = if first.month() == 12 {
         NaiveDate::from_ymd_opt(first.year() + 1, 1, 1).unwrap()
@@ -440,7 +450,7 @@ pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: N
     };
     let n_days = (next - first).num_days();
     let (start, end) = (midnight(tz, first), midnight(tz, next));
-    let t = tally(conn, tz, start, end)?;
+    let t = tally(conn, tz, start, end, tool)?;
     let sessions = t.sessions(conn, claude_dir, show_names, 3, |s, e| (md(tz.date(s)), md(tz.date(e))))?;
     let today = tz.date(now);
     let days_v = per_day(&t, tz, first, n_days);
@@ -484,16 +494,16 @@ pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: N
     } else {
         ("happy", format!("这个月 {active_days} 天在干。"))
     };
-    let (headline, number, sub) = if t.turns.is_empty() {
-        ("这个月没开工", String::new(), "休息也是节奏的一部分。".to_string())
+    let (title, number, sub) = if t.turns.is_empty() {
+        ("这个月没开工".to_string(), String::new(), "休息也是节奏的一部分。".to_string())
     } else {
-        ("这个月这些活，请人来做要花", fmt_usd(t.usd), t.worth_line())
+        (headline("这个月", tool), fmt_usd(t.usd), t.worth_line())
     };
 
-    let mut r = base("month", &t, show_names);
+    let mut r = base("month", &t, show_names, tool);
     r.insert("date".into(), json!(format!("{}-{:02}", first.year(), first.month())));
     r.insert("label".into(), json!(format!("{} 年 {} 月", first.year(), first.month())));
-    r.insert("character".into(), character(&cfg.character.name, mood, headline, number, sub, signoff));
+    r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
     r.insert("sessions".into(), json!(sessions));
     r.insert("days".into(), json!(days));
     r.insert("first_weekday".into(), json!(first.weekday().num_days_from_monday()));

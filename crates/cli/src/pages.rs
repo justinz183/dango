@@ -31,7 +31,7 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
     if !tools.is_empty() {
         out.push(row("分工具", tools.join(" · ")));
     }
-    let jobs = daemon::widget::jobs(conn, 0, i64::MAX)?;
+    let jobs = daemon::widget::jobs(conn, 0, i64::MAX, None)?;
     if !jobs.is_empty() {
         let top: Vec<String> = jobs
             .iter()
@@ -39,6 +39,17 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
             .map(|j| format!("{} {}", j["name"].as_str().unwrap_or(""), fmt_usd(j["usd"].as_f64().unwrap_or(0.0))))
             .collect();
         out.push(row("请了谁", top.join(" · ")));
+    }
+    // The same, per agent, once more than one has done work.
+    let tools = daemon::widget::tools(conn, 0, i64::MAX)?;
+    for t in tools.iter().filter(|_| tools.len() > 1) {
+        let id = t["id"].as_str().unwrap_or("");
+        let top: Vec<String> = daemon::widget::jobs(conn, 0, i64::MAX, Some(id))?
+            .iter()
+            .take(4)
+            .map(|j| format!("{} {}", j["name"].as_str().unwrap_or(""), fmt_usd(j["usd"].as_f64().unwrap_or(0.0))))
+            .collect();
+        out.push(row(if id == "codex" { "└ Codex" } else { "└ Claude" }, top.join(" · ")));
     }
     let next = match (o.rank.xp_to_next(), o.rank.next_label()) {
         (Some(n), Some(l)) => format!(" · 还差 {} XP 升 {l}", fmt_int(n as i64)),

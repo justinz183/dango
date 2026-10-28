@@ -210,7 +210,7 @@ fn day_report_from_fixtures() {
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
     let claude = paths.home.join("no-claude-dir");
     let date = chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
-    let r = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date, 1_793_200_000_000, true).unwrap();
+    let r = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date, 1_793_200_000_000, true, None).unwrap();
     assert_eq!(r["turns"], 3, "{r}");
     assert_eq!(r["sessions"].as_array().unwrap().len(), 1);
     let s = &r["sessions"][0];
@@ -226,7 +226,7 @@ fn day_report_from_fixtures() {
     assert!(r["blocks"].as_array().unwrap().iter().all(|b| b["color"].is_string()));
     assert!(r["character"]["number"].as_str().unwrap().starts_with('$'));
     assert_eq!(r["character"]["mood"], "happy");
-    let empty = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date.succ_opt().unwrap().succ_opt().unwrap(), 1_793_200_000_000, false).unwrap();
+    let empty = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date.succ_opt().unwrap().succ_opt().unwrap(), 1_793_200_000_000, false, None).unwrap();
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
     assert!(daemon::report::day_text(&r).contains("会话 1"));
@@ -244,7 +244,7 @@ fn week_and_month_reports_from_fixtures() {
     let claude = paths.home.join("no-claude-dir");
     let now = 1_793_200_000_000; // 2026-10-28 local
     let any = chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
-    let w = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any, now, false).unwrap();
+    let w = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any, now, false, None).unwrap();
     assert_eq!(w["kind"], "week");
     assert_eq!(w["date"], "2026-W44");
     let days = w["days"].as_array().unwrap();
@@ -259,7 +259,7 @@ fn week_and_month_reports_from_fixtures() {
     assert!(w["rank_end"]["xp"].as_u64().unwrap() >= w["rank_start"]["xp"].as_u64().unwrap());
     assert!(w["sessions"].as_array().unwrap().len() <= 3);
 
-    let m = daemon::report::month(&p.conn, tz, &Config::default(), &claude, any, now, false).unwrap();
+    let m = daemon::report::month(&p.conn, tz, &Config::default(), &claude, any, now, false, None).unwrap();
     assert_eq!(m["date"], "2026-10");
     assert_eq!(m["days"].as_array().unwrap().len(), 31);
     assert_eq!(m["first_weekday"], 3, "2026-10-01 is a Thursday");
@@ -273,7 +273,7 @@ fn week_and_month_reports_from_fixtures() {
     let text = daemon::report::text(&m);
     assert!(text.contains("活跃 3 天"), "{text}");
 
-    let empty = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any + chrono::Duration::days(14), now, false).unwrap();
+    let empty = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any + chrono::Duration::days(14), now, false, None).unwrap();
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
 }
@@ -318,7 +318,7 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert!(!dump.contains("视频") && !dump.contains("secret") && !dump.contains("/w/vid"), "no prompts, queries or paths");
 
     let claude = paths.home.join("no-claude-dir");
-    let day = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false).unwrap();
+    let day = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, None).unwrap();
     let tools = day["tools"].as_array().unwrap();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"Codex") && names.contains(&"Claude Code"), "{names:?}");
@@ -327,6 +327,29 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert!(daemon::report::text(&day).contains("Codex $"));
     let w = daemon::widget::data(&p.conn, tz, &Config::default(), 1_793_200_000_000).unwrap();
     assert_eq!(w["tools_all"].as_array().unwrap().len(), 2);
+
+    // Every dashboard block, per agent: the two views add up to the whole.
+    let views = &w["views"];
+    let total = |v: &Value| v["total"]["usd"].as_f64().unwrap();
+    assert!((total(&views["codex"]) - codex_usd).abs() < 1e-6);
+    assert!((total(&views["codex"]) + total(&views["claude_code"]) - w["total"]["usd"].as_f64().unwrap()).abs() < 1e-6);
+    let codex_jobs: f64 = views["codex"]["jobs"].as_array().unwrap().iter().map(|j| j["usd"].as_f64().unwrap()).sum();
+    let all_jobs: f64 = w["jobs"].as_array().unwrap().iter().map(|j| j["usd"].as_f64().unwrap()).sum();
+    assert!(codex_jobs > 0.0 && codex_jobs < all_jobs, "{codex_jobs} of {all_jobs}");
+    assert!(views["codex"]["jobs"].as_array().unwrap().iter().any(|j| j["id"] == "video"));
+    assert!(!views["claude_code"]["jobs"].as_array().unwrap().iter().any(|j| j["id"] == "video"), "the video job was Codex's");
+    assert!(views["codex"]["turns"].as_array().unwrap().iter().all(|t| t["tool"] == "Codex"));
+    assert_eq!(views["codex"]["days"].as_array().unwrap().len(), 30);
+    let codex_hours = views["codex"]["total"]["hours"].as_f64().unwrap();
+    assert!((codex_hours - mins / 60.0).abs() < 1e-6);
+
+    // Reports for one agent.
+    let only = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, Some("codex")).unwrap();
+    let both_codex = tools.iter().find(|t| t["name"] == "Codex").unwrap()["usd"].as_f64().unwrap();
+    assert!((only["usd"].as_f64().unwrap() - both_codex).abs() < 1e-6);
+    assert_eq!(only["tool"], "codex");
+    assert!(only["character"]["headline"].as_str().unwrap().starts_with("Codex 今天"), "{}", only["character"]);
+    assert_eq!(only["tools"].as_array().unwrap().len(), 1);
 
     // Running it again changes nothing.
     let again = daemon::backfill::run(&mut p, &paths, &none, i64::MAX, Some((&codex, i64::MAX))).unwrap();
