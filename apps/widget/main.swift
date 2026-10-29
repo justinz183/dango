@@ -3237,7 +3237,7 @@ if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
     v.drawBackground = args.contains("--backdrop")
     v.model = m
     v.t = 0.9
-    if args.contains("--receipt") { v.receipts = [Receipt(usd: 78.4, name: m.job?.name ?? "程序员", color: m.job?.color ?? barColor, born: 0)] }
+    if args.contains("--receipt") { v.receipts = [Receipt(usd: 78.4, name: m.job?.name ?? "软件工程师", color: m.job?.color ?? barColor, born: 0)] }
     snapshot(v, PetView.size, args[i + 1])
     exit(0)
 }

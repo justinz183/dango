@@ -135,7 +135,7 @@ default = "research"
 
 [[occupation]]
 id = "swe"
-name = "程序员"
+name = "软件工程师"
 name_en = "Software developer"
 soc = "15-1252"
 rate = 65.38
@@ -150,7 +150,7 @@ weak = ["写个", "实现", "脚本", "程序", "class", "function", "variable",
 
 [[occupation]]
 id = "web"
-name = "网页开发"
+name = "前端工程师"
 name_en = "Web developer"
 soc = "15-1254"
 rate = 47.49
@@ -180,7 +180,7 @@ weak = []
 
 [[occupation]]
 id = "ops"
-name = "运维"
+name = "运维工程师"
 name_en = "Systems administrator"
 soc = "15-1244"
 rate = 47.66
