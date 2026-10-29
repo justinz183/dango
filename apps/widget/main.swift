@@ -374,19 +374,18 @@ final class DashboardView: NSView {
             return 80
         }
 
-        // Header: the character, what it says, rank and XP, progress to the
-        // next division. Clicking it collapses.
+        // Header: the character, the total and the job, centred on the
+        // badge. Clicking it collapses.
         let tone = accent(base)
         if draw {
             characterBadge(NSRect(x: pad, y: y, width: 48, height: 48), mood: base.mood, ring: tone, job: base.job)
             let total = text(fmtUSD(base.totalUSD), size: 20, weight: .bold, mono: true)
-            put(total, pad + 60, y)
-            put(text(L("累计", "total"), size: 11, color: secondary), pad + 66 + total.size().width, y + 6)
+            put(total, pad + 60, y + 11)
+            put(text(L("累计", "total"), size: 11, color: secondary), pad + 66 + total.size().width, y + 17)
             if let j = base.job {
-                put(text(L("· 在当\(j.name)", "· working as \(j.name)"), size: 11, color: j.color), pad + 66 + total.size().width + 30, y + 6)
+                put(text(L("· 在当\(j.name)", "· working as \(j.name)"), size: 11, color: j.color), pad + 66 + total.size().width + 30, y + 17)
             }
-            put(text(base.name + L("：", ": ") + base.line, size: 12, color: primary), pad + 60, y + 27)
-            put(text(L("收起 ⌄", "Close ⌄"), size: 11, color: secondary), W - pad, y + 5, align: 2)
+            put(text(L("收起 ⌄", "Close ⌄"), size: 11, color: secondary), W - pad, y + 16, align: 2)
         }
         y += 58
         let beating = base.recordUSD > 0 && base.todayUSD + 1e-9 >= base.recordUSD && base.todayUSD > 0
