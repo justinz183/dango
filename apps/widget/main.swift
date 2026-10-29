@@ -385,7 +385,19 @@ final class DashboardView: NSView {
             if let j = base.job {
                 put(text(L("· 在当\(j.name)", "· working as \(j.name)"), size: 11, color: j.color), pad + 66 + total.size().width + 30, y + 17)
             }
-            put(text(L("收起 ⌄", "Close ⌄"), size: 11, color: secondary), W - pad, y + 16, align: 2)
+            // Collapse: a chevron in a soft circle (the header takes the click).
+            let knob = NSRect(x: W - pad - 22, y: y + 13, width: 22, height: 22)
+            NSColor.white.withAlphaComponent(0.08).setFill()
+            NSBezierPath(ovalIn: knob).fill()
+            let chevron = NSBezierPath()
+            chevron.lineWidth = 1.6
+            chevron.lineCapStyle = .round
+            chevron.lineJoinStyle = .round
+            chevron.move(to: NSPoint(x: knob.midX - 4.5, y: knob.midY - 2))
+            chevron.line(to: NSPoint(x: knob.midX, y: knob.midY + 2.5))
+            chevron.line(to: NSPoint(x: knob.midX + 4.5, y: knob.midY - 2))
+            secondary.setStroke()
+            chevron.stroke()
         }
         y += 58
         let beating = base.recordUSD > 0 && base.todayUSD + 1e-9 >= base.recordUSD && base.todayUSD > 0
@@ -583,7 +595,7 @@ final class DashboardView: NSView {
 
         // Export: this period's card, for the agent the board shows; the
         // menu (right click) also has the period before.
-        section(L("导出报告", "Export"), y, right: L("存到 图片/Dango · 右键可导上一期", "To Pictures/Dango · right-click for earlier"), draw: draw)
+        section(L("导出报告", "Export"), y, draw: draw)
         y += 22
         exportRects = []
         let bw = (inner - gap * 3) / 4
