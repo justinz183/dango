@@ -158,6 +158,10 @@ struct SessState {
     open_turn: Option<String>,
     last_turn_end: Option<i64>,
     last_test_failed: bool,
+    /// The last turn's topic and when it ended: a prompt with none of its
+    /// own ("继续") stays on it for a while (occupation::TOPIC_MEMORY_MINUTES).
+    last_topic: Option<String>,
+    last_topic_at: Option<i64>,
 }
 
 struct TurnRow {
@@ -746,9 +750,13 @@ impl Processor {
         // A finished turn's id can come back when the agent is woken again
         // under the same prompt; that work is scored as a turn of its own.
         let tid = if self.turn(&base)?.is_some() { format!("{base}:{}", ev.id) } else { base };
-        let agg = TurnAgg { topic: p.topic(), ..Default::default() };
-        self.create_turn(&tid, sid, ts, p.task_class.unwrap_or(TaskClass::Other), correction, agg)?;
         let mut st = self.sess(sid)?;
+        let remembered = st
+            .last_topic
+            .clone()
+            .filter(|_| st.last_topic_at.is_some_and(|at| (ts - at) as f64 / MIN <= occupation::TOPIC_MEMORY_MINUTES));
+        let agg = TurnAgg { topic: p.topic().or(remembered), ..Default::default() };
+        self.create_turn(&tid, sid, ts, p.task_class.unwrap_or(TaskClass::Other), correction, agg)?;
         st.open_turn = Some(tid);
         self.save_sess(sid, &st)?;
         let mut f = self.time_fields(ts);
@@ -912,6 +920,10 @@ impl Processor {
         let gap = st.last_turn_end.map(|e| scoring::active_gap((row.started_at - e) as f64 / MIN)).unwrap_or(0.0);
         let active = duration + gap;
         st.last_turn_end = Some(end_ts);
+        if agg.topic.is_some() {
+            st.last_topic = agg.topic.clone();
+            st.last_topic_at = Some(end_ts);
+        }
         if st.open_turn.as_deref() == Some(tid) {
             st.open_turn = None;
         }

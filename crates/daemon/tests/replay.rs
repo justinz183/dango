@@ -453,3 +453,38 @@ fn model_usage_prices_turns_once() {
     let leaked: String = p.conn.query_row("SELECT group_concat(payload) FROM events WHERE kind = 'usage'", [], |r| r.get(0)).unwrap();
     assert!(!leaked.contains("login") && !leaked.contains("Login") && !leaked.contains("/tmp/demo"), "usage events carry counts only");
 }
+
+/// "继续" after a health question is still the doctor's turn; hours
+/// later it is a new subject.
+#[test]
+fn a_prompt_without_a_topic_stays_on_the_sessions_last() {
+    use shadowcorp_core::event::{Event, Kind, Source};
+    let paths = home("topicmem");
+    let mut p = processor(&paths);
+    let t0 = 1_793_200_000_000;
+    let ev = |id: &str, ts: i64, kind: Kind, topic: Option<&str>| {
+        let mut e = Event::new(id.into(), ts, Source::ClaudeCode, kind);
+        e.session_id = Some("s-mem".into());
+        e.payload.topic = topic.map(str::to_string);
+        e
+    };
+    let hour = 3_600_000;
+    p.begin().unwrap();
+    for e in [
+        ev("p1", t0, Kind::Prompt, Some("doctor")),
+        ev("e1", t0 + 60_000, Kind::TurnEnd, None),
+        ev("p2", t0 + 120_000, Kind::Prompt, None),
+        ev("e2", t0 + 180_000, Kind::TurnEnd, None),
+        ev("p3", t0 + 3 * hour, Kind::Prompt, None),
+        ev("e3", t0 + 3 * hour + 60_000, Kind::TurnEnd, None),
+    ] {
+        p.handle(&e).unwrap();
+    }
+    p.commit().unwrap();
+    let work: Vec<String> =
+        p.conn.prepare("SELECT work FROM turns ORDER BY started_at").unwrap().query_map([], |r| r.get(0)).unwrap().flatten().collect();
+    assert_eq!(work.len(), 3);
+    assert!(work[0].contains("doctor"), "{}", work[0]);
+    assert!(work[1].contains("doctor"), "继续 stays with the doctor: {}", work[1]);
+    assert!(work[2].contains("research"), "three hours later it is a new subject: {}", work[2]);
+}

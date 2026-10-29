@@ -21,6 +21,9 @@ pub const SUBAGENT_MINUTES: f64 = 12.0;
 pub const CONSULT: (&str, f64) = ("research", 5.0);
 /// Professional drafting-and-editing pace for prose.
 pub const WORDS_PER_HOUR: f64 = 500.0;
+/// A prompt with no topic of its own ("继续", "好的") stays on the
+/// session's last topic for this long.
+pub const TOPIC_MEMORY_MINUTES: f64 = 60.0;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Occupation {
@@ -39,9 +42,24 @@ pub struct Occupation {
     pub absorbs_data: bool,
     /// What the widget draws on the character, by part name.
     pub look: Vec<String>,
-    /// Topic keywords: 2 points and 1 point; a prompt needs 2 to be about it.
+    /// Topic keywords: 2 points and 1 point, counted for the family.
     pub strong: Vec<String>,
     pub weak: Vec<String>,
+    /// The topic family (see `Family`).
+    pub family: String,
+    /// Words that pick it over the family's default; the default has none.
+    #[serde(default)]
+    pub tell: Vec<String>,
+}
+
+/// A group of occupations a prompt is first placed in: the family whose
+/// members' keywords score most, then the member whose tell words appear,
+/// else `default`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Family {
+    pub id: String,
+    pub name: String,
+    pub default: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,6 +68,7 @@ pub struct Table {
     /// The source, said on cards and the dashboard.
     pub label: String,
     pub as_of: String,
+    pub family: Vec<Family>,
     pub occupation: Vec<Occupation>,
 }
 
@@ -93,12 +112,19 @@ impl Table {
     pub fn scene(&self, id: &str) -> &str {
         self.get(id).map(|o| o.scene.as_str()).unwrap_or("desk")
     }
+
+    pub fn family_of(&self, id: &str) -> Option<&Family> {
+        let f = &self.get(id)?.family;
+        self.family.iter().find(|x| &x.id == f)
+    }
 }
 
-/// What a prompt is about: the occupation whose keywords score highest
-/// (strong 2, weak 1) once it reaches 2 points; ties go to the earlier
-/// entry. ASCII keywords match whole words or phrases, others anywhere.
-/// The text is read and dropped; only the id leaves.
+/// What a prompt is about, in two steps so that near occupations do not
+/// split the evidence: the family whose members' keywords score most
+/// (strong 2, weak 1; it takes a strong word or three weak ones; ties to
+/// the earlier family), then within it the member with the most tell
+/// words, else the family's default. ASCII keywords match whole words or
+/// phrases, others anywhere. The text is read and dropped; only the id leaves.
 pub fn topic(prompt: &str) -> Option<&'static str> {
     let p = prompt.to_lowercase();
     let padded: String = std::iter::once(' ')
@@ -106,16 +132,29 @@ pub fn topic(prompt: &str) -> Option<&'static str> {
         .chain(std::iter::once(' '))
         .collect();
     let hit = |kw: &str| if kw.is_ascii() { padded.contains(&format!(" {} ", kw.trim())) } else { p.contains(kw) };
-    let mut best: Option<(&'static str, usize)> = None;
-    for o in &Table::builtin().occupation {
+    let t = Table::builtin();
+    // Per family: points, and whether any strong word hit.
+    let mut by_family: BTreeMap<&str, (usize, bool)> = BTreeMap::new();
+    for o in &t.occupation {
         // A keyword listed twice counts once.
-        let score = 2 * o.strong.iter().filter(|k| hit(k)).count()
-            + o.weak.iter().filter(|k| !o.strong.contains(k) && hit(k)).count();
-        if score >= 2 && best.map_or(true, |(_, s)| score > s) {
-            best = Some((o.id.as_str(), score));
+        let strong = o.strong.iter().filter(|k| hit(k)).count();
+        let score = 2 * strong + o.weak.iter().filter(|k| !o.strong.contains(k) && hit(k)).count();
+        let e = by_family.entry(o.family.as_str()).or_default();
+        e.0 += score;
+        e.1 |= strong > 0;
+    }
+    let points = |f: &Family| by_family.get(f.id.as_str()).copied().unwrap_or((0, false));
+    let top = t.family.iter().filter(|f| matches!(points(f), (s, strong) if s >= 3 || (s >= 2 && strong))).map(|f| points(f).0).max()?;
+    // The earliest family with the top score wins a tie.
+    let family = t.family.iter().find(|f| points(f).0 == top && matches!(points(f), (s, strong) if s >= 3 || (s >= 2 && strong)))?;
+    let mut best: Option<(&'static str, usize)> = None;
+    for o in t.occupation.iter().filter(|o| o.family == family.id) {
+        let tells = o.tell.iter().filter(|k| hit(k)).count();
+        if tells > 0 && best.map_or(true, |(_, n)| tells > n) {
+            best = Some((o.id.as_str(), tells));
         }
     }
-    best.map(|b| b.0)
+    Some(best.map(|b| b.0).unwrap_or(family.default.as_str()))
 }
 
 /// Every id the attribution rules can return.
@@ -299,6 +338,19 @@ mod tests {
         assert!(t.occupation.len() >= 49, "{}", t.occupation.len());
         assert!(t.occupation.iter().all(|o| !o.scene.is_empty() && o.consult > 0.0 && !o.strong.is_empty()));
         assert_eq!(t.scene("doctor"), "clinic");
+        // Families: every occupation in one, every default a member of its
+        // own family with no tells, every other member with some.
+        assert!(t.family.len() >= 14);
+        for f in &t.family {
+            let d = t.get(&f.default).unwrap_or_else(|| panic!("{}: default {}", f.id, f.default));
+            assert_eq!(d.family, f.id, "{}", f.id);
+            assert!(d.tell.is_empty(), "{}: the default has no tells", f.id);
+        }
+        for o in &t.occupation {
+            let f = t.family_of(&o.id).unwrap_or_else(|| panic!("{}: family {}", o.id, o.family));
+            assert!(f.default == o.id || !o.tell.is_empty() || o.id == "entry", "{}: a specialty needs tells", o.id);
+        }
+        assert_eq!(t.family_of("vet").unwrap().default, "doctor");
         assert!(t.source.contains("BLS"));
         assert_eq!(t.rate("swe"), 65.38);
         assert_eq!(t.name("video"), "视频剪辑");
@@ -380,6 +432,105 @@ mod tests {
         assert_eq!(topic("写个 python 脚本处理 csv"), Some("swe"));
         assert_eq!(topic("ok"), None);
         assert_eq!(topic("继续"), None);
+    }
+
+    /// Talk about the product, the repo or the UI is nobody's specialty:
+    /// a naming question once came out as a vet ("叫什么名字" hit "叫").
+    #[test]
+    fn everyday_prompts_have_no_topic() {
+        for p in [
+            "你觉得我这个叫什么名字好，我这个产品",
+            "我觉得可以再想想用什么名字",
+            "请问这个上传到github了吗",
+            "建私有仓库并推送",
+            "开始做导出优化，目前只能导出日报",
+            "我们可以做个界面，变成一个办公室，然后谁在干活谁就在这个办公室里面在干活",
+            "睡着了眼睛应该闭起来的",
+            "今天的产出的数据没有了啊，你查查这个",
+            "请你帮我做个测试，这个产品",
+            "这个杠杆可以是经济收益的杠杆，不是时间的杠杆",
+            "一间屋 + 舞台 + 茶水间轮换",
+        ] {
+            // Research is what a talk-only turn is paid as anyway.
+            assert!(topic(p).map_or(true, |t| t == "research"), "{p} → {:?}", topic(p));
+        }
+        // Developer talk may be a developer's topic, never a tradesman's.
+        let tech = ["swe", "web", "qa", "ops", "data", "secops", "research"];
+        for p in [
+            "服务炸了，看一下日志", "npm 包升级后编译不过", "语法树解析有问题", "装一下依赖然后跑测试", "树形结构怎么存",
+            "解释一下这段代码", "这个函数是什么意思", "帮我设计一下数据库结构", "设计方案出一下", "语法错误在哪", "把这个按钮改成绿色，然后加个动画",
+            "学习一下这个库怎么用", "这个接口的原理讲一下", "经济杠杆怎么算", "弹性伸缩怎么配",
+        ] {
+            assert!(topic(p).map_or(true, |t| tech.contains(&t)), "{p} → {:?}", topic(p));
+        }
+    }
+
+    /// Chinese keywords match anywhere in the prompt, so a single character
+    /// fires on every word containing it; only a few specific ones are allowed.
+    #[test]
+    fn no_single_character_keywords() {
+        let allowed = ["猫", "狗", "癌", "肾", "苯", "酶", "熵", "泵", "锯", "臀", "娃", "诗", "钙", "炖", "腌"];
+        for o in &Table::builtin().occupation {
+            for k in o.strong.iter().chain(&o.weak).chain(&o.tell) {
+                assert!(k.is_ascii() || k.chars().count() > 1 || allowed.contains(&k.as_str()), "{}: {k:?}", o.id);
+            }
+        }
+    }
+
+    /// Labelled prompts, a few per family: the family's default unless a
+    /// tell word names a specialty.
+    #[test]
+    fn families_then_specialties() {
+        let cases = [
+            // health
+            ("最近老是头疼，要不要去医院看看", "doctor"), ("体检报告说转氨酶偏高，严重吗", "doctor"), ("发烧 38 度，要不要吃退烧药", "doctor"),
+            ("我家猫一直叫，是不是发情了", "vet"), ("狗狗拉稀两天了怎么办", "vet"),
+            ("帮我排一个深蹲和硬拉的训练计划", "trainer"), ("想增肌，一周练几次合适", "trainer"),
+            ("减脂期一天吃多少卡路里", "dietitian"), ("帮我做个一周的饮食计划，控制热量", "dietitian"),
+            ("布洛芬和感冒药能不能一起吃", "pharmacist"), ("这个药的剂量成人一天吃几次", "pharmacist"),
+            ("我最近焦虑得睡不着，压力大", "counselor"), ("分手之后情绪很差，怎么调整", "counselor"),
+            // money
+            ("帮我看看英伟达的财报", "fin"), ("Compare NVDA earnings", "fin"), ("炒股软件怎么做", "fin"), ("这只股票的估值贵不贵", "fin"),
+            ("英伟达下个季度的指引怎么看", "fin"),
+            ("个人所得税怎么报税，有哪些专项扣除", "accountant"), ("公司这笔费用怎么做账，发票怎么开", "accountant"),
+            ("美联储加息对房贷利率有什么影响", "economist"), ("最近 CPI 数据说明通胀怎么样", "economist"),
+            // writing
+            ("帮我写一篇公众号文章，讲远程办公", "writer"), ("这段文案润色一下，更有感染力", "writer"), ("帮我写一封辞职信", "writer"),
+            ("把这段翻译成英文", "translator"), ("这封邮件帮我翻成日语", "translator"),
+            // design and images
+            ("帮我设计一张海报，主题是周年庆", "designer"), ("logo 配色用什么好", "designer"),
+            ("人像摄影光圈开多大，镜头怎么选", "photographer"), ("客厅装修选什么地板，吊顶要不要做", "interior"),
+            ("这个注册流程的交互太绕了，用户体验怎么改", "ux"),
+            ("帮我把这段视频剪辑一下，加字幕", "video"), ("视频转场怎么做更自然", "video"),
+            ("这首歌的和弦进行怎么编", "musician"), ("吉他怎么扫弦，节奏型怎么练", "musician"),
+            ("面试穿什么合适，衬衫配什么裤子", "fashion"), ("圆脸适合什么发型，妆容怎么画", "stylist"),
+            // education and science
+            ("帮我制定一个雅思备考计划", "tutor"), ("孩子的数学作业，这道应用题怎么讲", "tutor"),
+            ("这个微分方程怎么解，求导过程写一下", "mathematician"), ("证明一下这个矩阵可逆", "mathematician"),
+            ("量子纠缠到底是什么，通俗讲讲", "physicist"), ("为什么相对论说时间会变慢", "physicist"),
+            ("这个化学反应的方程式怎么配平", "chemist"), ("细胞分裂时 DNA 是怎么复制的", "biologist"),
+            // home and engineering
+            ("家里突然跳闸了，是不是插座短路", "electrician"), ("灯不亮了，电线怎么接", "electrician"),
+            ("水管漏了，水压也小", "plumber"), ("马桶堵了怎么疏通", "plumber"),
+            ("想自己做个书架，木板怎么选，用什么钉子", "carpenter"), ("多肉黄叶烂根了，浇水是不是太多", "gardener"),
+            ("自建房的户型图和承重墙怎么设计", "architect"), ("齿轮传动的扭矩怎么算", "mech"), ("stm32 的 pcb 电路图怎么画", "ee"),
+            // life
+            ("番茄炒蛋怎么做才嫩", "chef"), ("红烧肉的做法，火候怎么掌握", "chef"),
+            ("宝宝八个月了，辅食怎么加", "childcare"), ("孩子上幼儿园分离焦虑哭闹怎么办", "childcare"),
+            ("明天去东京玩三天，帮我安排行程", "travel"), ("去日本的签证和机票怎么订便宜", "travel"), ("周末想去杭州，两天怎么安排", "travel"),
+            ("房东不退押金，租房合同怎么签", "realtor"), ("首付三成，房贷选哪种划算", "realtor"),
+            ("车子启动有异响，刹车也软，去 4s店 要多少钱", "mechanic"),
+            // law and business
+            ("合同条款写了违约金，能起诉吗", "lawyer"), ("劳动仲裁要准备什么材料", "lawyer"),
+            ("团队绩效怎么定目标，okr 怎么拆", "manager"), ("帮我写需求文档，这个功能的用户故事", "pm"),
+            ("招聘后端工程师的 jd 怎么写，面试问什么", "hr"), ("客户嫌报价高，怎么谈判成交", "sales"),
+            // tech
+            ("写个 python 脚本处理 csv", "swe"), ("这个页面的 css 布局怎么居中", "web"), ("给这个函数写单元测试", "qa"),
+            ("docker 部署到服务器上，nginx 怎么配", "ops"), ("用 pandas 做个数据分析，输出表格", "data"), ("这个接口有 sql 注入漏洞吗", "secops"),
+        ];
+        for (p, want) in cases {
+            assert_eq!(topic(p), Some(want), "{p}");
+        }
     }
 
     #[derive(serde::Deserialize)]
