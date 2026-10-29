@@ -31,6 +31,7 @@
 - 时薪只能来自可查的来源（目前是 BLS OEWS API），写明序列和日期；模型单价只能抄官方价格页（assets/model_prices.toml 写明 URL 和日期）。不凭记忆填数。
 - $ = 各职业分钟 × 该职业时薪；累计只增不减。
 - 新增成就 = 改 achievements.json + achievements.rs 里一对用例（刚好解锁 / 差一点）+ 一句解锁语（≤ 18 字），不改引擎代码。
+- 团子口味：八种（`flavors`），宠物用 `petFlavor`（UserDefaults `flavor`），办公室按 `jobFlavors`；改角色画法要跑 `dango-widget --snapshot-flavors out.png` 和 `--paper` 两张看，浅色口味要描边、装扮要有光晕。
 - 所有界面文字中英两份：Rust 用 `Lang::t(中, 英)` / `cfg.lang()`，职业名 `Table::name_in`；Swift 用 `L(中, 英)`（全局 `lang` 来自 widget.json 或报告 JSON 的 `lang`）。新加文字不许只写一种语言。旧的成就 / 公司页（badges、stats 里的阶段金币）只有中文，英文模式下 stats 只出产出几行。
 - 文案遵守 SPEC 8.5：说产出不说节省，永远向上；可以说"模型花费"和"杠杆"（= 产出 $ ÷ 模型花费 $），不在界面上列 token 数。
 - Claude Code hooks / statusline / 插件清单的字段名，每次使用前核对官方文档，不凭记忆。

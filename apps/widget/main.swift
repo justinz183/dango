@@ -262,7 +262,7 @@ func characterBadge(_ r: NSRect, mood: String, ring: NSColor, glow: Bool = false
     NSColor(calibratedRed: 0.96, green: 0.93, blue: 0.89, alpha: 1).setFill()
     NSBezierPath(ovalIn: r.insetBy(dx: 2.5, dy: 2.5)).fill()
     let inset = r.width * 0.2
-    drawCharacter(r.insetBy(dx: inset, dy: inset), mood: mood, look: job?.look ?? [], jobColor: job?.color)
+    drawCharacter(r.insetBy(dx: inset, dy: inset), mood: mood, look: job?.look ?? [], jobColor: job?.color, flavor: petFlavor)
 }
 
 /// The accent for "this moment": the current job's colour, else the teal.
@@ -733,8 +733,10 @@ final class DashboardView: NSView {
 /// outfit, blinking, breathing), helpers behind it, and when `working` the
 /// job's scene (drawActivity) or, for desk jobs, a desk and laptop in front
 /// with hands typing. `c` is the character's box; everything else scales with it.
-func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, working: Bool, helpers: Int, desk: Bool? = nil, slump: CGFloat = 0, slab: Bool = true) {
+func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, working: Bool, helpers: Int, desk: Bool? = nil, slump: CGFloat = 0, slab: Bool = true,
+                flavor: Flavor? = nil) {
     let s = c.width / 80
+    let flavor = flavor ?? petFlavor
     // `slump` lowers the body only (asleep at the desk); the desk stays put.
     let bob = CGFloat(sin(t * (working ? 3.0 : 1.6))) * (working ? 1.3 : 0.9) * s - slump
     NSColor.black.withAlphaComponent(0.25).setFill()
@@ -742,15 +744,15 @@ func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, wo
     for i in 0..<min(helpers, 3) {
         let hb = CGFloat(sin(t * 3.2 + Double(i) * 1.7)) * 1.5 * s
         drawCharacter(NSRect(x: c.minX - 42 * s + CGFloat(i) * 15 * s, y: c.minY + 2 * s + hb, width: 34 * s, height: 34 * s),
-                      mood: "focused", ink: ink.withAlphaComponent(0.9))
+                      mood: "focused", flavor: flavorNamed(helperFlavors[i % helperFlavors.count]))
     }
     // At work in a scene other than a desk, the hands are on that scene's
     // equipment: the character goes without what it holds.
     let scene = working ? job?.scene ?? "desk" : "desk"
     let look = (job?.look ?? []).filter { scene == "desk" || !handProps.contains($0) }
-    drawCharacter(c.offsetBy(dx: 0, dy: bob), mood: mood, ink: ink, look: look, jobColor: job?.color, blink: blink)
+    drawCharacter(c.offsetBy(dx: 0, dy: bob), mood: mood, look: look, jobColor: job?.color, blink: blink, flavor: flavor)
     if scene != "desk", let job {
-        drawActivity(scene, c, job.color, t, look: job.look)
+        drawActivity(scene, c, job.color, t, look: job.look, skin: flavor.body)
         return
     }
     guard desk ?? working else { return }
@@ -776,7 +778,7 @@ func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, wo
         NSBezierPath(rect: NSRect(x: c.midX - 14 * s, y: yy, width: CGFloat([14, 22, 10, 18][k]) * s, height: 1.5 * s)).fill()
     }
     if fmod(t, 1.0) < 0.5 { NSBezierPath(rect: NSRect(x: c.midX - 14 * s, y: c.minY + 8 * s, width: 2 * s, height: 3 * s)).fill() }
-    ink.setFill()
+    flavor.body.setFill()
     for (k, dx) in [(0, CGFloat(-16)), (1, CGFloat(6))] {
         let up: CGFloat = sin(t * 11 + Double(k) * .pi) > 0 ? 2.5 : 0
         NSBezierPath(ovalIn: NSRect(x: c.midX + dx * s, y: c.minY + (up - 1) * s, width: 11 * s, height: 7 * s)).fill()
@@ -858,13 +860,13 @@ var sceneNames: [String: String] {
 /// character in box `c`: the place's equipment, moving. The hands are on
 /// the equipment, so the character is drawn without what it holds; studio
 /// work depends on that (`look`): a guitar is played, a camera flashes.
-func drawActivity(_ scene: String, _ c: NSRect, _ color: NSColor, _ t: Double, look: [String]) {
+func drawActivity(_ scene: String, _ c: NSRect, _ color: NSColor, _ t: Double, look: [String], skin: NSColor = ink) {
     let s = c.width / 80
     /// A point `fx` across and `fy` up the character's box.
     func p(_ fx: CGFloat, _ fy: CGFloat) -> NSPoint { NSPoint(x: c.minX + c.width * fx, y: c.minY + c.height * fy) }
-    func hand(_ q: NSPoint) { fillOval(NSRect(x: q.x - 5 * s, y: q.y - 4 * s, width: 10 * s, height: 8 * s), ink) }
+    func hand(_ q: NSPoint) { fillOval(NSRect(x: q.x - 5 * s, y: q.y - 4 * s, width: 10 * s, height: 8 * s), skin) }
     func arm(_ from: NSPoint, _ to: NSPoint) {
-        strokeLine(from, to, 7 * s, ink)
+        strokeLine(from, to, 7 * s, skin)
         hand(to)
     }
     /// A counter, bench or desk across the front of the body, `top` points up.
@@ -1012,7 +1014,7 @@ func drawActivity(_ scene: String, _ c: NSRect, _ color: NSColor, _ t: Double, l
             fillRound(NSRect(x: tube.minX, y: tube.minY, width: tube.width, height: 8 * s), 2.5 * s, tint)
         }
         let held = p(1.06, 0.6)
-        strokeLine(p(0.86, 0.5), held, 7 * s, ink)
+        strokeLine(p(0.86, 0.5), held, 7 * s, skin)
         rotated(held, CGFloat(sin(t * 4)) * 15) {
             fillRound(NSRect(x: held.x - 2.5 * s, y: held.y - 2 * s, width: 5 * s, height: 17 * s), 2.5 * s, glassTint)
             fillRound(NSRect(x: held.x - 2.5 * s, y: held.y - 2 * s, width: 5 * s, height: 8 * s), 2.5 * s, color)
@@ -1064,7 +1066,7 @@ func drawActivity(_ scene: String, _ c: NSRect, _ color: NSColor, _ t: Double, l
         }
         let tilt = -12 - 22 * CGFloat(max(0, sin(t * 1.4)))
         let hold = p(0.92, 0.5)
-        strokeLine(p(0.8, 0.45), hold, 7 * s, ink)
+        strokeLine(p(0.8, 0.45), hold, 7 * s, skin)
         rotated(hold, tilt) {
             fillRound(NSRect(x: hold.x, y: hold.y - 6 * s, width: 16 * s, height: 12 * s), 2 * s, color)
             fillPoly([NSPoint(x: hold.x + 15 * s, y: hold.y + 2 * s), NSPoint(x: hold.x + 26 * s, y: hold.y + 8 * s),
@@ -1091,7 +1093,7 @@ func drawActivity(_ scene: String, _ c: NSRect, _ color: NSColor, _ t: Double, l
         }
         if n < 5 {
             let next = NSPoint(x: bx + 5.5 * s, y: c.minY + CGFloat(n) * 9 * s + 8 * s)
-            strokeLine(p(0.86, 0.45), next, 7 * s, ink)
+            strokeLine(p(0.86, 0.45), next, 7 * s, skin)
             fillRound(NSRect(x: next.x - 5.5 * s, y: next.y - 2 * s, width: 11 * s, height: 9 * s), 1.5 * s, tints[n])
             hand(next)
         }
@@ -1684,7 +1686,7 @@ final class OfficeView: NSView {
             let mins = (now - o.since) / 60_000
             if mins < 15 { return (o, .coffee) }
             if mins > 120 { return (o, .sleep) }
-            return (o, [Pastime.window, .plant, .coffee, .phone][stableHash(o.job.id + "\(Int(now / 180_000))") % 4])
+            return (o, [Pastime.plant, .coffee, .phone][stableHash(o.job.id + "\(Int(now / 180_000))") % 3])
         }
         // Sleepers choose first: they need the sofa.
         var free: [Spot] = [.coffee, .seat(0), .seat(1), .corner]
@@ -1702,7 +1704,7 @@ final class OfficeView: NSView {
             let p: Pastime
             switch spot {
             case .coffee: p = .coffee
-            case .corner: p = want == .plant ? .plant : .window
+            case .corner: p = .plant
             case .seat: p = want == .sleep ? .sleep : .phone
             }
             placed.append((o, p, spot))
@@ -1813,15 +1815,72 @@ final class OfficeView: NSView {
             taken[0].append(w.x - half...w.x + half)
             taken[1].append(w.x - half...w.x + half)
         }
-        for w in all.filter({ doing($0) != .working }).sorted(by: { $0.x < $1.x }) {
-            let name = text(truncate(w.o.job.name, size: 9, weight: .semibold, width: 60), size: 9, weight: .semibold, color: w.o.job.color)
-            let half = name.size().width / 2 + 3
-            let span = w.x - half...w.x + half
-            guard let row = [0, 1].first(where: { r in !taken[r].contains { $0.overlaps(span) } }) else { continue }
-            taken[row].append(span)
-            faded(w.alpha) { put(name, w.x, row == 0 ? 22 : 8, align: 1) }
+        // Everyone else is named only when the pointer is on them: a bubble
+        // over the head with who, what they are up to, and this week's $.
+        hitRects = all.map { w in
+            let p = doing(w)
+            let size: CGFloat = p == .working ? stageSize : 42
+            let lift: CGFloat = [.phone, .chat, .sleep].contains(p) ? 6 : 0
+            return (w.o.job.id, NSRect(x: w.x - size / 2, y: floorH + 2 + lift, width: size, height: size + 4))
+        }
+        if let id = hovered, let w = all.first(where: { $0.o.job.id == id }), let r = hitRects.first(where: { $0.0 == id })?.1 {
+            let what: String
+            switch doing(w) {
+            case .working: what = L("在干", "working")
+            case .coffee: what = L("喝咖啡", "having coffee")
+            case .phone: what = L("刷手机", "on the phone")
+            case .chat: what = L("聊天", "chatting")
+            case .sleep: what = L("睡着了", "asleep")
+            case .plant: what = L("浇花", "watering the flowers")
+            case .window: what = L("看窗外", "looking outside")
+            case nil: what = L("在走动", "walking")
+            }
+            let name = text(w.o.job.name, size: 10, weight: .semibold, color: w.o.job.color)
+            let sub = text(what + " · " + L("本周 ", "this week ") + fmtUSD(w.o.usd), size: 9, color: primary.withAlphaComponent(0.85))
+            let bw = max(name.size().width, sub.size().width) + 16
+            var box = NSRect(x: r.midX - bw / 2, y: r.maxY + 6, width: bw, height: 32)
+            box.origin.x = min(max(box.minX, 4), bounds.width - bw - 4)
+            box.origin.y = min(box.minY, bounds.height - box.height - 4)
+            fillRound(box, 7, NSColor(calibratedWhite: 0.05, alpha: 0.92))
+            fillPoly([NSPoint(x: r.midX - 4, y: box.minY), NSPoint(x: r.midX + 4, y: box.minY), NSPoint(x: r.midX, y: box.minY - 4)], NSColor(calibratedWhite: 0.05, alpha: 0.92))
+            put(name, box.minX + 8, box.minY + 17)
+            put(sub, box.minX + 8, box.minY + 4)
         }
     }
+
+    // MARK: hover
+
+    /// Who is under the pointer, and where everyone is (set on each draw).
+    private var hovered: String?
+    private var hitRects: [(String, NSRect)] = []
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        // The nearest character whose box holds the pointer.
+        let hit = hitRects.filter { $0.1.contains(p) }.min { abs($0.1.midX - p.x) < abs($1.1.midX - p.x) }?.0
+        if hit != hovered {
+            hovered = hit
+            needsDisplay = true
+        }
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if hovered != nil {
+            hovered = nil
+            needsDisplay = true
+        }
+        super.mouseExited(with: event)
+    }
+
+    /// For snapshots: show the bubble over this occupation's character.
+    func hover(_ id: String?) { hovered = id }
 
     /// Set from the stage layout on each draw.
     private var stageSize: CGFloat = 54
@@ -1831,6 +1890,7 @@ final class OfficeView: NSView {
     /// One person: walking, at work on the stage, or at a pastime.
     private func person(_ w: Walker, _ p: Pastime?) {
         let job = w.o.job
+        let fl = flavor(forJob: job.id)
         let phase = t + Double(stableHash(job.id) % 100) * 0.07
         let blink = fmod(phase, 4.3) < 0.12
         let size: CGFloat = p == .working ? stageSize : 42
@@ -1839,13 +1899,13 @@ final class OfficeView: NSView {
             switch p {
             case nil:
                 let hop = CGFloat(abs(sin(phase * 9))) * 3
-                drawWorker(c.offsetBy(dx: 0, dy: hop), job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
+                drawWorker(c.offsetBy(dx: 0, dy: hop), job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false, flavor: fl)
             case .working:
                 // Helpers stand behind the worker unless the stage is full.
                 drawWorker(c, job: job, mood: "focused", t: phase, blink: blink, working: true, helpers: crowded ? 0 : w.o.helpers,
-                           slab: !sharing.contains(job.id))
+                           slab: !sharing.contains(job.id), flavor: fl)
             case .coffee:
-                drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
+                drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false, flavor: fl)
                 // A mug in the hand toward the machine, steam rising.
                 let sip = CGFloat(max(0, sin(phase * 0.9))) * 6
                 let mug = NSRect(x: c.minX - 6, y: c.minY + 10 + sip, width: 10, height: 11)
@@ -1858,7 +1918,7 @@ final class OfficeView: NSView {
                 }
             case .phone, .chat:
                 c.origin.y += 6
-                drawWorker(c, job: job, mood: p == .chat ? "happy" : "focused", t: phase, blink: blink, working: false, helpers: 0, desk: false)
+                drawWorker(c, job: job, mood: p == .chat ? "happy" : "focused", t: phase, blink: blink, working: false, helpers: 0, desk: false, flavor: fl)
                 if p == .phone {
                     fillRound(NSRect(x: c.midX - 6, y: c.minY + 8, width: 12, height: 18), 2, coal)
                     fillRound(NSRect(x: c.midX - 4.5, y: c.minY + 10, width: 9, height: 14), 1, job.color.withAlphaComponent(0.55 + 0.3 * CGFloat(sin(phase * 2.6))))
@@ -1874,35 +1934,46 @@ final class OfficeView: NSView {
                 }
             case .sleep:
                 c.origin.y += 6
-                drawWorker(c, job: job, mood: "sleepy", t: phase * 0.5, blink: true, working: false, helpers: 0, desk: false, slump: 3)
+                drawWorker(c, job: job, mood: "sleepy", t: phase * 0.5, blink: true, working: false, helpers: 0, desk: false, slump: 3, flavor: fl)
                 for k in 0..<2 {
                     let rise = CGFloat(fmod(phase * 0.5 + Double(k) * 0.5, 1.0))
                     put(text("z", size: 8 + CGFloat(k) * 2, weight: .bold, color: secondary.withAlphaComponent(0.85 * (1 - rise))),
                         c.maxX - 4 + rise * 8, c.maxY - 8 + rise * 14, align: 1)
                 }
             case .window:
-                drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
+                drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false, flavor: fl)
             case .plant:
-                drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
-                // A watering can held out at the body's right side, below
-                // the eyes, its spout over the flower pot; when it tips,
-                // drops fall from the spout's tip onto the soil.
-                let tilt = -17 - 15 * CGFloat(sin(phase * 1.5))
-                let hold = NSPoint(x: c.maxX + 1, y: c.minY + 20)
-                let can = NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.75, alpha: 1)
-                strokeLine(NSPoint(x: c.maxX - 6, y: c.minY + 14), hold, 5, ink)
+                drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false, flavor: fl)
+                // Watering, in a loop: lift the can, tip it over the pot and
+                // pour a stream onto the soil (a splash where it lands),
+                // then set it upright again.
+                let cycle = CGFloat(fmod(phase * 0.45, 1.0))
+                let pour = cycle < 0.25 ? cycle / 0.25 : cycle < 0.75 ? 1 : 1 - (cycle - 0.75) / 0.25
+                let tilt = -8 - 40 * pour
+                let hold = NSPoint(x: c.maxX + 2, y: c.minY + 24 + 3 * pour)
+                let can = NSColor(calibratedRed: 0.42, green: 0.62, blue: 0.78, alpha: 1)
+                strokeLine(NSPoint(x: c.maxX - 8, y: c.minY + 15), hold, 6, fl.body)
                 rotated(hold, tilt) {
-                    fillRound(NSRect(x: hold.x, y: hold.y - 5, width: 13, height: 10), 2, can)
-                    fillPoly([NSPoint(x: hold.x + 12, y: hold.y + 2), NSPoint(x: hold.x + 20, y: hold.y + 6), NSPoint(x: hold.x + 20, y: hold.y + 4), NSPoint(x: hold.x + 12, y: hold.y - 2)], can)
+                    fillRound(NSRect(x: hold.x - 2, y: hold.y - 7, width: 17, height: 13), 3, can)
+                    fillRound(NSRect(x: hold.x + 1, y: hold.y + 6, width: 11, height: 3), 1.5, can.blended(withFraction: 0.25, of: .black) ?? can)
+                    fillPoly([NSPoint(x: hold.x + 14, y: hold.y + 1), NSPoint(x: hold.x + 27, y: hold.y + 7), NSPoint(x: hold.x + 27, y: hold.y + 4), NSPoint(x: hold.x + 14, y: hold.y - 3)], can)
+                    fillRound(NSRect(x: hold.x + 26, y: hold.y + 3, width: 4, height: 6), 1.5, can.blended(withFraction: 0.25, of: .black) ?? can)
                 }
-                if tilt < -26 {
+                if pour > 0.7 {
                     let a = tilt * .pi / 180
-                    let tip = NSPoint(x: hold.x + 20 * cos(a) - 5 * sin(a), y: hold.y + 20 * sin(a) + 5 * cos(a))
-                    let soil = floorH + 9
-                    for k in 0..<3 {
-                        let f = CGFloat(fmod(phase * 2.2 + Double(k) / 3, 1.0))
-                        fillOval(NSRect(x: tip.x - 1 + CGFloat(k) - 1, y: tip.y - f * max(0, tip.y - soil), width: 2, height: 3),
-                                 NSColor(calibratedRed: 0.55, green: 0.75, blue: 0.95, alpha: 0.9))
+                    let tip = NSPoint(x: hold.x + 28 * cos(a) - 6 * sin(a), y: hold.y + 28 * sin(a) + 6 * cos(a))
+                    let soil = NSPoint(x: plantX, y: floorH + 8)
+                    let water = NSColor(calibratedRed: 0.58, green: 0.8, blue: 1, alpha: 0.95)
+                    // A stream of drops from the spout to the pot.
+                    for k in 0..<6 {
+                        let f = CGFloat(fmod(phase * 3 + Double(k) / 6, 1.0))
+                        let x = tip.x + (soil.x - tip.x) * f, y = tip.y + (soil.y - tip.y) * f
+                        fillOval(NSRect(x: x - 1.3, y: y - 1.8, width: 2.6, height: 3.6), water.withAlphaComponent(0.95 - 0.3 * f))
+                    }
+                    // A splash where it lands.
+                    let s = CGFloat(fmod(phase * 3, 1.0))
+                    for side: CGFloat in [-1, 1] {
+                        fillOval(NSRect(x: soil.x + side * (2 + 5 * s) - 1, y: soil.y + 2 + 3 * sin(s * .pi), width: 2, height: 2), water.withAlphaComponent(1 - s))
                     }
                 }
             }
@@ -1945,7 +2016,6 @@ final class OfficeView: NSView {
         fillRound(NSRect(x: machine.midX - 3, y: machine.minY + 2, width: 6, height: 6), 1, paper)
         // The sofa's back, and the room's name above it.
         fillRound(NSRect(x: 72, y: floorH + 6, width: 70, height: 30), 8, NSColor(calibratedRed: 0.24, green: 0.33, blue: 0.36, alpha: 1))
-        put(text(L("茶水间", "Break room"), size: 9, weight: .medium, color: secondary.withAlphaComponent(0.5)), 92, b.maxY - 22, align: 1)
 
         // The stage: one scene per worker, or an empty one waiting.
         let st = stage
@@ -2299,6 +2369,24 @@ final class App: NSObject, NSApplicationDelegate {
         let langItem = NSMenuItem(title: "语言 / Language", action: nil, keyEquivalent: "")
         langItem.submenu = langs
         menu.addItem(langItem)
+        let flav = NSMenu()
+        for f in flavors {
+            let item = NSMenuItem(title: f.name, action: #selector(setFlavor(_:)), keyEquivalent: "")
+            item.representedObject = f.id
+            item.state = petFlavor.id == f.id ? .on : .off
+            item.image = NSImage(size: NSSize(width: 14, height: 14), flipped: false) { r in
+                f.body.setFill()
+                NSBezierPath(ovalIn: r.insetBy(dx: 1.5, dy: 1.5)).fill()
+                NSColor.black.withAlphaComponent(0.3).setStroke()
+                NSBezierPath(ovalIn: r.insetBy(dx: 1.5, dy: 1.5)).stroke()
+                return true
+            }
+            item.target = self
+            flav.addItem(item)
+        }
+        let flavItem = NSMenuItem(title: L("团子口味", "Flavor"), action: nil, keyEquivalent: "")
+        flavItem.submenu = flav
+        menu.addItem(flavItem)
         let auto = NSMenuItem(title: L("登录时自动启动", "Start at login"), action: #selector(toggleAutostart), keyEquivalent: "")
         auto.state = FileManager.default.fileExists(atPath: agentPlist) ? .on : .off
         menu.addItem(auto)
@@ -2315,6 +2403,14 @@ final class App: NSObject, NSApplicationDelegate {
     @objc func quit() { NSApp.terminate(nil) }
 
     @objc func toggleSound() { Sounds.enabled.toggle() }
+
+    /// The flavour menu: the pet, its dashboard badge and new cards.
+    @objc func setFlavor(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        UserDefaults.standard.set(id, forKey: "flavor")
+        pet?.needsDisplay = true
+        dashboard.needsDisplay = true
+    }
 
     /// The language menu: switches here at once and tells the daemon
     /// (`dango lang`), which rewrites widget.json in that language.
@@ -2384,6 +2480,55 @@ final class App: NSObject, NSApplicationDelegate {
     }
 }
 
+// MARK: - Flavors
+
+/// A 团子's flavour: the body colour and its name. Light flavours get dark
+/// bead eyes and an outline; dark ones keep white eyes.
+struct Flavor {
+    var id: String
+    var zh: String
+    var en: String
+    var body: NSColor
+    var name: String { L(zh, en) }
+    var light: Bool { luminance(body) > 0.5 }
+}
+
+func luminance(_ c: NSColor) -> CGFloat {
+    let x = c.usingColorSpace(.deviceRGB) ?? c
+    return 0.299 * x.redComponent + 0.587 * x.greenComponent + 0.114 * x.blueComponent
+}
+
+let flavors: [Flavor] = [
+    Flavor(id: "sesame", zh: "黑芝麻", en: "Black sesame", body: NSColor(calibratedRed: 0.17, green: 0.16, blue: 0.16, alpha: 1)),
+    Flavor(id: "plain", zh: "原味", en: "Plain", body: NSColor(calibratedRed: 0.97, green: 0.95, blue: 0.91, alpha: 1)),
+    Flavor(id: "sakura", zh: "樱花", en: "Sakura", body: NSColor(calibratedRed: 0.97, green: 0.73, blue: 0.78, alpha: 1)),
+    Flavor(id: "matcha", zh: "抹茶", en: "Matcha", body: NSColor(calibratedRed: 0.62, green: 0.76, blue: 0.47, alpha: 1)),
+    Flavor(id: "kinako", zh: "黄豆粉", en: "Kinako", body: NSColor(calibratedRed: 0.89, green: 0.76, blue: 0.52, alpha: 1)),
+    Flavor(id: "pumpkin", zh: "南瓜", en: "Pumpkin", body: NSColor(calibratedRed: 0.96, green: 0.65, blue: 0.33, alpha: 1)),
+    Flavor(id: "taro", zh: "紫薯", en: "Taro", body: NSColor(calibratedRed: 0.62, green: 0.50, blue: 0.80, alpha: 1)),
+    Flavor(id: "azuki", zh: "红豆", en: "Red bean", body: NSColor(calibratedRed: 0.55, green: 0.29, blue: 0.29, alpha: 1)),
+]
+
+func flavorNamed(_ id: String) -> Flavor { flavors.first { $0.id == id } ?? flavors[0] }
+
+/// Snapshots set this instead of the saved choice.
+var petFlavorOverride: String?
+
+/// The pet's own flavour (the menu's 团子口味 / Flavor), black sesame at first.
+var petFlavor: Flavor { flavorNamed(petFlavorOverride ?? UserDefaults.standard.string(forKey: "flavor") ?? "sesame") }
+
+/// Every job's 团子 in the office has its own flavour, so a room of
+/// colleagues is not a row of black blobs; the usual crowd all differ.
+let jobFlavors = ["swe": "sesame", "data": "taro", "writer": "plain", "research": "pumpkin", "video": "azuki", "qa": "matcha", "web": "sakura",
+                  "ops": "kinako", "fin": "kinako", "doctor": "plain", "trainer": "pumpkin", "counselor": "sakura", "designer": "sakura",
+                  "musician": "taro", "chef": "azuki", "mathematician": "matcha", "physicist": "taro", "chemist": "matcha", "biologist": "matcha",
+                  "architect": "kinako", "lawyer": "sesame", "entry": "plain"]
+
+func flavor(forJob id: String) -> Flavor { flavorNamed(jobFlavors[id] ?? flavors[stableHash(id) % flavors.count].id) }
+
+/// The three colours of a hanami skewer, for the helpers behind a worker.
+let helperFlavors = ["sakura", "plain", "matcha"]
+
 // MARK: - Character
 
 /// The character (DESIGN.md §2): a round ink blob with big eyes. `mood`
@@ -2391,10 +2536,15 @@ final class App: NSObject, NSApplicationDelegate {
 /// flipped and unflipped views: positions are given as fractions from the
 /// top of `r`.
 func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedRed: 0.17, green: 0.16, blue: 0.16, alpha: 1),
-                   look: [String] = [], jobColor: NSColor? = nil, blink: Bool = false) {
+                   look: [String] = [], jobColor: NSColor? = nil, blink: Bool = false, flavor: Flavor? = nil) {
     let flipped = NSGraphicsContext.current?.isFlipped ?? false
     let w = r.width, h = r.height
     let cream = NSColor(calibratedRed: 0.96, green: 0.93, blue: 0.89, alpha: 1)
+    // The flavour's colour (or `ink`), and what goes with it.
+    let skin = flavor?.body ?? ink
+    let light = luminance(skin) > 0.5
+    let shade = skin.blended(withFraction: light ? 0.32 : 0.0, of: .black) ?? skin
+    let pupil = NSColor(calibratedWhite: 0.08, alpha: 1)
     /// A point `fromTop` of the way down and `fx` across `r`.
     func pt(_ fx: CGFloat, _ fromTop: CGFloat) -> NSPoint {
         NSPoint(x: r.minX + w * fx, y: flipped ? r.minY + h * fromTop : r.maxY - h * fromTop)
@@ -2429,19 +2579,85 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
     /// Baseline-ish y for text whose top is `fromTop` down.
     func ty(_ fromTop: CGFloat, size: CGFloat) -> CGFloat { flipped ? r.minY + h * fromTop : r.maxY - h * fromTop - size * 1.2 }
 
-    // Body: a soft blob, slightly flatter at the bottom.
+    // Body: a soft mochi, slightly flatter at the bottom. Light flavours
+    // get a darker rim so they read on paper and on light walls.
     let bodyRect = box(0.04, 0.04, 0.92, 0.94)
-    let body = NSBezierPath(ovalIn: bodyRect)
-    ink.setFill()
-    body.fill()
-    NSBezierPath(roundedRect: box(0.08, flipped ? 0.62 : 0.62, 0.84, 0.36), xRadius: w * 0.2, yRadius: w * 0.2).fill()
+    let base = box(0.08, 0.62, 0.84, 0.36)
+    if light {
+        shade.setFill()
+        let o = max(1, w * 0.025)
+        NSBezierPath(ovalIn: bodyRect.insetBy(dx: -o, dy: -o)).fill()
+        NSBezierPath(roundedRect: base.insetBy(dx: -o, dy: -o), xRadius: w * 0.2 + o, yRadius: w * 0.2 + o).fill()
+    }
+    skin.setFill()
+    NSBezierPath(ovalIn: bodyRect).fill()
+    NSBezierPath(roundedRect: base, xRadius: w * 0.2, yRadius: w * 0.2).fill()
+    // A soft shine, top left.
+    NSColor.white.withAlphaComponent(light ? 0.5 : 0.1).setFill()
+    NSBezierPath(ovalIn: box(0.2, 0.13, 0.2, 0.1)).fill()
+    // Flavour marks: sesame seeds, kinako dust, a sakura petal.
+    switch flavor?.id {
+    case "sesame":
+        for (fx, ft) in [(0.62, 0.12), (0.7, 0.2), (0.55, 0.19)] {
+            NSColor.white.withAlphaComponent(0.22).setFill()
+            NSBezierPath(ovalIn: box(CGFloat(fx), CGFloat(ft), 0.045, 0.028)).fill()
+        }
+    case "kinako":
+        for (fx, ft) in [(0.6, 0.12), (0.7, 0.18), (0.52, 0.2), (0.78, 0.27), (0.25, 0.26), (0.66, 0.26)] {
+            shade.withAlphaComponent(0.45).setFill()
+            NSBezierPath(ovalIn: box(CGFloat(fx), CGFloat(ft), 0.03, 0.03)).fill()
+        }
+    case "sakura":
+        let c0 = pt(0.74, 0.17)
+        for k in 0..<5 {
+            let a = CGFloat(k) * 2 * .pi / 5
+            NSColor.white.withAlphaComponent(0.75).setFill()
+            NSBezierPath(ovalIn: NSRect(x: c0.x + cos(a) * w * 0.035 - w * 0.03, y: c0.y + sin(a) * w * 0.035 - w * 0.03, width: w * 0.06, height: w * 0.06)).fill()
+        }
+        NSColor(calibratedRed: 0.93, green: 0.45, blue: 0.55, alpha: 1).setFill()
+        NSBezierPath(ovalIn: NSRect(x: c0.x - w * 0.018, y: c0.y - w * 0.018, width: w * 0.036, height: w * 0.036)).fill()
+    default:
+        break
+    }
     // Cheeks
-    NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.55, alpha: 0.35).setFill()
+    NSColor(calibratedRed: 0.95, green: 0.5, blue: 0.55, alpha: light ? 0.5 : 0.35).setFill()
     NSBezierPath(ovalIn: box(0.16, 0.58, 0.14, 0.08)).fill()
     NSBezierPath(ovalIn: box(0.70, 0.58, 0.14, 0.08)).fill()
-    // Eyes
-    let white = NSColor.white
-    let pupil = NSColor(calibratedWhite: 0.08, alpha: 1)
+    // A small mouth between the cheeks, by mood.
+    let mouthInk = light ? pupil.withAlphaComponent(0.8) : NSColor.white.withAlphaComponent(0.75)
+    let m = box(0.45, 0.585, 0.1, 0.06)
+    mouthInk.setStroke()
+    let mouth = NSBezierPath()
+    mouth.lineWidth = max(1, w * 0.022)
+    mouth.lineCapStyle = .round
+    let down: CGFloat = flipped ? 1 : -1
+    switch mood {
+    case "happy", "proud":
+        // Open and smiling.
+        mouthInk.setFill()
+        let o = NSBezierPath()
+        o.move(to: NSPoint(x: m.minX, y: m.midY - down * m.height * 0.3))
+        o.curve(to: NSPoint(x: m.maxX, y: m.midY - down * m.height * 0.3),
+                controlPoint1: NSPoint(x: m.minX, y: m.midY + down * m.height * 0.9), controlPoint2: NSPoint(x: m.maxX, y: m.midY + down * m.height * 0.9))
+        o.close()
+        o.fill()
+    case "sleepy":
+        mouth.appendOval(in: NSRect(x: m.midX - w * 0.02, y: m.midY - w * 0.02, width: w * 0.04, height: w * 0.04))
+        mouth.stroke()
+    case "focused", "missing":
+        mouth.move(to: NSPoint(x: m.minX + m.width * 0.2, y: m.midY))
+        mouth.line(to: NSPoint(x: m.maxX - m.width * 0.2, y: m.midY))
+        mouth.stroke()
+    default:
+        mouth.move(to: NSPoint(x: m.minX, y: m.midY - down * m.height * 0.2))
+        mouth.curve(to: NSPoint(x: m.maxX, y: m.midY - down * m.height * 0.2),
+                    controlPoint1: NSPoint(x: m.minX + m.width * 0.25, y: m.midY + down * m.height * 0.5),
+                    controlPoint2: NSPoint(x: m.maxX - m.width * 0.25, y: m.midY + down * m.height * 0.5))
+        mouth.stroke()
+    }
+    // Eyes: white with dark pupils on dark flavours; dark beads with a
+    // glint on light ones.
+    let white = light ? pupil : NSColor.white
     for fx in [CGFloat(0.28), CGFloat(0.55)] {
         let e = box(fx, 0.32, 0.17, 0.22)
         if blink {
@@ -2467,16 +2683,24 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
                           radius: e.width * 0.5, startAngle: a0, endAngle: a1, clockwise: false)
             arc.stroke()
         case "focused", "sleepy":
+            let lid = mood == "sleepy" ? 0.5 : 0.4
+            if light {
+                // A bead with the lid half down.
+                pupil.setFill()
+                NSBezierPath(ovalIn: box(fx + 0.025, 0.34, 0.12, 0.17)).fill()
+                skin.setFill()
+                NSBezierPath(rect: box(fx, 0.32, 0.17, 0.02 + 0.17 * lid)).fill()
+                continue
+            }
             white.setFill()
             NSBezierPath(ovalIn: e).fill()
             // Lid over the top part of the eye.
-            let lid = mood == "sleepy" ? 0.5 : 0.4
-            ink.setFill()
+            skin.setFill()
             NSBezierPath(rect: box(fx - 0.01, 0.32 - 0.05, 0.19, 0.05 + 0.22 * lid)).fill()
             pupil.setFill()
             NSBezierPath(ovalIn: box(fx + 0.045, 0.32 + 0.22 * lid, 0.08, 0.22 * (1 - lid) * 0.8)).fill()
         case "proud":
-            white.setFill()
+            (light ? NSColor(calibratedRed: 0.85, green: 0.62, blue: 0.1, alpha: 1) : white).setFill()
             let star = NSBezierPath()
             let c = NSPoint(x: e.midX, y: e.midY)
             let rOut = e.width * 0.62, rIn = e.width * 0.26
@@ -2488,6 +2712,13 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
             }
             star.close()
             star.fill()
+        case _ where light:
+            // A dark bead with a glint.
+            let dx: CGFloat = mood == "waiting" ? 0.02 : 0
+            pupil.setFill()
+            NSBezierPath(ovalIn: box(fx + 0.025 + dx, 0.34, 0.12, 0.17)).fill()
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: box(fx + 0.085 + dx, 0.365, 0.04, 0.045)).fill()
         default:
             white.setFill()
             NSBezierPath(ovalIn: e).fill()
@@ -2501,6 +2732,17 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
     // Outfit: the look's parts, drawn by name in the job's colour. Unknown
     // names are ignored, so the table can name parts before they are drawn.
     if let c = jobColor, !look.isEmpty {
+        // On light flavours every part gets a soft dark halo, so a white
+        // lab coat still shows on a white mochi.
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        if light {
+            let halo = NSShadow()
+            halo.shadowColor = shade.withAlphaComponent(0.85)
+            halo.shadowBlurRadius = max(1, w * 0.025)
+            halo.shadowOffset = .zero
+            halo.set()
+        }
         let head = pt(0.5, 0.47)
         let dark = NSColor(calibratedWhite: 0.12, alpha: 1)
         let tan = NSColor(calibratedRed: 0.85, green: 0.72, blue: 0.5, alpha: 1)
@@ -2771,7 +3013,7 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
                     rr(NSRect(x: q.x + cos(a) * w * 0.13 - w * 0.035, y: q.y + sin(a) * w * 0.13 - w * 0.035, width: w * 0.07, height: w * 0.07), w * 0.01, c)
                 }
                 oval(NSRect(x: q.x - w * 0.12, y: q.y - w * 0.12, width: w * 0.24, height: w * 0.24), c)
-                oval(NSRect(x: q.x - w * 0.05, y: q.y - w * 0.05, width: w * 0.1, height: w * 0.1), ink)
+                oval(NSRect(x: q.x - w * 0.05, y: q.y - w * 0.05, width: w * 0.1, height: w * 0.1), skin)
             case "circuit":
                 rr(box(0.72, 0.62, 0.36, 0.3), w * 0.02, NSColor(calibratedRed: 0.15, green: 0.45, blue: 0.3, alpha: 1))
                 for k in 0..<3 { line(pt(0.76, 0.68 + CGFloat(k) * 0.08), pt(1.04, 0.68 + CGFloat(k) * 0.08), w * 0.02, c) }
@@ -2788,7 +3030,7 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
                 let a: CGFloat = 50 * .pi / 180 * (flipped ? 1 : -1)
                 let tip = NSPoint(x: c0.x + cos(a) * w * 0.2, y: c0.y + sin(a) * w * 0.2)
                 oval(NSRect(x: tip.x - w * 0.09, y: tip.y - w * 0.09, width: w * 0.18, height: w * 0.18), c)
-                oval(NSRect(x: tip.x - w * 0.04, y: tip.y - w * 0.04, width: w * 0.08, height: w * 0.08), ink)
+                oval(NSRect(x: tip.x - w * 0.04, y: tip.y - w * 0.04, width: w * 0.08, height: w * 0.08), skin)
             case "pipe":
                 rr(box(0.74, 0.74, 0.3, 0.09), 0, c)
                 rr(box(0.98, 0.56, 0.09, 0.27), 0, c)
@@ -2802,8 +3044,8 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
                 oval(box(-0.04, 0.56, 0.16, 0.16), tan)
                 oval(box(-0.08, 0.52, 0.07, 0.07), tan)
                 oval(box(0.09, 0.52, 0.07, 0.07), tan)
-                oval(box(0.0, 0.6, 0.03, 0.03), ink)
-                oval(box(0.05, 0.6, 0.03, 0.03), ink)
+                oval(box(0.0, 0.6, 0.03, 0.03), dark)
+                oval(box(0.05, 0.6, 0.03, 0.03), dark)
             default:
                 break
             }
@@ -2812,8 +3054,9 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
     // Mood extras
     switch mood {
     case "sleepy":
-        put(text("z", size: h * 0.18, weight: .bold, color: ink), r.minX + w * 0.86, ty(-0.1, size: h * 0.18), align: 1)
-        put(text("z", size: h * 0.12, weight: .bold, color: ink), r.minX + w * 1.0, ty(-0.18, size: h * 0.12), align: 1)
+        let zc = light ? shade : skin
+        put(text("z", size: h * 0.18, weight: .bold, color: zc), r.minX + w * 0.86, ty(-0.1, size: h * 0.18), align: 1)
+        put(text("z", size: h * 0.12, weight: .bold, color: zc), r.minX + w * 1.0, ty(-0.18, size: h * 0.12), align: 1)
     case "proud":
         NSColor(calibratedRed: 0.83, green: 0.69, blue: 0.22, alpha: 1).setFill()
         for (sx, sy, ss) in [(0.0, 0.08, 0.08), (0.9, 0.02, 0.06), (0.98, 0.36, 0.05)] {
@@ -2838,7 +3081,7 @@ func drawCharacter(_ r: NSRect, mood: String, ink: NSColor = NSColor(calibratedR
         // A little lamp held up.
         NSColor(calibratedRed: 0.95, green: 0.78, blue: 0.43, alpha: 1).setFill()
         NSBezierPath(ovalIn: box(1.0, 0.2, 0.14, 0.14)).fill()
-        ink.setFill()
+        NSColor(calibratedWhite: 0.3, alpha: 1).setFill()
         NSBezierPath(rect: box(1.06, 0.34, 0.02, 0.3)).fill()
     default:
         break
@@ -2908,8 +3151,8 @@ class CardView: NSView {
         put(text(r.s("label"), size: 30, weight: .medium, color: ink2), pad, 64)
         put(text(L("打工团子", "Dango"), size: 22, weight: .semibold, color: ink2.withAlphaComponent(0.6)), W - pad, 68, align: 2)
         let top = r.l("jobs").first
-        drawCharacter(NSRect(x: pad, y: 130, width: 150, height: 150), mood: ch.s("mood"), ink: ink,
-                      look: top?["look"] as? [String] ?? [], jobColor: (top?["color"] as? String).map { color(hex: $0) })
+        drawCharacter(NSRect(x: pad, y: 130, width: 150, height: 150), mood: ch.s("mood"),
+                      look: top?["look"] as? [String] ?? [], jobColor: (top?["color"] as? String).map { color(hex: $0) }, flavor: petFlavor)
         let tx = pad + 200
         put(text(ch.s("headline"), size: 36, color: ink2), tx, 128)
         if !ch.s("number").isEmpty {
@@ -3430,6 +3673,7 @@ if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
         if state != "working" { m.mood = state }
     }
     if let id = flagv("--job"), let j = m.occupations.first(where: { $0.id == id }) { m.job = j }
+    petFlavorOverride = flagv("--flavor")
     if let n = flagv("--helpers").flatMap({ Int($0) }) { m.subagents = n }
     let v = PetView(frame: NSRect(origin: .zero, size: PetView.size))
     v.drawBackground = args.contains("--backdrop")
@@ -3437,6 +3681,40 @@ if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
     v.t = 0.9
     if args.contains("--receipt") { v.receipts = [Receipt(usd: 78.4, name: m.job?.name ?? "软件工程师", color: m.job?.color ?? barColor, born: 0)] }
     snapshot(v, PetView.size, args[i + 1])
+    exit(0)
+}
+if let i = args.firstIndex(of: "--snapshot-flavors"), args.count > i + 1 {
+    // Every flavour (rows) in each mood and two outfits (columns), on the
+    // widget's dark ground; --paper draws it on the cards' paper instead.
+    _ = NSApplication.shared
+    final class FlavorSheet: NSView {
+        let onPaper: Bool
+        init(onPaper: Bool) {
+            self.onPaper = onPaper
+            super.init(frame: NSRect(x: 0, y: 0, width: 130 + 8 * 96, height: CGFloat(flavors.count) * 100 + 30))
+        }
+        required init?(coder: NSCoder) { nil }
+        override var isFlipped: Bool { true }
+        override func draw(_ dirtyRect: NSRect) {
+            (onPaper ? paper : NSColor(calibratedWhite: 0.13, alpha: 1)).setFill()
+            bounds.fill()
+            let tone = onPaper ? ink2 : secondary
+            let cols: [(String, [String], NSColor?)] = [("waiting", [], nil), ("focused", [], nil), ("happy", [], nil), ("proud", [], nil), ("sleepy", [], nil),
+                ("idle", ["labcoat", "stethoscope"], color(hex: "#e35d6a")), ("idle", ["toque", "apron", "pan"], color(hex: "#d98a3a")), ("idle", ["hood"], color(hex: "#4a78c4"))]
+            for (k, c) in cols.enumerated() {
+                put(text(c.1.isEmpty ? c.0 : c.1[0], size: 10, color: tone), 130 + CGFloat(k) * 96 + 40, 8, align: 1)
+            }
+            for (row, f) in flavors.enumerated() {
+                let y = 26 + CGFloat(row) * 100
+                put(text("\(f.zh) \(f.en)", size: 11, weight: .medium, color: tone), 12, y + 36)
+                for (k, c) in cols.enumerated() {
+                    drawCharacter(NSRect(x: 130 + CGFloat(k) * 96 + 6, y: y + 6, width: 68, height: 68), mood: c.0, look: c.1, jobColor: c.2, flavor: f)
+                }
+            }
+        }
+    }
+    let v = FlavorSheet(onPaper: args.contains("--paper"))
+    snapshot(v, v.bounds.size, args[i + 1])
     exit(0)
 }
 if let i = args.firstIndex(of: "--card"), args.count > i + 2 {
@@ -3483,6 +3761,7 @@ if let i = args.firstIndex(of: "--snapshot-office"), args.count > i + 1 {
     let v = OfficeView(frame: NSRect(origin: .zero, size: size))
     v.occupants = staff
     v.tick(0.9)
+    v.hover(flagv("--hover"))
     if let sec = flagv("--walk").flatMap({ Double($0) }), let a = staff.firstIndex(where: \.working), staff.count > k {
         staff[a].working = false
         staff[a].since = now
