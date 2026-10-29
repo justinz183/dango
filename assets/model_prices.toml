@@ -1,0 +1,145 @@
+# What the models cost per million tokens (docs/DESIGN.md v5): the
+# denominator of the economic leverage (what the work would have cost a
+# person ÷ what the models cost at API prices). Standard tier, global
+# routing, USD. Fetched 2026-10-29 from the official pages:
+#   Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+#   OpenAI:    https://developers.openai.com/api/docs/pricing
+# `cache_write` is the short-lived write (Anthropic 5 min, OpenAI 30 min),
+# `cache_write_long` the long one (Anthropic 1 h, OpenAI 12 h); `cache_read`
+# is "cache hits and refreshes" / "cached input". An id ending in "@long" is
+# the price for a request over the model's long-context threshold. A model
+# not listed here is unpriced: its tokens are counted, its cost is not.
+source = "Anthropic and OpenAI API pricing pages, standard tier"
+as_of = "2026-10-29"
+
+[[model]]
+id = "claude-fable-5-1"
+input = 10.0
+cache_write = 12.5
+cache_write_long = 20.0
+cache_read = 0.25
+output = 50.0
+
+[[model]]
+id = "claude-fable-5"
+input = 10.0
+cache_write = 12.5
+cache_write_long = 20.0
+cache_read = 1.0
+output = 50.0
+
+[[model]]
+id = "claude-opus-5-5"
+input = 4.0
+cache_write = 5.0
+cache_write_long = 8.0
+cache_read = 0.20
+output = 20.0
+
+[[model]]
+id = "claude-opus-5"
+input = 5.0
+cache_write = 6.25
+cache_write_long = 10.0
+cache_read = 0.50
+output = 25.0
+
+[[model]]
+id = "claude-opus-4-8"
+input = 5.0
+cache_write = 6.25
+cache_write_long = 10.0
+cache_read = 0.50
+output = 25.0
+
+[[model]]
+id = "claude-opus-4-7"
+input = 5.0
+cache_write = 6.25
+cache_write_long = 10.0
+cache_read = 0.50
+output = 25.0
+
+[[model]]
+id = "claude-sonnet-5-5"
+input = 2.0
+cache_write = 2.5
+cache_write_long = 4.0
+cache_read = 0.10
+output = 10.0
+
+# Prompts up to 100,000 tokens; over that, the @long row.
+[[model]]
+id = "claude-haiku-5-5"
+input = 0.10
+cache_write = 0.125
+cache_write_long = 0.20
+cache_read = 0.01
+output = 0.50
+
+[[model]]
+id = "claude-haiku-5-5@long"
+input = 0.50
+cache_write = 0.625
+cache_write_long = 1.0
+cache_read = 0.05
+output = 2.50
+
+# OpenAI: requests up to 272K input tokens; over that, the @long rows.
+[[model]]
+id = "gpt-6-astra"
+input = 10.0
+cache_write = 12.5
+cache_write_long = 25.0
+cache_read = 1.0
+output = 50.0
+
+[[model]]
+id = "gpt-6-astra@long"
+input = 20.0
+cache_read = 2.0
+output = 75.0
+
+[[model]]
+id = "gpt-6.1-sol"
+input = 2.0
+cache_write = 2.5
+cache_write_long = 5.0
+cache_read = 0.10
+output = 10.0
+
+[[model]]
+id = "gpt-6.1-sol@long"
+input = 4.0
+cache_read = 0.20
+output = 15.0
+
+[[model]]
+id = "gpt-5.5"
+input = 5.0
+cache_read = 0.50
+output = 30.0
+
+[[model]]
+id = "gpt-5.5@long"
+input = 10.0
+cache_read = 1.0
+output = 45.0
+
+[[model]]
+id = "gpt-5.4"
+input = 2.50
+cache_read = 0.25
+output = 15.0
+
+[[model]]
+id = "gpt-5.4@long"
+input = 5.0
+cache_read = 0.50
+output = 22.50
+
+[[model]]
+id = "gpt-5.3-codex"
+input = 1.75
+cache_read = 0.175
+output = 14.0

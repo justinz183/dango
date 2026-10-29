@@ -60,7 +60,7 @@ name = "translation"
 steps = [
   { edit = "docs/zh/guide.md", lines = 60, words = 1500 },
 ]
-translate = true
+topic = "translator"
 main = "translator"
 minutes = 185.00
 usd = 89.20
@@ -77,7 +77,7 @@ steps = [
   { tool = "mcp__financial-datasets__get_income_statement" },
   { cmd = "python3 dcf.py" },
 ]
-finance = true
+topic = "fin"
 main = "fin"
 minutes = 64.00
 usd = 52.69

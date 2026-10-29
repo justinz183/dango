@@ -303,11 +303,12 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert_eq!(q("SELECT COUNT(*) || '' FROM turns WHERE session_id = 'th-main' AND ended_at IS NOT NULL"), "2");
     let work: std::collections::BTreeMap<String, f64> = serde_json::from_str(&q("SELECT work FROM turns WHERE id = 't1'")).unwrap();
     assert_eq!(shadowcorp_core::occupation::main(&work).as_deref(), Some("video"), "{work:?}");
-    for job in ["swe", "writer", "research", "data"] {
+    for job in ["swe", "writer", "data"] {
         assert!(work.contains_key(job), "{job} missing from {work:?}");
     }
-    // ffmpeg 15 + whisper 20 + turn base 5 + one sub-agent 12.
-    assert!((work["video"] - 52.0).abs() < 1e-9, "{work:?}");
+    // ffmpeg 15 + whisper 20 + turn base 5 + one sub-agent 12, plus the web
+    // search (5): in a turn about a video, research is the editor's work.
+    assert!(!work.contains_key("research") && (work["video"] - 57.0).abs() < 1e-9, "{work:?}");
     let failed: String = q("SELECT test_passed || '' FROM turns WHERE id = 't2'");
     assert_eq!(failed, "0", "cargo test exited 101");
 
@@ -379,4 +380,42 @@ fn each_tool_has_its_own_live_cutoff() {
     }
     assert_eq!(db::get_meta(&p.conn, "live_since:codex").unwrap().as_deref(), Some("1793000000000"));
     assert_eq!(db::get_meta(&p.conn, "live_since").unwrap(), None, "Claude Code history is still open for backfill");
+}
+
+#[test]
+fn model_usage_prices_turns_once() {
+    let paths = home("usage");
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let mut p = Processor::new(db::open(&paths.db).unwrap(), Mode::Backfill, tz, Config::default());
+    let fx = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
+    let (claude, codex) = (fx.join("claude"), fx.join("codex"));
+    daemon::backfill::run(&mut p, &paths, &claude, i64::MAX, Some((&codex, i64::MAX))).unwrap();
+    let priced = daemon::usage::fill(&mut p, &claude, &codex, i64::MAX, usize::MAX).unwrap();
+    assert!(priced >= 4, "{priced}");
+    let cost = |tid: &str| -> f64 { p.conn.query_row("SELECT cost_usd FROM turns WHERE id = ?1", [tid], |r| r.get(0)).unwrap() };
+    // Opus 5.5: 10 in·$4 + 1000 5m·$5 + 2000 1h·$8 + 100k read·$0.20 + 500 out·$20, counted once
+    // though written on two lines; then 200k read + 1000 out; the sub-agent's Fable 5.1:
+    // 50k read·$0.25 + 2000 out·$50.
+    let want = (40.0 + 5_000.0 + 16_000.0 + 20_000.0 + 10_000.0 + 40_000.0 + 20_000.0 + 12_500.0 + 100_000.0) / 1e6;
+    assert!((cost("pd1") - want).abs() < 1e-9, "{} vs {want}", cost("pd1"));
+    assert_eq!(cost("pd2"), 0.0, "<synthetic> is not a model");
+    // Codex t1: 20k in·$10 + 80k cached·$1 + 1000 out·$50, then a 300k request at the long rate
+    // (300k·$20 + 100·$75); the reviewer thread's codex-auto-review has no price.
+    let want = (200_000.0 + 80_000.0 + 50_000.0 + 6_000_000.0 + 7_500.0) / 1e6;
+    assert!((cost("t1") - want).abs() < 1e-9, "{} vs {want}", cost("t1"));
+    let tokens: String = p.conn.query_row("SELECT tokens FROM turns WHERE id = 't1'", [], |r| r.get(0)).unwrap();
+    assert!(tokens.contains("gpt-6-astra@long") && tokens.contains("codex-auto-review"), "the reviewer is counted, just not priced: {tokens}");
+
+    let (c_pd1, c_t1) = (cost("pd1"), cost("t1"));
+    let total = p.ctr("cost", "all");
+    assert!((total - c_pd1 - c_t1).abs() < 1e-9);
+    assert!((p.ctr("cost:codex", "all") - c_t1).abs() < 1e-9);
+    assert_eq!(daemon::usage::fill(&mut p, &claude, &codex, i64::MAX, usize::MAX).unwrap(), 0, "each turn once");
+
+    let day = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, None).unwrap();
+    let lev = day["usd"].as_f64().unwrap() / total;
+    assert!((day["leverage"].as_f64().unwrap() - lev).abs() < 1e-9, "economic leverage = $ of work / $ of model");
+    assert!(day["character"]["sub"].as_str().unwrap().contains("模型花费"), "{}", day["character"]);
+    let leaked: String = p.conn.query_row("SELECT group_concat(payload) FROM events WHERE kind = 'usage'", [], |r| r.get(0)).unwrap();
+    assert!(!leaked.contains("login") && !leaked.contains("Login") && !leaked.contains("/tmp/demo"), "usage events carry counts only");
 }

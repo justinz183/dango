@@ -290,6 +290,7 @@ fn run_backfill(paths: &Paths, args: &[String]) -> Result<i32> {
     let (cutoff, codex_cutoff) = (since("live_since")?, since("live_since:codex")?);
     println!("正在整理 Claude Code{} 的历史…", if codex { " 和 Codex" } else { "" });
     let r = backfill::run(&mut p, paths, &claude_dir, cutoff, codex.then_some((codex_dir.as_path(), codex_cutoff)))?;
+    daemon::usage::fill(&mut p, &claude_dir, &codex_dir, now_ms(), usize::MAX)?;
     let total = snapshot::counter(&p.conn, "person_days", "all");
     let unlocked: i64 = p.conn.query_row("SELECT COUNT(DISTINCT achievement_id) FROM unlocks", [], |r| r.get(0))?;
     p.conn.execute("UPDATE unlocks SET celebrated = 1 WHERE backfilled = 1", [])?;
@@ -374,6 +375,7 @@ fn rebuild(paths: &Paths) -> Result<i32> {
     let (_lock, _) = locked_processor(paths, Mode::Rebuild)?;
     let old = db::open(&paths.db)?;
     let old_total = snapshot::counter(&old, "person_days", "all");
+    let old_usd = snapshot::counter(&old, "usd", "all");
     let tmp = paths.home.join("data.rebuild.db");
     for ext in ["", "-wal", "-shm"] {
         let _ = fs::remove_file(format!("{}{ext}", tmp.display()));
@@ -388,7 +390,9 @@ fn rebuild(paths: &Paths) -> Result<i32> {
         }
     }
     let mut p = Processor::new(new, Mode::Rebuild, Tz::from_env(), Config::load(paths));
-    let mut st = old.prepare("SELECT id, ts, source, kind, session_id, turn_id, cwd_hash, payload FROM events ORDER BY ts, rowid")?;
+    // Usage last: it prices a finished turn, and a turn that ended without a
+    // Stop is only closed by a later event than its usage.
+    let mut st = old.prepare("SELECT id, ts, source, kind, session_id, turn_id, cwd_hash, payload FROM events ORDER BY kind = 'usage', ts, rowid")?;
     let rows = st.query_map([], |r| {
         Ok((
             r.get::<_, String>(0)?,
@@ -416,11 +420,17 @@ fn rebuild(paths: &Paths) -> Result<i32> {
     }
     p.commit()?;
     let new_total = snapshot::counter(&p.conn, "person_days", "all");
+    let new_usd = snapshot::counter(&p.conn, "usd", "all");
     drop(st);
     drop(p);
     if new_total + 1e-9 < old_total {
         let _ = fs::remove_file(&tmp);
         println!("未重建：新常数算出 {} 人日，少于现有的 {} 人日（只增不减）。", fmt_pd(new_total), fmt_pd(old_total));
+        return Ok(1);
+    }
+    if new_usd + 0.005 < old_usd {
+        let _ = fs::remove_file(&tmp);
+        println!("未重建：新规则算出 {}，少于现有的 {}（只增不减）。", fmt_usd(new_usd), fmt_usd(old_usd));
         return Ok(1);
     }
     drop(old);
@@ -429,6 +439,6 @@ fn rebuild(paths: &Paths) -> Result<i32> {
         let _ = fs::remove_file(format!("{}{ext}", paths.db.display()));
         let _ = fs::remove_file(format!("{}{ext}", tmp.display()));
     }
-    println!("重建完成：{n} 个事件，{} → {} 人日。", fmt_pd(old_total), fmt_pd(new_total));
+    println!("重建完成：{n} 个事件，{} → {}。", fmt_usd(old_usd), fmt_usd(new_usd));
     Ok(0)
 }

@@ -57,7 +57,12 @@ CREATE TABLE IF NOT EXISTS turns (
   agg           TEXT NOT NULL DEFAULT '{}',
   -- Credited minutes per occupation (JSON) and what hiring them would cost.
   work          TEXT NOT NULL DEFAULT '{}',
-  usd           REAL NOT NULL DEFAULT 0
+  usd           REAL NOT NULL DEFAULT 0,
+  -- Model tokens by price key (JSON), what they cost at API prices, and
+  -- whether the turn's usage event has been applied.
+  tokens        TEXT NOT NULL DEFAULT '{}',
+  cost_usd      REAL NOT NULL DEFAULT 0,
+  cost_done     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS turns_session ON turns(session_id, started_at);
 
@@ -164,11 +169,19 @@ fn init(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.execute_batch(SCHEMA)?;
-    // Databases from before occupations (docs/DESIGN.md §3) lack these.
-    if !conn.prepare("SELECT 1 FROM pragma_table_info('turns') WHERE name = 'usd'")?.exists([])? {
+    // Databases from before occupations (docs/DESIGN.md §3) and model costs (v5) lack these.
+    let has = |c: &str| conn.prepare(&format!("SELECT 1 FROM pragma_table_info('turns') WHERE name = '{c}'"))?.exists([]);
+    if !has("usd")? {
         conn.execute_batch(
             "ALTER TABLE turns ADD COLUMN work TEXT NOT NULL DEFAULT '{}';
              ALTER TABLE turns ADD COLUMN usd REAL NOT NULL DEFAULT 0;",
+        )?;
+    }
+    if !has("cost_usd")? {
+        conn.execute_batch(
+            "ALTER TABLE turns ADD COLUMN tokens TEXT NOT NULL DEFAULT '{}';
+             ALTER TABLE turns ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0;
+             ALTER TABLE turns ADD COLUMN cost_done INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
     conn.execute(

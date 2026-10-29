@@ -38,6 +38,8 @@ pub enum Kind {
     SessionEnd,
     Commit,
     PreCompact,
+    /// A finished turn's token usage by model, read from the agent's logs.
+    Usage,
 }
 
 impl Kind {
@@ -52,6 +54,7 @@ impl Kind {
             Kind::SessionEnd => "session_end",
             Kind::Commit => "commit",
             Kind::PreCompact => "pre_compact",
+            Kind::Usage => "usage",
         }
     }
 }
@@ -249,12 +252,19 @@ pub struct Payload {
     /// Words of prose added (counted, never kept).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub words: Option<u32>,
-    /// The prompt or a connector is about markets.
+    /// What the prompt (or a connector) is about: an occupation id.
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub topic: Option<String>,
+    /// Before v6 a finance prompt was this flag; read, never written, so
+    /// that replaying old events (rebuild) still pays them as finance. The
+    /// old `translate` flag is let go: it only turned writing into
+    /// translation, which pays less.
+    #[serde(skip_serializing)]
     pub finance: Option<bool>,
-    /// The prompt asks for a translation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub translate: Option<bool>,
+    /// Usage events: tokens by price key (model, "@long" over the
+    /// long-context threshold). Counts only.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub tokens: std::collections::BTreeMap<String, crate::pricing::Tokens>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -273,6 +283,13 @@ pub struct Event {
     pub cwd_hash: Option<String>,
     #[serde(default)]
     pub payload: Payload,
+}
+
+impl Payload {
+    /// The topic, from older events' flags too.
+    pub fn topic(&self) -> Option<String> {
+        self.topic.clone().or_else(|| (self.finance == Some(true)).then(|| "fin".to_string()))
+    }
 }
 
 impl Event {
@@ -320,5 +337,16 @@ mod tests {
         let back: Event = serde_json::from_str(&s).unwrap();
         assert_eq!(back, e);
         assert_eq!(back.ts_ms(), Some(1_793_000_000_000));
+    }
+
+    #[test]
+    fn old_topic_flags_still_read() {
+        let p: Payload = serde_json::from_str(r#"{"finance":true}"#).unwrap();
+        assert_eq!(p.topic().as_deref(), Some("fin"));
+        assert!(!serde_json::to_string(&p).unwrap().contains("finance"));
+        let p: Payload = serde_json::from_str(r#"{"finance":true,"topic":"doctor"}"#).unwrap();
+        assert_eq!(p.topic().as_deref(), Some("doctor"));
+        let p: Payload = serde_json::from_str(r#"{"translate":true}"#).unwrap();
+        assert_eq!(p.topic(), None);
     }
 }

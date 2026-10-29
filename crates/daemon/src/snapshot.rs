@@ -6,7 +6,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use shadowcorp_core::achievements::{self, display_name, Catalog, Category, Rarity, Store};
 use shadowcorp_core::progress::{self, stage_for, Stage, Streak};
 use shadowcorp_core::render::{fmt_int, fmt_short, grand_badge, StatusInfo};
-use shadowcorp_core::scoring::{leverage, ScoringConstants};
+use shadowcorp_core::pricing;
+use shadowcorp_core::scoring::ScoringConstants;
 
 use crate::db::{get_meta, set_meta};
 use crate::ingest::{day_key, week_key, Result, Tz, PERMISSION_QUIET_MS};
@@ -111,7 +112,7 @@ pub fn company(conn: &Connection, tz: Tz, cfg_target: f64, now_ms: i64) -> Resul
         titles,
         week_pd: counter(conn, "person_days", &wk),
         week_target: weekly_target(conn, cfg_target),
-        week_leverage: leverage(counter(conn, "human_minutes", &wk), counter(conn, "active_minutes", &wk)),
+        week_leverage: pricing::leverage(counter(conn, "usd", &wk), counter(conn, "cost", &wk)),
         streak: streak.as_of(today),
         coins,
         freeze_tokens,
@@ -157,6 +158,11 @@ pub struct Output {
     pub total_usd: f64,
     pub today_usd: f64,
     pub week_usd: f64,
+    /// What the models cost at API prices.
+    pub total_cost: f64,
+    pub today_cost: f64,
+    pub week_cost: f64,
+    /// This week's dollars of work per dollar of model.
     pub week_leverage: Option<f64>,
     /// The best day so far, in dollars.
     pub record_day_usd: f64,
@@ -192,7 +198,10 @@ pub fn output(conn: &Connection, tz: Tz, now_ms: i64) -> Output {
         total_usd: counter(conn, "usd", "all"),
         today_usd: counter(conn, "usd", &dk),
         week_usd: counter(conn, "usd", &wk),
-        week_leverage: leverage(counter(conn, "human_minutes", &wk), counter(conn, "active_minutes", &wk)),
+        total_cost: counter(conn, "cost", "all"),
+        today_cost: counter(conn, "cost", &dk),
+        week_cost: counter(conn, "cost", &wk),
+        week_leverage: pricing::leverage(counter(conn, "usd", &wk), counter(conn, "cost", &wk)),
         record_day_usd: best_day_usd(conn),
     }
 }
@@ -222,15 +231,15 @@ pub fn activity(conn: &Connection, now_ms: i64) -> Result<(i64, i64, Option<i64>
     Ok((working, subagents, last_event))
 }
 
-/// One status line: rank, XP, today's and this week's value, leverage.
+/// One status line: the total, today's and this week's value, and the
+/// economic leverage (this session's, else this week's).
 pub fn status(conn: &Connection, tz: Tz, now_ms: i64, session: Option<&str>) -> Result<String> {
     let o = output(conn, tz, now_ms);
     let lev = session
-        .map(|s| {
+        .and_then(|s| {
             let k = format!("session:{s}");
-            leverage(counter(conn, "human_minutes", &k), counter(conn, "active_minutes", &k))
+            pricing::leverage(counter(conn, "usd", &k), counter(conn, "cost", &k))
         })
-        .unwrap_or(None)
         .or(o.week_leverage);
     Ok(shadowcorp_core::render::status_line(&StatusInfo {
         total_usd: o.total_usd,

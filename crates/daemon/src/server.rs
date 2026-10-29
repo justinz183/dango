@@ -20,6 +20,10 @@ use crate::paths::Paths;
 use crate::snapshot;
 
 pub const POLL: Duration = Duration::from_millis(250);
+/// Model usage is read every this many polls (~10 s)…
+const USAGE_EVERY: u64 = 40;
+/// …for turns that ended at least this long ago, once their logs are written.
+const USAGE_SETTLE_MS: i64 = 15_000;
 
 /// Takes the processor lock without waiting. Ok(None) means another process
 /// (normally the daemon) holds it.
@@ -122,6 +126,9 @@ pub fn run(paths: &Paths) -> Result<()> {
             eprintln!("shadowcorp daemon: panel write failed: {e}");
         }
     }
+    let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    let (claude_dir, codex_dir) = (home.join(".claude"), home.join(".codex"));
+    let mut tick: u64 = 0;
     loop {
         {
             let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
@@ -129,6 +136,26 @@ pub fn run(paths: &Paths) -> Result<()> {
                 eprintln!("shadowcorp daemon: ingest failed: {e}");
             }
         }
+        // Every ~10 s, price turns that ended a little while ago. The logs
+        // are read without the lock, so a Stop hook's box is never held up.
+        if tick % USAGE_EVERY == 0 {
+            let todo = {
+                let p = shared.lock().unwrap_or_else(|e| e.into_inner());
+                crate::usage::pending(&p.conn, now_ms() - USAGE_SETTLE_MS, 200).unwrap_or_default()
+            };
+            if !todo.is_empty() {
+                let events = crate::usage::read(&claude_dir, &codex_dir, &todo);
+                let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+                match crate::usage::apply(&mut p, &events) {
+                    Ok(n) if n > 0 => {
+                        let _ = widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms());
+                    }
+                    Ok(_) => {}
+                    Err(e) => eprintln!("shadowcorp daemon: usage failed: {e}"),
+                }
+            }
+        }
+        tick += 1;
         thread::sleep(POLL);
     }
 }

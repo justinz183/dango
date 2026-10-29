@@ -10,6 +10,7 @@ use chrono::{Datelike, Duration, Timelike};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
 use shadowcorp_core::occupation::{self, Table};
+use shadowcorp_core::pricing;
 use shadowcorp_core::render::{fmt_hours, fmt_usd};
 use shadowcorp_core::scoring::ScoringConstants;
 
@@ -40,18 +41,18 @@ pub fn tool_label(source: &str) -> (&'static str, &'static str) {
 pub fn tools(conn: &Connection, from: i64, to: i64) -> Result<Vec<Value>> {
     let k = ScoringConstants::builtin();
     let mut st = conn.prepare(
-        "SELECT s.source, SUM(t.usd), SUM(t.credited_pd), COUNT(*) FROM turns t JOIN sessions s ON s.id = t.session_id
+        "SELECT s.source, SUM(t.usd), SUM(t.credited_pd), COUNT(*), SUM(t.cost_usd) FROM turns t JOIN sessions s ON s.id = t.session_id
          WHERE t.ended_at >= ?1 AND t.ended_at < ?2 GROUP BY s.source ORDER BY SUM(t.usd) DESC",
     )?;
-    let rows: Vec<(String, f64, f64, i64)> =
-        st.query_map([from, to], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.flatten().collect();
+    let rows: Vec<(String, f64, f64, i64, f64)> =
+        st.query_map([from, to], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?.flatten().collect();
     let total: f64 = rows.iter().map(|r| r.1).sum();
     Ok(rows
         .into_iter()
-        .map(|(src, usd, pd, n)| {
+        .map(|(src, usd, pd, n, cost)| {
             let (name, color) = tool_label(&src);
             json!({ "id": src, "name": name, "color": color, "usd": usd, "hours": pd * k.caps.minutes_per_day / 60.0, "turns": n,
-                    "share": if total > 0.0 { usd / total } else { 0.0 } })
+                    "cost": cost, "leverage": pricing::leverage(usd, cost), "share": if total > 0.0 { usd / total } else { 0.0 } })
         })
         .collect())
 }
@@ -121,7 +122,8 @@ pub fn current_job(conn: &Connection, now: i64) -> Result<Option<String>> {
 }
 
 /// Who is in the office: the occupations that did any work in the last
-/// seven days (five at most, by what they earned). An occupation is at work
+/// seven days (eight at most, by what they earned; the room shows six at a
+/// time and takes the rest in turns). An occupation is at work
 /// when a turn in progress is mainly its job, or has given it 15 minutes
 /// already; its helpers are that turn's sub-agents. The rest slack off, by
 /// how long ago they last worked (the widget decides how).
@@ -179,9 +181,9 @@ pub fn office(conn: &Connection, tz: Tz, now: i64) -> Result<Vec<Value>> {
     list.sort_by(|a, b| b.3.cmp(&a.3).then(b.1.total_cmp(&a.1)));
     Ok(list
         .into_iter()
-        .take(5)
+        .take(8)
         .map(|(o, usd, last, working, helpers)| {
-            json!({ "id": o, "name": t.name(&o), "color": t.get(&o).map(|x| x.color.as_str()),
+            json!({ "id": o, "name": t.name(&o), "color": t.get(&o).map(|x| x.color.as_str()), "scene": t.scene(&o),
                     "working": working, "helpers": helpers, "since": last, "usd": usd })
         })
         .collect())
@@ -248,6 +250,8 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
             let job = occupation::main(&work_of(&work)).map(|o| t.name(&o).to_string()).unwrap_or_default();
             ("happy", format!("刚干了 {} 的{}活，值 {}。", fmt_hours(pd * k.caps.minutes_per_day / 60.0), job, fmt_usd(usd)))
         }
+    } else if let Some(l) = o.week_leverage.filter(|l| *l >= 10.0 && o.week_cost >= 1.0) {
+        ("happy", format!("这周每花 $1，干出 ${:.0} 的活。", l))
     } else if prev_week > 0.0 && o.week_usd > prev_week * 1.2 && local.weekday().num_days_from_monday() >= 3 {
         ("happy", format!("这周比上周多 {}。", fmt_usd(o.week_usd - prev_week)))
     } else if o.today_usd > 0.0 && (days == 7 || days % 30 == 0 || days % 100 == 0) {
@@ -299,21 +303,24 @@ fn recent_turns(conn: &Connection, tool: Option<&str>) -> Result<Vec<Value>> {
 pub fn view(conn: &Connection, tz: Tz, now: i64, tool: Option<&str>) -> Result<Value> {
     let k = ScoringConstants::builtin();
     let today = tz.date(now);
-    let (usd_m, min_m) = match tool {
-        Some(t) => (format!("usd:{t}"), format!("minutes:{t}")),
-        None => ("usd".to_string(), "person_days".to_string()),
+    let (usd_m, min_m, cost_m) = match tool {
+        Some(t) => (format!("usd:{t}"), format!("minutes:{t}"), format!("cost:{t}")),
+        None => ("usd".to_string(), "person_days".to_string(), "cost".to_string()),
     };
     // Credited minutes: per-agent counters hold minutes, the overall one person-days.
     let to_hours = |v: f64| if tool.is_some() { v / 60.0 } else { v * k.caps.minutes_per_day / 60.0 };
     let c = |m: &str, scope: String| snapshot::counter(conn, m, &scope);
-    let pair = |scope: String| json!({ "usd": c(&usd_m, scope.clone()), "hours": to_hours(c(&min_m, scope)) });
+    let pair = |scope: String| {
+        let (usd, cost) = (c(&usd_m, scope.clone()), c(&cost_m, scope.clone()));
+        json!({ "usd": usd, "hours": to_hours(c(&min_m, scope)), "cost": cost, "leverage": pricing::leverage(usd, cost) })
+    };
 
     let month_start = today.with_day(1).unwrap_or(today);
     let from = today - Duration::days(HISTORY_DAYS - 1);
     let first = from.min(month_start);
     let midnight = |d: chrono::NaiveDate| tz.ms(d.and_hms_opt(0, 0, 0).unwrap());
     let (d1, d7, d30) = (midnight(today), midnight(today - Duration::days(6)), midnight(from));
-    let (usd_days, min_days) = (metric_by_day(conn, &usd_m, first)?, metric_by_day(conn, &min_m, first)?);
+    let (usd_days, min_days, cost_days) = (metric_by_day(conn, &usd_m, first)?, metric_by_day(conn, &min_m, first)?, metric_by_day(conn, &cost_m, first)?);
     let mut turns_by_day: HashMap<String, i64> = HashMap::new();
     let mut st = conn.prepare(
         "SELECT t.ended_at FROM turns t JOIN sessions s ON s.id = t.session_id WHERE t.ended_at >= ?1 AND (?2 IS NULL OR s.source = ?2)",
@@ -333,7 +340,7 @@ pub fn view(conn: &Connection, tz: Tz, now: i64, tool: Option<&str>) -> Result<V
     let days: Vec<Value> = (0..HISTORY_DAYS)
         .map(|i| {
             let key = day_key(from + Duration::days(i));
-            json!({ "day": key, "usd": get(&usd_days, &key), "hours": to_hours(get(&min_days, &key)),
+            json!({ "day": key, "usd": get(&usd_days, &key), "hours": to_hours(get(&min_days, &key)), "cost": get(&cost_days, &key),
                     "turns": turns_by_day.get(&key).copied().unwrap_or(0) })
         })
         .collect();
@@ -341,7 +348,8 @@ pub fn view(conn: &Connection, tz: Tz, now: i64, tool: Option<&str>) -> Result<V
     Ok(json!({
         "today": pair(format!("day:{}", day_key(today))),
         "week": pair(format!("week:{}", week_key(today))),
-        "month": { "usd": in_month(&usd_days), "hours": to_hours(in_month(&min_days)) },
+        "month": { "usd": in_month(&usd_days), "hours": to_hours(in_month(&min_days)), "cost": in_month(&cost_days),
+                   "leverage": pricing::leverage(in_month(&usd_days), in_month(&cost_days)) },
         "total": pair("all".to_string()),
         "days": days,
         "hours": hours.to_vec(),
@@ -357,7 +365,7 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
     let (working, subagents, last_event) = snapshot::activity(conn, now)?;
     let t = Table::builtin();
     let job = current_job(conn, now)?;
-    let job_json = job.as_deref().map(|j| json!({ "id": j, "name": t.name(j), "color": t.get(j).map(|x| x.color.as_str()) }));
+    let job_json = job.as_deref().map(|j| json!({ "id": j, "name": t.name(j), "color": t.get(j).map(|x| x.color.as_str()), "scene": t.scene(j) }));
     let all = view(conn, tz, now, None)?;
     let today = tz.date(now);
     let midnight = |d: chrono::NaiveDate| tz.ms(d.and_hms_opt(0, 0, 0).unwrap());
@@ -370,12 +378,14 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
     Ok(json!({
         "generated_at": now,
         "rates": { "source": t.source, "label": t.label, "as_of": t.as_of },
-        "occupations": t.occupation.iter().map(|o| json!({ "id": o.id, "name": o.name, "color": o.color })).collect::<Vec<_>>(),
+        "occupations": t.occupation.iter().map(|o| json!({ "id": o.id, "name": o.name, "color": o.color, "scene": o.scene, "look": o.look })).collect::<Vec<_>>(),
         "character": character(conn, tz, cfg, &o, now, working, subagents, last_event, job.as_deref())?,
         "record": { "day_usd": o.record_day_usd },
-        "total": { "hours": o.total_hours, "usd": o.total_usd, "person_days": o.total_pd },
-        "today": { "hours": o.today_hours, "usd": o.today_usd, "person_days": o.today_pd },
-        "week": { "hours": o.week_hours, "usd": o.week_usd, "person_days": o.week_pd, "leverage": o.week_leverage },
+        "total": { "hours": o.total_hours, "usd": o.total_usd, "person_days": o.total_pd, "cost": o.total_cost,
+                   "leverage": pricing::leverage(o.total_usd, o.total_cost) },
+        "today": { "hours": o.today_hours, "usd": o.today_usd, "person_days": o.today_pd, "cost": o.today_cost,
+                   "leverage": pricing::leverage(o.today_usd, o.today_cost) },
+        "week": { "hours": o.week_hours, "usd": o.week_usd, "person_days": o.week_pd, "cost": o.week_cost, "leverage": o.week_leverage },
         "month": all["month"],
         "days": all["days"],
         "hours": all["hours"],

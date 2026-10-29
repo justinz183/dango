@@ -11,8 +11,9 @@ use chrono::{Datelike, Duration, NaiveDate, Timelike};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use shadowcorp_core::occupation::{self, Table};
+use shadowcorp_core::pricing;
 use shadowcorp_core::render::{fmt_short, fmt_usd};
-use shadowcorp_core::scoring::{leverage, ACTIVE_GAP_MINUTES, LEVERAGE_MIN_ACTIVE};
+use shadowcorp_core::scoring::ACTIVE_GAP_MINUTES;
 
 use crate::config::Config;
 use crate::ingest::{day_key, week_key, Result, Tz};
@@ -35,6 +36,8 @@ struct Turn {
     work: BTreeMap<String, f64>,
     human_minutes: f64,
     usd: f64,
+    /// What the models cost for it at API prices.
+    cost: f64,
     /// sessions.source: claude_code or codex.
     tool: String,
 }
@@ -68,10 +71,11 @@ struct Tally {
     turns: Vec<Turn>,
     sessions: HashMap<String, Sess>,
     by_job: BTreeMap<String, f64>,
-    /// Per agent: minutes, dollars, turns.
-    by_tool: BTreeMap<String, (f64, f64, usize)>,
+    /// Per agent: minutes, dollars, turns, model cost.
+    by_tool: BTreeMap<String, (f64, f64, usize, f64)>,
     human: f64,
     usd: f64,
+    cost: f64,
     active: f64,
     files: i64,
     tests_run: usize,
@@ -99,7 +103,7 @@ fn midnight(tz: Tz, d: NaiveDate) -> i64 {
 
 fn tally(conn: &Connection, tz: Tz, start: i64, end: i64, tool: Option<&str>) -> Result<Tally> {
     let mut st = conn.prepare(
-        "SELECT t.session_id, t.started_at, t.ended_at, t.files_touched, t.test_run, t.test_passed, t.is_correction, t.work, t.usd, s.source
+        "SELECT t.session_id, t.started_at, t.ended_at, t.files_touched, t.test_run, t.test_passed, t.is_correction, t.work, t.usd, s.source, t.cost_usd
          FROM turns t JOIN sessions s ON s.id = t.session_id
          WHERE t.ended_at >= ?1 AND t.ended_at < ?2 AND (?3 IS NULL OR s.source = ?3) ORDER BY t.started_at",
     )?;
@@ -118,6 +122,7 @@ fn tally(conn: &Connection, tz: Tz, start: i64, end: i64, tool: Option<&str>) ->
                 work,
                 usd: r.get(8)?,
                 tool: r.get(9)?,
+                cost: r.get(10)?,
             })
         })?
         .flatten()
@@ -139,10 +144,12 @@ fn tally(conn: &Connection, tz: Tz, start: i64, end: i64, tool: Option<&str>) ->
         s.last_end = Some(x.end);
         t.human += x.human_minutes;
         t.usd += x.usd;
+        t.cost += x.cost;
         let e = t.by_tool.entry(x.tool.clone()).or_default();
         e.0 += x.human_minutes;
         e.1 += x.usd;
         e.2 += 1;
+        e.3 += x.cost;
         t.files += x.files;
         if x.test_run {
             t.tests_run += 1;
@@ -159,8 +166,9 @@ fn tally(conn: &Connection, tz: Tz, start: i64, end: i64, tool: Option<&str>) ->
 }
 
 impl Tally {
+    /// Dollars of work per dollar of model.
     fn leverage(&self) -> Option<f64> {
-        leverage(self.human, self.active).filter(|_| self.active >= LEVERAGE_MIN_ACTIVE)
+        pricing::leverage(self.usd, self.cost)
     }
 
     /// Who you would have hired: one entry per occupation, most dollars first.
@@ -173,6 +181,7 @@ impl Tally {
                 let job = t.get(o);
                 json!({ "id": o, "name": t.name(o), "name_en": job.map(|j| j.name_en.as_str()), "soc": job.map(|j| j.soc.as_str()),
                         "color": color(o), "rate": t.rate(o), "hours": hours(m), "usd": usd,
+                        "scene": t.scene(o), "look": job.map(|j| j.look.clone()).unwrap_or_default(),
                         "share": if self.usd > 0.0 { usd / self.usd } else { 0.0 } })
             })
             .collect()
@@ -183,9 +192,10 @@ impl Tally {
         let mut list: Vec<_> = self.by_tool.iter().collect();
         list.sort_by(|a, b| b.1 .1.total_cmp(&a.1 .1));
         list.into_iter()
-            .map(|(src, (m, usd, n))| {
+            .map(|(src, (m, usd, n, cost))| {
                 let (name, color) = crate::widget::tool_label(src);
                 json!({ "id": src, "name": name, "color": color, "hours": hours(*m), "usd": usd, "turns": n,
+                        "cost": cost, "leverage": pricing::leverage(*usd, *cost),
                         "share": if self.usd > 0.0 { usd / self.usd } else { 0.0 } })
             })
             .collect()
@@ -226,14 +236,12 @@ impl Tally {
         Ok(rows)
     }
 
-    /// "9.6 小时的活 · 你花了 2.1 小时 · 杠杆 4.6x"
+    /// "9.6 小时的活 · 模型花费 $85 · 杠杆 19.7x"
     fn worth_line(&self) -> String {
-        let a = self.active / 60.0;
-        let you = if a < 1.0 { format!("{} 分钟", (a * 60.0).round()) } else { format!("{} 小时", fmt_short(a)) };
         let work = format!("{} 小时的活", fmt_short(hours(self.human)));
         match self.leverage() {
-            Some(l) => format!("{work} · 你花了 {you} · 杠杆 {l:.1}x"),
-            None => format!("{work} · 你花了 {you}"),
+            Some(l) => format!("{work} · 模型花费 {} · 杠杆 {}", fmt_usd(self.cost), pricing::fmt_leverage(Some(l))),
+            None => work,
         }
     }
 }
@@ -241,7 +249,7 @@ impl Tally {
 /// What the previous period came to, for "比上周 +$600".
 fn prev(conn: &Connection, tz: Tz, label: &str, start: i64, end: i64, tool: Option<&str>) -> Result<Value> {
     let t = tally(conn, tz, start, end, tool)?;
-    Ok(json!({ "label": label, "usd": t.usd, "hours": hours(t.human) }))
+    Ok(json!({ "label": label, "usd": t.usd, "hours": hours(t.human), "cost": t.cost, "leverage": t.leverage() }))
 }
 
 /// "今天这些活" for everything, "Codex 今天干的活" for one agent.
@@ -268,6 +276,7 @@ fn base(kind: &str, t: &Tally, show_names: bool, tool: Option<&str>) -> serde_js
         "tests_passed": t.tests_passed,
         "night_turns": t.night,
         "usd": t.usd,
+        "cost": t.cost,
         "jobs": t.jobs(),
         "tools": t.tools(),
         "rates": { "source": rates.source, "label": rates.label, "as_of": rates.as_of },

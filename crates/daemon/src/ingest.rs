@@ -124,8 +124,8 @@ struct TurnAgg {
     last_activity: i64,
     /// Minutes per occupation from the turn's steps.
     work: BTreeMap<String, f64>,
-    finance: bool,
-    translate: bool,
+    /// What the turn is about (an occupation id), from the prompt or a connector.
+    topic: Option<String>,
 }
 
 impl TurnAgg {
@@ -142,8 +142,8 @@ impl TurnAgg {
     /// Minutes per occupation the whole turn is worth (docs/DESIGN.md §3).
     fn work(&self, cap: f64) -> BTreeMap<String, f64> {
         let mut w = self.work.clone();
-        occupation::remap(&mut w, self.finance, self.translate);
-        occupation::finish(w, self.agent_calls.max(self.subagent_stops), cap)
+        occupation::remap(&mut w, self.topic.as_deref());
+        occupation::finish(w, self.agent_calls.max(self.subagent_stops), cap, self.topic.as_deref())
     }
 }
 
@@ -411,6 +411,7 @@ impl Processor {
             Kind::SessionEnd => self.on_session_end(ev, ts)?,
             Kind::Commit => self.on_commit(ev, ts)?,
             Kind::PreCompact => {}
+            Kind::Usage => self.on_usage(ev)?,
         }
         Ok(true)
     }
@@ -745,7 +746,7 @@ impl Processor {
         // A finished turn's id can come back when the agent is woken again
         // under the same prompt; that work is scored as a turn of its own.
         let tid = if self.turn(&base)?.is_some() { format!("{base}:{}", ev.id) } else { base };
-        let agg = TurnAgg { finance: p.finance.unwrap_or(false), translate: p.translate.unwrap_or(false), ..Default::default() };
+        let agg = TurnAgg { topic: p.topic(), ..Default::default() };
         self.create_turn(&tid, sid, ts, p.task_class.unwrap_or(TaskClass::Other), correction, agg)?;
         let mut st = self.sess(sid)?;
         st.open_turn = Some(tid);
@@ -799,7 +800,9 @@ impl Processor {
         if let (Some(o), Some(m)) = (&p.occupation, p.minutes) {
             *agg.work.entry(o.clone()).or_default() += m;
         }
-        agg.finance |= p.finance.unwrap_or(false);
+        if agg.topic.is_none() {
+            agg.topic = p.topic();
+        }
         agg.last_activity = agg.last_activity.max(ts);
         self.save_agg(&tid, &agg)?;
 
@@ -1030,7 +1033,7 @@ impl Processor {
                 week_usd: self.ctr("usd", &wkey),
                 total_usd: self.ctr("usd", "all"),
                 record_usd: self.record_value("max_day_usd")?,
-                leverage: leverage(self.ctr("human_minutes", &skey), self.ctr("active_minutes", &skey)),
+                leverage: shadowcorp_core::pricing::leverage(self.ctr("usd", &wkey), self.ctr("cost", &wkey)),
                 highlight: self.take_highlight(),
             };
             self.settlements.insert(sid.to_string(), summary);
@@ -1078,6 +1081,27 @@ impl Processor {
         self.record("max_day_usd", day_usd)?;
         self.upsert_daily(&sc)?;
         self.give_coins(coins_for_pd(old_total, old_total + dpd))
+    }
+
+    /// A finished turn's model usage: price it and move the cost counters,
+    /// on the day the turn ended. Applied once per turn.
+    fn on_usage(&mut self, ev: &Event) -> Result<()> {
+        let Some(tid) = ev.turn_id.as_deref() else { return Ok(()) };
+        let row: Option<(String, Option<i64>, i64)> = self
+            .conn
+            .query_row("SELECT session_id, ended_at, cost_done FROM turns WHERE id = ?1", [tid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .optional()?;
+        let Some((sid, Some(end_ts), 0)) = row else { return Ok(()) };
+        let (cost, _) = shadowcorp_core::pricing::PriceTable::builtin().cost(&ev.payload.tokens);
+        self.conn.execute(
+            "UPDATE turns SET tokens = ?2, cost_usd = ?3, cost_done = 1 WHERE id = ?1",
+            params![tid, serde_json::to_string(&ev.payload.tokens)?, cost],
+        )?;
+        let sc = self.scopes(end_ts, Some(&sid));
+        let tool = self.session_tool(&sid)?;
+        self.add_in("cost", cost, &sc, &["all", "day", "week", "session"]);
+        self.add_in(&format!("cost:{tool}"), cost, &sc, &["all", "day", "week"]);
+        Ok(())
     }
 
     /// Which agent a session belongs to (claude_code, codex).

@@ -31,7 +31,7 @@ pub struct Report {
     pub secs: f64,
 }
 
-fn ts_of(e: &Value) -> Option<i64> {
+pub(crate) fn ts_of(e: &Value) -> Option<i64> {
     DateTime::parse_from_rfc3339(e.get("timestamp")?.as_str()?).ok().map(|d| d.timestamp_millis())
 }
 
@@ -203,8 +203,7 @@ pub fn file_events(path: &Path, parent: Option<&str>, cutoff: i64, paths: &Paths
             task_class: Some(classify::classify_prompt(&text)),
             is_correction: Some(classify::is_correction(&text)),
             prompt_repeat: Some(repeat),
-            finance: occupation::is_finance_prompt(&text).then_some(true),
-            translate: occupation::is_translate_prompt(&text).then_some(true),
+            topic: occupation::topic(&text).map(str::to_string),
             ..Default::default()
         };
         ev.cwd_hash = (!cwd.is_empty()).then(|| short_hash(&cwd));
@@ -350,8 +349,7 @@ pub fn codex_file_events(path: &Path, cutoff: i64, paths: &Paths) -> Vec<Event> 
                         task_class: Some(classify::classify_prompt(&text)),
                         is_correction: Some(classify::is_correction(&text)),
                         prompt_repeat: Some(repeat),
-                        finance: occupation::is_finance_prompt(&text).then_some(true),
-                        translate: occupation::is_translate_prompt(&text).then_some(true),
+                        topic: occupation::topic(&text).map(str::to_string),
                         ..Default::default()
                     };
                     ev.cwd_hash = (!cwd.is_empty()).then(|| short_hash(&cwd));

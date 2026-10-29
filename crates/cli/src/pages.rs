@@ -7,6 +7,7 @@ use shadowcorp_core::achievements::{self, display_name, roman, Catalog, Category
 use shadowcorp_core::progress::record_label;
 use daemon::config::Config;
 use shadowcorp_core::render::{fmt_hours, fmt_int, fmt_pd, fmt_short, fmt_usd, pad, ring_bar};
+use shadowcorp_core::pricing;
 use shadowcorp_core::scoring::fmt_leverage;
 
 fn fmt_record(key: &str, v: f64) -> String {
@@ -53,6 +54,16 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
         out.push(row(if id == "codex" { "└ Codex" } else { "└ Claude" }, top.join(" · ")));
     }
     out.push(row("今日", format!("{} · 本周 {}", fmt_usd(o.today_usd), fmt_usd(o.week_usd))));
+    out.push(row(
+        "模型花费",
+        format!(
+            "今日 {} · 本周 {} · 累计 {} · 杠杆 {}",
+            fmt_usd(o.today_cost),
+            fmt_usd(o.week_cost),
+            fmt_usd(o.total_cost),
+            pricing::fmt_leverage(pricing::leverage(o.total_usd, o.total_cost))
+        ),
+    ));
     let mut stage = format!("Lv.{} {} · {} 位员工", c.stage.level, c.stage.name, c.stage.employees);
     if let Some(n) = c.next {
         stage += &format!(" · 距「{}」还差 {} 人日", n.name, fmt_pd(n.threshold - c.total_pd));
@@ -65,7 +76,7 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
             fmt_short(c.week_pd),
             fmt_short(c.week_target),
             ring_bar(c.week_pd, c.week_target, 5),
-            fmt_leverage(c.week_leverage)
+            pricing::fmt_leverage(c.week_leverage)
         ),
     ));
     let s = &c.streak;

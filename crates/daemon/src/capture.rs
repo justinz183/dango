@@ -277,8 +277,7 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
             let prompt = s(input, "prompt").unwrap_or("");
             p.task_class = Some(classify::classify_prompt(prompt));
             p.is_correction = Some(classify::is_correction(prompt));
-            p.finance = occupation::is_finance_prompt(prompt).then_some(true);
-            p.translate = occupation::is_translate_prompt(prompt).then_some(true);
+            p.topic = occupation::topic(prompt).map(str::to_string);
             if let Some(sid) = s(input, "session_id") {
                 p.prompt_repeat = Some(prompt_repeat(env.paths, sid, prompt));
             }
@@ -341,7 +340,7 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
                     p.occupation = Some(occ.into());
                     p.minutes = Some(minutes);
                     if other.starts_with("mcp__") && occupation::is_finance_server(other.split("__").nth(1).unwrap_or("")) {
-                        p.finance = Some(true);
+                        p.topic = Some("fin".into());
                     }
                 }
             }
@@ -484,7 +483,7 @@ mod tests {
         let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "WebSearch", "tool_input": { "query": "secret query" } }));
         assert_eq!((p.occupation.as_deref(), p.minutes), (Some("research"), Some(5.0)));
         let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "mcp__financial-datasets__get_news", "tool_input": {} }));
-        assert_eq!((p.occupation.as_deref(), p.finance), (Some("fin"), Some(true)));
+        assert_eq!((p.occupation.as_deref(), p.topic.as_deref()), (Some("fin"), Some("fin")));
         let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": { "command": "ffmpeg -i a.mp4 b.mp4" } }));
         assert_eq!((p.occupation.as_deref(), p.minutes), (Some("video"), Some(15.0)));
         let doc = "第一段文字。\nSecond paragraph here.";
@@ -494,9 +493,12 @@ mod tests {
         let line = serde_json::to_string(&p).unwrap();
         assert!(!line.contains("第一段") && !line.contains("paragraph"), "words counted, never kept");
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "fx", "prompt": "帮我分析一下这只股票的财报" }));
-        assert_eq!((p.finance, p.translate), (Some(true), None));
+        assert_eq!(p.topic.as_deref(), Some("fin"));
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "tr", "prompt": "Translate this into Chinese" }));
-        assert_eq!(p.translate, Some(true));
+        assert_eq!(p.topic.as_deref(), Some("translator"));
+        let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "hp", "prompt": "SECRET 最近血压有点高，要不要吃药" }));
+        assert_eq!(p.topic.as_deref(), Some("doctor"));
+        assert!(!serde_json::to_string(&p).unwrap().contains("SECRET"), "only the topic id is kept");
         let read = json!({ "hook_event_name": "PostToolUse", "tool_name": "mcp__Claude_Browser__computer", "tool_input": {} });
         assert!(from_claude_hook(&read, b"", &env(&paths)).is_none(), "clicking around is not research");
     }

@@ -1,7 +1,9 @@
-//! "Who you would have hired" (docs/DESIGN.md v3). Each step an agent takes
-//! is attributed to one occupation with the minutes a person in that job
-//! would need for it; occupations are priced from assets/occupations.toml.
-//! Pure: callers pass in what they observed and keep only the result.
+//! "Who you would have hired" (docs/DESIGN.md v3, v6). Each step an agent
+//! takes is attributed to one occupation with the minutes a person in that
+//! job would need for it, and a prompt's topic says who a talk-only turn
+//! consulted; occupations, scenes, looks and topic keywords come from
+//! assets/occupations.toml. Pure: callers pass in what they observed and
+//! keep only the result.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -29,6 +31,17 @@ pub struct Occupation {
     /// US$ per hour.
     pub rate: f64,
     pub color: String,
+    /// Where its character works in the office.
+    pub scene: String,
+    /// Minutes a talk-only turn about it is worth.
+    pub consult: f64,
+    /// Python / SQL steps in a turn about it are its work, not a data scientist's.
+    pub absorbs_data: bool,
+    /// What the widget draws on the character, by part name.
+    pub look: Vec<String>,
+    /// Topic keywords: 2 points and 1 point; a prompt needs 2 to be about it.
+    pub strong: Vec<String>,
+    pub weak: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +85,37 @@ impl Table {
     pub fn usd(&self, work: &BTreeMap<String, f64>) -> f64 {
         work.iter().map(|(id, m)| m / 60.0 * self.rate(id)).sum()
     }
+
+    pub fn consult(&self, id: &str) -> f64 {
+        self.get(id).map(|o| o.consult).unwrap_or(CONSULT.1)
+    }
+
+    pub fn scene(&self, id: &str) -> &str {
+        self.get(id).map(|o| o.scene.as_str()).unwrap_or("desk")
+    }
+}
+
+/// What a prompt is about: the occupation whose keywords score highest
+/// (strong 2, weak 1) once it reaches 2 points; ties go to the earlier
+/// entry. ASCII keywords match whole words or phrases, others anywhere.
+/// The text is read and dropped; only the id leaves.
+pub fn topic(prompt: &str) -> Option<&'static str> {
+    let p = prompt.to_lowercase();
+    let padded: String = std::iter::once(' ')
+        .chain(p.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '+' | '#' | '.' | '/' | '-') { c } else { ' ' }))
+        .chain(std::iter::once(' '))
+        .collect();
+    let hit = |kw: &str| if kw.is_ascii() { padded.contains(&format!(" {} ", kw.trim())) } else { p.contains(kw) };
+    let mut best: Option<(&'static str, usize)> = None;
+    for o in &Table::builtin().occupation {
+        // A keyword listed twice counts once.
+        let score = 2 * o.strong.iter().filter(|k| hit(k)).count()
+            + o.weak.iter().filter(|k| !o.strong.contains(k) && hit(k)).count();
+        if score >= 2 && best.map_or(true, |(_, s)| score > s) {
+            best = Some((o.id.as_str(), score));
+        }
+    }
+    best.map(|b| b.0)
 }
 
 /// Every id the attribution rules can return.
@@ -197,36 +241,23 @@ pub fn is_finance_server(server: &str) -> bool {
     ["financial", "finance", "fmp", "stock", "market", "defillama", "rootdata"].iter().any(|k| s.contains(k))
 }
 
-/// Prompt words that make research and data work count as a financial
-/// analyst's.
-pub fn is_finance_prompt(prompt: &str) -> bool {
-    let p = prompt.to_lowercase();
-    const ZH: [&str; 10] = ["股票", "财报", "估值", "美股", "港股", "个股", "持仓", "基金", "投资", "交易"];
-    const EN: [&str; 8] = ["stock", "ticker", "earnings", "valuation", "10-k", "dcf", "portfolio", "equity"];
-    ZH.iter().any(|k| p.contains(k)) || {
-        let words: Vec<&str> = p.split(|c: char| !c.is_ascii_alphanumeric() && c != '-').collect();
-        EN.iter().any(|k| words.contains(k))
+/// Applies a turn's topic: research in a turn about health is the doctor's
+/// work, data steps in one about markets the financial analyst's, writing
+/// in one asking for a translation the translator's.
+pub fn remap(work: &mut BTreeMap<String, f64>, topic: Option<&str>) {
+    let Some(tp) = topic else { return };
+    let absorbs_data = Table::builtin().get(tp).is_some_and(|o| o.absorbs_data);
+    let mut moves = vec![("research", tp)];
+    if tp == "translator" {
+        moves.push(("writer", tp));
     }
-}
-
-pub fn is_translate_prompt(prompt: &str) -> bool {
-    let p = prompt.to_lowercase();
-    p.contains("翻译") || p.contains("translate") || p.contains("translation")
-}
-
-/// Applies a turn's context: research and data work in a turn about markets
-/// is a financial analyst's; writing in a turn asking for a translation is
-/// a translator's.
-pub fn remap(work: &mut BTreeMap<String, f64>, finance: bool, translate: bool) {
-    let mut moves = Vec::new();
-    if finance {
-        moves.push(("research", "fin"));
-        moves.push(("data", "fin"));
-    }
-    if translate {
-        moves.push(("writer", "translator"));
+    if absorbs_data {
+        moves.push(("data", tp));
     }
     for (from, to) in moves {
+        if from == to {
+            continue;
+        }
         if let Some(m) = work.remove(from) {
             *work.entry(to.to_string()).or_default() += m;
         }
@@ -240,11 +271,13 @@ pub fn main(work: &BTreeMap<String, f64>) -> Option<String> {
 
 /// A finished turn's minutes per occupation: its steps, plus subagents and
 /// the per-turn base on the main occupation, scaled down together when the
-/// turn exceeds `cap` minutes.
-pub fn finish(mut work: BTreeMap<String, f64>, subagents: u32, cap: f64) -> BTreeMap<String, f64> {
+/// turn exceeds `cap` minutes. A turn with no steps is a consult with the
+/// topic's occupation (a researcher when there is none).
+pub fn finish(mut work: BTreeMap<String, f64>, subagents: u32, cap: f64, topic: Option<&str>) -> BTreeMap<String, f64> {
     work.retain(|_, m| *m > 0.0);
     if work.is_empty() {
-        work.insert(CONSULT.0.to_string(), CONSULT.1 + SUBAGENT_MINUTES * subagents as f64);
+        let who = topic.unwrap_or(CONSULT.0);
+        work.insert(who.to_string(), Table::builtin().consult(who) + SUBAGENT_MINUTES * subagents as f64);
     } else if let Some(m) = main(&work) {
         *work.get_mut(&m).unwrap() += TURN_BASE_MINUTES + SUBAGENT_MINUTES * subagents as f64;
     }
@@ -263,12 +296,14 @@ mod tests {
     #[test]
     fn table_is_complete_and_sourced() {
         let t = Table::builtin();
-        assert_eq!(t.occupation.len(), 12);
+        assert!(t.occupation.len() >= 49, "{}", t.occupation.len());
+        assert!(t.occupation.iter().all(|o| !o.scene.is_empty() && o.consult > 0.0 && !o.strong.is_empty()));
+        assert_eq!(t.scene("doctor"), "clinic");
         assert!(t.source.contains("BLS"));
         assert_eq!(t.rate("swe"), 65.38);
         assert_eq!(t.name("video"), "视频剪辑");
         for o in &t.occupation {
-            assert!(o.rate > 10.0 && o.rate < 100.0, "{}", o.id);
+            assert!(o.rate > 10.0 && o.rate < 150.0, "{}", o.id);
             assert!(o.color.starts_with('#') && o.color.len() == 7, "{}", o.id);
         }
     }
@@ -322,14 +357,29 @@ mod tests {
     #[test]
     fn context_moves_work() {
         let mut w: BTreeMap<String, f64> = [("research".into(), 10.0), ("data".into(), 4.0), ("writer".into(), 30.0)].into();
-        remap(&mut w, true, true);
-        assert_eq!(w.get("fin"), Some(&14.0));
-        assert_eq!(w.get("translator"), Some(&30.0));
-        assert!(!w.contains_key("research") && !w.contains_key("writer"));
-        assert!(is_finance_prompt("帮我看看英伟达的财报"));
-        assert!(is_finance_prompt("Compare NVDA earnings"));
-        assert!(!is_finance_prompt("restock the fridge list"));
-        assert!(is_translate_prompt("把这段翻译成英文"));
+        remap(&mut w, Some("fin"));
+        assert_eq!((w.get("fin"), w.get("writer")), (Some(&14.0), Some(&30.0)), "markets absorb research and data");
+        assert!(!w.contains_key("research") && !w.contains_key("data"));
+        let mut w: BTreeMap<String, f64> = [("writer".into(), 30.0), ("research".into(), 5.0)].into();
+        remap(&mut w, Some("translator"));
+        assert_eq!(w.get("translator"), Some(&35.0));
+        let mut w: BTreeMap<String, f64> = [("research".into(), 5.0)].into();
+        remap(&mut w, None);
+        assert_eq!(w.get("research"), Some(&5.0), "no topic, nothing moves");
+        assert_eq!(topic("帮我看看英伟达的财报"), Some("fin"));
+        assert_eq!(topic("Compare NVDA earnings"), Some("fin"));
+        assert_eq!(topic("restock the fridge list"), None, "whole words only");
+        assert_eq!(topic("把这段翻译成英文"), Some("translator"));
+        assert_eq!(topic("最近老是头疼，要不要去医院看看"), Some("doctor"));
+        assert_eq!(topic("帮我排一个深蹲和硬拉的训练计划"), Some("trainer"));
+        assert_eq!(topic("番茄炒蛋怎么做才嫩"), Some("chef"));
+        assert_eq!(topic("我最近焦虑得睡不着，压力大"), Some("counselor"));
+        assert_eq!(topic("合同条款写了违约金，能起诉吗"), Some("lawyer"));
+        assert_eq!(topic("房东不退押金，租房合同怎么签"), Some("realtor"));
+        assert_eq!(topic("明天去东京玩三天，帮我安排行程"), Some("travel"));
+        assert_eq!(topic("写个 python 脚本处理 csv"), Some("swe"));
+        assert_eq!(topic("ok"), None);
+        assert_eq!(topic("继续"), None);
     }
 
     #[derive(serde::Deserialize)]
@@ -344,10 +394,7 @@ mod tests {
         steps: Vec<Step>,
         #[serde(default)]
         subagents: u32,
-        #[serde(default)]
-        finance: bool,
-        #[serde(default)]
-        translate: bool,
+        topic: Option<String>,
         main: String,
         minutes: f64,
         usd: f64,
@@ -379,8 +426,8 @@ mod tests {
                 };
                 *work.entry(occ.to_string()).or_insert(0.0) += m;
             }
-            remap(&mut work, c.finance, c.translate);
-            let w = finish(work, c.subagents, 360.0);
+            remap(&mut work, c.topic.as_deref());
+            let w = finish(work, c.subagents, 360.0, c.topic.as_deref());
             let minutes: f64 = w.values().sum();
             let usd = Table::builtin().usd(&w);
             assert_eq!(main(&w).as_deref(), Some(c.main.as_str()), "{}", c.name);
@@ -391,14 +438,19 @@ mod tests {
 
     #[test]
     fn finishing_a_turn() {
-        let w = finish(BTreeMap::new(), 0, 360.0);
+        let w = finish(BTreeMap::new(), 0, 360.0, None);
         assert_eq!(w.get("research"), Some(&5.0), "talk-only turn");
-        let w = finish(BTreeMap::new(), 1, 360.0);
+        let w = finish(BTreeMap::new(), 1, 360.0, None);
         assert_eq!(w.get("research"), Some(&17.0), "subagents still count");
-        let w = finish([("video".into(), 30.0), ("swe".into(), 10.0)].into(), 2, 360.0);
+        let w = finish(BTreeMap::new(), 0, 360.0, Some("doctor"));
+        assert_eq!(w.get("doctor"), Some(&15.0), "a talk about health is a doctor's consult");
+        let mut w: BTreeMap<String, f64> = [("research".into(), 10.0), ("data".into(), 4.0)].into();
+        remap(&mut w, Some("doctor"));
+        assert_eq!((w.get("doctor"), w.get("data")), (Some(&10.0), Some(&4.0)), "a doctor does not absorb data steps");
+        let w = finish([("video".into(), 30.0), ("swe".into(), 10.0)].into(), 2, 360.0, None);
         assert_eq!(w.get("video"), Some(&(30.0 + 5.0 + 24.0)));
         assert_eq!(w.get("swe"), Some(&10.0));
-        let w = finish([("swe".into(), 600.0), ("qa".into(), 200.0)].into(), 0, 360.0);
+        let w = finish([("swe".into(), 600.0), ("qa".into(), 200.0)].into(), 0, 360.0, None);
         let total: f64 = w.values().sum();
         assert!((total - 360.0).abs() < 1e-9);
         assert!((w["swe"] / w["qa"] - 605.0 / 200.0).abs() < 1e-9, "scaled together");

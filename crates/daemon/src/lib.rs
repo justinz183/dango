@@ -12,4 +12,5 @@ pub mod server;
 pub mod snapshot;
 pub mod spool;
 pub mod titles;
+pub mod usage;
 pub mod widget;

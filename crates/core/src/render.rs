@@ -4,7 +4,7 @@
 
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::scoring::fmt_leverage;
+use crate::pricing::fmt_leverage;
 
 /// Total box width in terminal cells, borders included.
 pub const BOX_WIDTH: usize = 44;
