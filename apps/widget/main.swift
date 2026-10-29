@@ -1534,15 +1534,19 @@ final class PetView: NSView {
             let p = min(1, (t - rc.born) / 2.8)
             let ease = 1 - pow(1 - p, 2)
             let alpha = p < 0.65 ? 1 : max(0, 1 - (p - 0.65) / 0.35)
-            let card = NSRect(x: c.midX - 44, y: c.minY + 50 + CGFloat(ease) * 32, width: 88, height: 30)
+            let amount = text("+" + fmtUSD(rc.usd), size: 13, weight: .bold, color: ink.withAlphaComponent(alpha), mono: true)
+            let name = text(rc.name, size: 9, weight: .medium, color: ink2.withAlphaComponent(alpha))
+            // As wide as the longer line ("Software engineer" is), kept inside the view.
+            let w = min(bounds.width - 8, max(88, 17 + max(amount.size().width, name.size().width) + 10))
+            let card = NSRect(x: min(max(4, c.midX - w / 2), bounds.width - 4 - w), y: c.minY + 50 + CGFloat(ease) * 32, width: w, height: 30)
             NSColor.black.withAlphaComponent(0.18 * alpha).setFill()
             NSBezierPath(roundedRect: card.offsetBy(dx: 0, dy: -2), xRadius: 7, yRadius: 7).fill()
             paper.withAlphaComponent(alpha).setFill()
             NSBezierPath(roundedRect: card, xRadius: 7, yRadius: 7).fill()
             rc.color.withAlphaComponent(alpha).setFill()
             NSBezierPath(roundedRect: NSRect(x: card.minX + 6, y: card.minY + 7, width: 5, height: 16), xRadius: 2.5, yRadius: 2.5).fill()
-            put(text("+" + fmtUSD(rc.usd), size: 13, weight: .bold, color: ink.withAlphaComponent(alpha), mono: true), card.minX + 17, card.minY + 12)
-            put(text(rc.name, size: 9, weight: .medium, color: ink2.withAlphaComponent(alpha)), card.minX + 17, card.minY + 3)
+            put(amount, card.minX + 17, card.minY + 12)
+            put(name, card.minX + 17, card.minY + 3)
         }
         // The caption: today's dollars; the line when hovered; the record when just beaten.
         let tone = m.job?.color ?? barColor
