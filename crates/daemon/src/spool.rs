@@ -8,7 +8,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
-use shadowcorp_core::event::Event;
+use dango_core::event::Event;
 
 use crate::paths::Paths;
 

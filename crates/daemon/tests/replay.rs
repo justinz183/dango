@@ -13,7 +13,7 @@ use daemon::paths::Paths;
 use daemon::spool;
 use rusqlite::Connection;
 use serde_json::Value;
-use shadowcorp_core::event::Event;
+use dango_core::event::Event;
 
 fn fixtures() -> Vec<Value> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/hooks/claude_code");
@@ -83,7 +83,7 @@ fn fixtures_ingest_and_score() {
     assert!(pd > 0.2 && pd < 1.5, "fixture total {pd}");
     // Every credited minute belongs to an occupation, and the dollars are
     // exactly those minutes at each occupation's wage.
-    let rates = shadowcorp_core::occupation::Table::builtin();
+    let rates = dango_core::occupation::Table::builtin();
     let mut st = p.conn.prepare("SELECT substr(metric, 6), value FROM counters WHERE metric LIKE 'work:%' AND scope = 'all'").unwrap();
     let work: Vec<(String, f64)> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().flatten().collect();
     drop(st);
@@ -147,7 +147,7 @@ fn panel_data_hides_secrets_and_writes_files() {
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
     let d = daemon::panel::data(&p.conn, tz, 0.0, 1_793_200_000_000).unwrap();
     let ach = d["achievements"].as_array().unwrap();
-    assert_eq!(ach.len(), shadowcorp_core::achievements::Catalog::builtin().achievements.len());
+    assert_eq!(ach.len(), dango_core::achievements::Catalog::builtin().achievements.len());
     for a in ach {
         if a["hidden"] == true {
             assert!(a["name"].is_null() && a["unlock_line"].is_null(), "{} leaks a hidden name", a["id"]);
@@ -157,9 +157,9 @@ fn panel_data_hides_secrets_and_writes_files() {
     assert_eq!(d["roles"].as_array().unwrap().len(), 12);
     let page = daemon::panel::write(&paths, &p.conn, tz, 0.0, 1_793_200_000_000).unwrap();
     let html = fs::read_to_string(&page).unwrap();
-    assert!(html.contains("window.SHADOWCORP_DATA = {") && !html.contains("/*INLINE_DATA*/"), "data is inlined");
+    assert!(html.contains("window.DANGO_DATA = {") && !html.contains("/*INLINE_DATA*/"), "data is inlined");
     let js = fs::read_to_string(paths.home.join("panel-data.js")).unwrap();
-    assert!(js.starts_with("window.SHADOWCORP_DATA = {"));
+    assert!(js.starts_with("window.DANGO_DATA = {"));
     assert!(!js.contains("/Users") && !js.contains("/w/repo"), "no paths in panel data");
 }
 
@@ -190,7 +190,8 @@ fn widget_data_carries_history_without_paths() {
     assert!(turns.len() <= 10 && !turns.is_empty());
     assert!(turns[0]["usd"].as_f64().unwrap() > 0.0 && turns[0]["color"].is_string(), "{}", turns[0]);
     let ch = &d["character"];
-    assert_eq!(ch["name"], "Claude");
+    assert_eq!(ch["name"], "团子", "the character is called 团子 unless set");
+    assert_eq!(d["lang"], "zh");
     assert!(["waiting", "focused", "happy", "proud", "sleepy", "missing"].contains(&ch["mood"].as_str().unwrap()), "{ch}");
     assert!(ch["line"].as_str().unwrap().chars().count() <= 18, "{ch}");
     assert!(d["rank"].is_null() && d["total"]["xp"].is_null(), "ranks are gone");
@@ -218,7 +219,8 @@ fn day_report_from_fixtures() {
     assert_eq!(r["sessions"].as_array().unwrap().len(), 1);
     let s = &r["sessions"][0];
     assert_eq!((s["from"].as_str(), s["to"].as_str()), (Some("10:01"), Some("10:22")));
-    assert_eq!(s["title"], "会话 1", "no transcript → numbered");
+    assert_eq!(s["title"], "软件工程师 · Claude Code · 3 个回合", "no transcript → described by what it was");
+    assert_eq!(s["has_title"], false);
     assert!(r["human_hours"].as_f64().unwrap() > 0.0);
     let jobs = r["jobs"].as_array().unwrap();
     let share: f64 = jobs.iter().map(|c| c["share"].as_f64().unwrap()).sum();
@@ -232,7 +234,30 @@ fn day_report_from_fixtures() {
     let empty = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date.succ_opt().unwrap().succ_opt().unwrap(), 1_793_200_000_000, false, None).unwrap();
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
-    assert!(daemon::report::day_text(&r).contains("会话 1"));
+    assert!(daemon::report::day_text(&r).contains("软件工程师 · Claude Code"));
+    // Where the day stands among your own, and in full-time people.
+    assert_eq!(r["standing"]["unit"], "day");
+    assert!(r["standing"]["count"].as_i64().unwrap() >= 1 && r["standing"]["rank"].as_i64().unwrap() >= 1, "{}", r["standing"]);
+    let people = r["people"]["people"].as_f64().unwrap();
+    assert!((people - (r["human_hours"].as_f64().unwrap() / 8.0)).abs() < 0.06, "{}", r["people"]);
+
+    // The same day in English.
+    let mut en = Config::default();
+    en.general.locale = "en".into();
+    let e = daemon::report::day(&p.conn, tz, &en, &claude, date, 1_793_200_000_000, false, None).unwrap();
+    assert_eq!(e["lang"], "en");
+    assert_eq!(e["label"], "Tuesday, Oct 27");
+    assert_eq!(e["character"]["name"], "Dango");
+    assert!(e["character"]["headline"].as_str().unwrap().starts_with("Hiring people for that day's work"), "{}", e["character"]);
+    assert!(e["character"]["sub"].as_str().unwrap().contains("hours of work"), "{}", e["character"]);
+    assert_eq!(e["sessions"][0]["title"], "Software engineer · Claude Code · 3 turns");
+    assert_eq!(e["jobs"][0]["name"], "Software engineer");
+    assert!(e["rates"]["label"].as_str().unwrap().starts_with("Priced at"));
+    assert!(e["character"]["signoff"].as_str().unwrap().is_ascii(), "{}", e["character"]["signoff"]);
+    let ew = daemon::widget::data(&p.conn, tz, &en, 1_793_200_000_000).unwrap();
+    assert_eq!(ew["lang"], "en");
+    assert!(ew["jobs"].as_array().unwrap().iter().all(|j| j["name"].as_str().unwrap().is_ascii()), "{}", ew["jobs"]);
+    assert!(ew["character"]["line"].as_str().unwrap().is_ascii(), "{}", ew["character"]);
 }
 
 #[test]
@@ -335,7 +360,7 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert_eq!(q("SELECT COUNT(*) || '' FROM sessions WHERE id IN ('th-sub', 'th-g')"), "0", "sub-agents count toward the parent");
     assert_eq!(q("SELECT COUNT(*) || '' FROM turns WHERE session_id = 'th-main' AND ended_at IS NOT NULL"), "2");
     let work: std::collections::BTreeMap<String, f64> = serde_json::from_str(&q("SELECT work FROM turns WHERE id = 't1'")).unwrap();
-    assert_eq!(shadowcorp_core::occupation::main(&work).as_deref(), Some("video"), "{work:?}");
+    assert_eq!(dango_core::occupation::main(&work).as_deref(), Some("video"), "{work:?}");
     for job in ["swe", "writer", "data"] {
         assert!(work.contains_key(job), "{job} missing from {work:?}");
     }
@@ -458,7 +483,7 @@ fn model_usage_prices_turns_once() {
 /// later it is a new subject.
 #[test]
 fn a_prompt_without_a_topic_stays_on_the_sessions_last() {
-    use shadowcorp_core::event::{Event, Kind, Source};
+    use dango_core::event::{Event, Kind, Source};
     let paths = home("topicmem");
     let mut p = processor(&paths);
     let t0 = 1_793_200_000_000;
@@ -493,7 +518,7 @@ fn a_prompt_without_a_topic_stays_on_the_sessions_last() {
 /// representative: the vet's talk-only turn is the doctor's.
 #[test]
 fn merged_occupations_count_as_their_representative() {
-    use shadowcorp_core::event::{Event, Kind, Source};
+    use dango_core::event::{Event, Kind, Source};
     let paths = home("alias");
     let mut p = processor(&paths);
     let t0 = 1_793_200_000_000;

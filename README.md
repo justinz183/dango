@@ -1,30 +1,32 @@
-# ShadowCorp — 你的 Claude，和它的工作日报
+# 打工团子 Dango — 你的 AI，和它的工作日报
 
-住在屏幕角落的"你的 Claude"：一只桌面宠物，有活就坐在小桌前干、按正在干的活换装；记得自己替你干了多少活、这些活请人来做要花多少钱、都当了谁（软件工程师、文案、视频剪辑、数据分析师……），每天给你一张好看到能发出去的日报卡。不统计 token，不存 prompt、代码或路径。
+中文 / English：右键宠物 →「语言 / Language」切换，或 `dango lang en`、`dango lang zh`。宠物、仪表盘、办公室、日报卡、结算框、状态栏和命令行输出都跟着换。
+
+住在屏幕角落的"团子"（英文版叫 Dango）：一只桌面宠物，有活就坐在小桌前干、按正在干的活换装；记得自己替你干了多少活、这些活请人来做要花多少钱、都当了谁（软件工程师、文案、视频剪辑、数据分析师……），每天给你一张好看到能发出去的日报卡。不统计 token，不存 prompt、代码或路径。
 
 设计稿：[docs/DESIGN.md](docs/DESIGN.md)（v3，2026-10-29，替代原规格书 [docs/SPEC.md](docs/SPEC.md) 的"影子公司"设定和每回合分钟公式）。取舍与待定：[docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)。
 
 ## 日报 / 周报 / 月报卡
 
 ```bash
-shadowcorp card --day yesterday --names
+dango card --day yesterday --names
 ```
 
 ```bash
-shadowcorp card --week --names
+dango card --week --names
 ```
 
 ```bash
-shadowcorp card --month --names
+dango card --month --names
 ```
 
 ```bash
-shadowcorp card --year
+dango card --year
 ```
 
-生成 1080 宽的竖图 PNG 到 `~/Pictures/ShadowCorp/`，复制到剪贴板，并打开（高度随内容，介于 4:5 和 9:16 之间）。也可以在仪表盘底部「导出报告」点今日日报 / 本周周报 / 本月月报 / 今年年报（按仪表盘当前选的 agent 出），或右键小部件 →「导出报告」，那里还有昨日 / 上周 / 上月 / 去年；宠物会说一声"已复制到剪贴板"。日报内容：角色当天的表情和一句话、请人来做要花多少 $、工时与杠杆、24 小时时间线（按职业上色）、做得最多的会话、都当了谁（每种职业的工时 × 时薪）、回合 / 文件 / 测试 / 一次过、段位进度。`--names` 才会带上会话标题和项目名（它们只存本机，默认不上卡）；`--day` 接 `YYYY-MM-DD`、`today`、`yesterday`。
+生成 1080 宽的竖图 PNG 到 `~/Pictures/Dango/`，复制到剪贴板，并打开（高度随内容，介于 4:5 和 9:16 之间）。也可以在仪表盘底部「导出报告」点今日日报 / 本周周报 / 本月月报 / 今年年报（按仪表盘当前选的 agent 出），或右键小部件 →「导出报告」，那里还有昨日 / 上周 / 上月 / 去年；宠物会说一声"已复制到剪贴板"。日报内容：角色当天的表情和一句话、请人来做要花多少 $、工时与杠杆、24 小时时间线（按职业上色）、做得最多的会话、都当了谁（每种职业的工时 × 时薪）、回合 / 文件 / 测试 / 一次过、段位进度。`--names` 才会带上会话标题和项目名（它们只存本机，默认不上卡）；`--day` 接 `YYYY-MM-DD`、`today`、`yesterday`。
 
-周报：每天一根按职业堆叠的 $ 柱子、都当了谁、花时间最多的三件事、活跃天数 / 回合 / 测试 / 杠杆、和前一周比。月报：日历热力图（颜色越深这天产出越多）、24 小时作息分布（「你最常在 14–17 点开工」）、都当了谁、三件事、和前一个月比。年报：12 个月按职业堆叠的柱子、全年每天一格的热力图（最好的一天、最长连续）、都当了谁、活跃天数 / 回合 / 测试 / 杠杆、和去年比。过去的周期按绝对名字比（「第 42 周 → 第 43 周」「8 月 → 9 月」），当前周期才说"上周 → 本周"。`--day` 选的是哪一天所在的周 / 月 / 年。文字版：`shadowcorp report [--week|--month|--year] …`。
+周报：每天一根按职业堆叠的 $ 柱子、都当了谁、花时间最多的三件事、活跃天数 / 回合 / 测试 / 杠杆、和前一周比。月报：日历热力图（颜色越深这天产出越多）、24 小时作息分布（「你最常在 14–17 点开工」）、都当了谁、三件事、和前一个月比。年报：12 个月按职业堆叠的柱子、全年每天一格的热力图（最好的一天、最长连续）、都当了谁、活跃天数 / 回合 / 测试 / 杠杆、和去年比。过去的周期按绝对名字比（「第 42 周 → 第 43 周」「8 月 → 9 月」），当前周期才说"上周 → 本周"。`--day` 选的是哪一天所在的周 / 月 / 年。文字版：`dango report [--week|--month|--year] …`。
 
 ## 产出怎么算
 
@@ -36,13 +38,13 @@ shadowcorp card --year
 
 ## 桌面小部件
 
-打开方式：双击 **/Applications/ShadowCorp.app**（Launchpad 里也有），或者在终端运行：
+打开方式：双击 **/Applications/Dango.app**（Launchpad 里也有），或者在终端运行：
 
 ```bash
-shadowcorp widget
+dango widget
 ```
 
-打包：`apps/widget/bundle.sh` 生成 `target/release/ShadowCorp.app`（含图标，ad-hoc 签名），复制到 /Applications 即可。重复打开不会出现第二个面板。
+打包：`apps/widget/bundle.sh` 生成 `target/release/Dango.app`（含图标，ad-hoc 签名），复制到 /Applications 即可。重复打开不会出现第二个面板。
 
 **桌面宠物**（收起时屏幕上只有它）：一个圆滚滚的墨团。有 agent 在跑的时候它就坐到小桌子前敲键盘（屏幕上有代码在滚、光标在闪、两只手在打字），带子 agent 时身后多出几个小帮手；回合结算时从桌上递出一张小票「+$78 · 程序员」往上飘，伴一声轻响。它会**按正在干的活换装**：程序员连帽衫、网页开发胸前 `</>`、测试工程师举放大镜、运维安全帽、数据分析师抱图表、金融分析师领带、研究员圆眼镜、文案耳朵上夹铅笔、翻译顶着「译」、平面设计贝雷帽、视频剪辑耳机、资料录入抱一摞表格。没活的时候端杯咖啡等你、会眨眼、会呼吸；凌晨还在干就犯困；破了单日纪录就星星眼。只有角色和它脚下的小标签接受点击，透明的部分点穿到桌面；可以拖到任何位置（置顶、不占 Dock、不抢焦点）。
 
@@ -57,7 +59,7 @@ shadowcorp widget
 - 产出图：30 天 / 7 天按日，1 天按小时（标出最高的一根和当前这根，鼠标悬停看任意一根）
 - 都当了谁：所选窗口里每种职业的工时 × 时薪，超过 6 种可展开
 
-点仪表盘顶部或屏幕上任何别的地方就收回去。纯本地：读 `~/.shadowcorp/widget.json`（守护进程有新活动就重写），每 2 秒刷新。
+点仪表盘顶部或屏幕上任何别的地方就收回去。纯本地：读 `~/.dango/widget.json`（守护进程有新活动就重写），每 2 秒刷新。
 
 原生 Swift（AppKit），150 KB。`apps/widget/build.sh` 只出裸二进制；`apps/widget/bundle.sh` 出 .app。
 
@@ -68,7 +70,7 @@ shadowcorp widget
 | 采集：Claude Code 插件 hooks、Codex hooks、spool、SQLite、两边的历史回填 | ✅ |
 | 计分：按职业计时、BLS 时薪折算 $、单日纪录与同比 | ✅ |
 | 展示：桌面小部件、终端结算框、状态栏、`stats`；Claude Code 和 Codex 分开显示 | ✅ |
-| 旧设定（成就、公司阶段、网页面板 `shadowcorp panel`） | 仍可用，不再是主界面 |
+| 旧设定（成就、公司阶段、网页面板 `dango panel`） | 仍可用，不再是主界面 |
 | git 接入、安装脚本、Windows / Linux | 未开始 |
 
 ## 构建与试用
@@ -80,72 +82,72 @@ cargo build --release
 不碰真实数据，回放 fixtures 看结算框：
 
 ```bash
-SHADOWCORP_HOME=/tmp/sc-demo SHADOWCORP_TZ=+08:00 ./target/release/shadowcorp replay fixtures/hooks/claude_code
+DANGO_HOME=/tmp/sc-demo DANGO_TZ=+08:00 ./target/release/dango replay fixtures/hooks/claude_code
 ```
 
 把你的 Claude Code 和 Codex 历史导入一个临时目录（只读 `~/.claude/projects` 和 `~/.codex/sessions`）：
 
 ```bash
-SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp backfill
+DANGO_HOME=/tmp/sc-mine ./target/release/dango backfill
 ```
 
 ```bash
-SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp stats
+DANGO_HOME=/tmp/sc-mine ./target/release/dango stats
 ```
 
 ```bash
-SHADOWCORP_HOME=/tmp/sc-mine ./target/release/shadowcorp badges
+DANGO_HOME=/tmp/sc-mine ./target/release/dango badges
 ```
 
 ## 接入 Claude Code（手动，M8 前没有安装脚本）
 
-1. 把二进制放到 PATH 上，例如 `cp target/release/shadowcorp ~/.local/bin/`。
-2. 导入历史：`shadowcorp backfill`。
-3. 运行守护进程：`shadowcorp daemon`（开机自启的 LaunchAgent 属于 M8）。
-4. 装插件：`claude plugin marketplace add ~/shadowcorp`，再 `claude plugin install shadowcorp@shadowcorp`。
-5. 可选状态栏，加进 `~/.claude/settings.json`：`{ "statusLine": { "type": "command", "command": "shadowcorp status --claude" } }`
+1. 把二进制放到 PATH 上，例如 `cp target/release/dango ~/.local/bin/`。
+2. 导入历史：`dango backfill`。
+3. 运行守护进程：`dango daemon`（开机自启的 LaunchAgent 属于 M8）。
+4. 装插件：`claude plugin marketplace add ~/dango`，再 `claude plugin install dango@dango`。
+5. 可选状态栏，加进 `~/.claude/settings.json`：`{ "statusLine": { "type": "command", "command": "dango status --claude" } }`
 
 守护进程没运行时事件照样落盘，下次启动补算；结算框只在守护进程运行时出现。
 
 ## 接入 Codex
 
-1. 把 [plugins/codex/hooks.json](plugins/codex/hooks.json) 复制到 `~/.codex/hooks.json`，把里面的 `shadowcorp` 换成绝对路径（Codex 桌面版不一定能找到 `~/.local/bin`）。
+1. 把 [plugins/codex/hooks.json](plugins/codex/hooks.json) 复制到 `~/.codex/hooks.json`，把里面的 `dango` 换成绝对路径（Codex 桌面版不一定能找到 `~/.local/bin`）。
 2. 在 Codex 里用 `/hooks` 审阅并信任这些 hook（Codex 要求非托管 hook 先信任才会运行，改过文件要重新信任）。
-3. `shadowcorp backfill` 会一起导入 `~/.codex/sessions` 的历史。每个工具各有自己的分界点（第一个实时事件），所以重复跑不会重复计。信任 hook 之后再跑一次，可以补上中间那段。
+3. `dango backfill` 会一起导入 `~/.codex/sessions` 的历史。每个工具各有自己的分界点（第一个实时事件），所以重复跑不会重复计。信任 hook 之后再跑一次，可以补上中间那段。
 
 Codex 的每一步按和 Claude Code 一样的规则归给职业：命令（`Bash` / unified exec）、`apply_patch`（按文件拆开）、MCP 工具、子 agent。
 
 **分开看**：
 - 仪表盘顶部有「全部 / Claude Code / Codex」切换，今日 / 本周 / 本月 / 总计、30 天柱图、产出图、都当了谁都会跟着切。"都当了谁"超过 6 种时，点「还有 N 种 · 展开 ▾」看全部，「收起 ▴」收回。切到某个工具时点「生成今日日报」，生成的就是那个工具的日报。
-- 卡片和文字报告加 `--tool claude` 或 `--tool codex`：`shadowcorp card --week --tool codex`。不加时卡片头部会写出两边各自的 $ 和占比。
-- `shadowcorp stats` 在「请了谁」下面分别列出 Claude 和 Codex 各自请了谁。
+- 卡片和文字报告加 `--tool claude` 或 `--tool codex`：`dango card --week --tool codex`。不加时卡片头部会写出两边各自的 $ 和占比。
+- `dango stats` 在「请了谁」下面分别列出 Claude 和 Codex 各自请了谁。
 
 已知限制：Codex 的结算框会以提示（warning）的样式出现；Codex 内置的网页搜索不触发 hook，只有回填时能看到；Codex 的电脑操作（`cua_repl` 的点击、滚动）不计钱，和 Claude 里点浏览器一样。
 
 ## 网页面板（旧）
 
 ```bash
-shadowcorp panel
+dango panel
 ```
 
-在浏览器打开 `~/.shadowcorp/panel.html`：像素办公室（员工随 agent 工作打字、子 agent 起身、闲时喝咖啡、久了打盹、夜里只亮台灯）、累计人日与阶段、周环、连续、纪录、成就墙（点开看详情）、职业图鉴、最近 8 周人日。守护进程在有新活动时重写数据，页面每 2 秒刷新；新解锁的成就会弹出庆祝。纯本地文件，不联网、不开端口。这是 SPEC 第 9–10 节桌面面板的网页预览版，菜单栏 App 属于 M3。
+在浏览器打开 `~/.dango/panel.html`：像素办公室（员工随 agent 工作打字、子 agent 起身、闲时喝咖啡、久了打盹、夜里只亮台灯）、累计人日与阶段、周环、连续、纪录、成就墙（点开看详情）、职业图鉴、最近 8 周人日。守护进程在有新活动时重写数据，页面每 2 秒刷新；新解锁的成就会弹出庆祝。纯本地文件，不联网、不开端口。这是 SPEC 第 9–10 节桌面面板的网页预览版，菜单栏 App 属于 M3。
 
 ## 命令
 
 | 命令 | 作用 |
 | --- | --- |
-| `shadowcorp hook` | 所有 hook 的入口：读 stdin，写 spool，永远 exit 0 |
-| `shadowcorp status [--claude]` | 一行状态 |
-| `shadowcorp widget` | 启动桌面小部件（右下角） |
-| `shadowcorp report --day DATE [--names] [--json]` | 某天的文字日报 |
-| `shadowcorp card --day DATE [--names] [--out PNG]` | 日报分享卡（PNG + 剪贴板） |
-| `shadowcorp stats` / `badges` | 产出总览 / 旧的成就图鉴 |
-| `shadowcorp panel` | 旧的网页面板 |
-| `shadowcorp backfill` | 导入安装前的历史（可重复运行，不会重复计） |
-| `shadowcorp daemon` | 守护进程：tail spool，Unix socket 应答 |
-| `shadowcorp replay PATH…` | 回放 hook fixtures |
-| `shadowcorp rebuild` | 从事件表重建（总数变少则拒绝） |
-| `shadowcorp privacy-scan` | 检查本地数据里没有路径、代码、prompt |
+| `dango hook` | 所有 hook 的入口：读 stdin，写 spool，永远 exit 0 |
+| `dango status [--claude]` | 一行状态 |
+| `dango widget` | 启动桌面小部件（右下角） |
+| `dango report --day DATE [--names] [--json]` | 某天的文字日报 |
+| `dango card --day DATE [--names] [--out PNG]` | 日报分享卡（PNG + 剪贴板） |
+| `dango stats` / `badges` | 产出总览 / 旧的成就图鉴 |
+| `dango panel` | 旧的网页面板 |
+| `dango backfill` | 导入安装前的历史（可重复运行，不会重复计） |
+| `dango daemon` | 守护进程：tail spool，Unix socket 应答 |
+| `dango replay PATH…` | 回放 hook fixtures |
+| `dango rebuild` | 从事件表重建（总数变少则拒绝） |
+| `dango privacy-scan` | 检查本地数据里没有路径、代码、prompt |
 
 ## 验证结果（2026-10-28，本机）
 

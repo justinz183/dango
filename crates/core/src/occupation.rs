@@ -67,6 +67,8 @@ pub struct Table {
     pub source: String,
     /// The source, said on cards and the dashboard.
     pub label: String,
+    #[serde(default)]
+    pub label_en: String,
     pub as_of: String,
     /// Merged occupations: old id → the representative it counts as.
     #[serde(default)]
@@ -101,6 +103,20 @@ impl Table {
 
     pub fn name(&self, id: &str) -> &str {
         self.get(id).map(|o| o.name.as_str()).unwrap_or("其他")
+    }
+
+    /// The occupation's name in `lang`.
+    pub fn name_in(&self, id: &str, lang: crate::i18n::Lang) -> &str {
+        match (self.get(id), lang) {
+            (Some(o), crate::i18n::Lang::En) => o.name_en.as_str(),
+            (Some(o), _) => o.name.as_str(),
+            (None, l) => l.t("其他", "Other"),
+        }
+    }
+
+    /// Where the wages come from, in `lang`.
+    pub fn label_in(&self, lang: crate::i18n::Lang) -> &str {
+        if lang.en() && !self.label_en.is_empty() { &self.label_en } else { &self.label }
     }
 
     /// US$ for a set of minutes per occupation.
@@ -424,7 +440,6 @@ mod tests {
         remap(&mut w, Some("fin"));
         assert_eq!((w.get("fin"), w.get("writer")), (Some(&14.0), Some(&30.0)), "markets absorb research and data");
         assert!(!w.contains_key("research") && !w.contains_key("data"));
-        let mut w: BTreeMap<String, f64> = [("writer".into(), 30.0), ("research".into(), 5.0)].into();
         let mut w: BTreeMap<String, f64> = [("research".into(), 5.0)].into();
         remap(&mut w, None);
         assert_eq!(w.get("research"), Some(&5.0), "no topic, nothing moves");

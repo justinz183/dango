@@ -1,4 +1,4 @@
-//! The local visual panel: a self-contained page (~/.shadowcorp/panel.html)
+//! The local visual panel: a self-contained page (~/.dango/panel.html)
 //! plus the data it shows (panel-data.js), rewritten by the daemon after new
 //! activity so the office moves while an agent works. Both files stay on
 //! disk; nothing is served or uploaded. Derived values only.
@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use chrono::Duration;
 use rusqlite::Connection;
 use serde_json::{json, Value};
-use shadowcorp_core::achievements::{self, display_name, Catalog, Store};
-use shadowcorp_core::progress::record_label;
+use dango_core::achievements::{self, display_name, Catalog, Store};
+use dango_core::progress::record_label;
 
 use crate::ingest::{week_key, Result, Tz};
 use crate::paths::{write_private, Paths};
@@ -126,7 +126,7 @@ pub fn data(conn: &Connection, tz: Tz, cfg_target: f64, now: i64) -> Result<Valu
 /// the page path. Each write goes through a temp file and a rename so the
 /// page never reads half a file.
 pub fn write(paths: &Paths, conn: &Connection, tz: Tz, cfg_target: f64, now: i64) -> Result<PathBuf> {
-    let js = format!("window.SHADOWCORP_DATA = {};\n", data(conn, tz, cfg_target, now)?);
+    let js = format!("window.DANGO_DATA = {};\n", data(conn, tz, cfg_target, now)?);
     let page = html_path(paths);
     let html = TEMPLATE.replace("/*INLINE_DATA*/", &js.replace("</", "<\\/"));
     for (name, body) in [("panel-data.js", js.as_str()), ("panel.html", html.as_str())] {

@@ -23,7 +23,7 @@ version = "1.0"
 classifier_v2 = false
 
 [character]
-name = "Claude"            # 小部件里那个角色的名字
+name = ""                  # 角色的名字；空 = 中文叫"团子"，英文叫"Dango"
 
 [ceremony]
 sound = true
@@ -53,7 +53,7 @@ pub struct Character {
 
 impl Default for Character {
     fn default() -> Character {
-        Character { name: "Claude".into() }
+        Character { name: String::new() }
     }
 }
 
@@ -61,6 +61,8 @@ impl Default for Character {
 #[serde(default)]
 pub struct General {
     pub weekly_target: f64,
+    /// "zh-CN" or "en": the language of everything shown.
+    pub locale: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -88,7 +90,7 @@ impl Default for Config {
 }
 impl Default for General {
     fn default() -> General {
-        General { weekly_target: 0.0 }
+        General { weekly_target: 0.0, locale: "zh-CN".into() }
     }
 }
 impl Default for Sources {
@@ -103,6 +105,50 @@ impl Default for Ceremony {
 }
 
 impl Config {
+    pub fn lang(&self) -> dango_core::i18n::Lang {
+        dango_core::i18n::Lang::parse(&self.general.locale)
+    }
+
+    /// The character's name: the one set, else 团子 / Dango.
+    pub fn character_name(&self) -> String {
+        let n = self.character.name.trim();
+        if n.is_empty() { self.lang().t("团子", "Dango").to_string() } else { n.to_string() }
+    }
+
+    /// Writes the language into config.toml, keeping everything else.
+    pub fn set_locale(paths: &Paths, locale: &str) -> std::io::Result<()> {
+        let _ = Config::load(paths);
+        let s = fs::read_to_string(&paths.config).unwrap_or_default();
+        let line = format!("locale = \"{locale}\"");
+        let mut out = Vec::new();
+        let (mut section, mut done) = (String::new(), false);
+        for l in s.lines() {
+            let t = l.trim();
+            if t.starts_with('[') {
+                if section == "[general]" && !done {
+                    out.push(line.clone());
+                    done = true;
+                }
+                section = t.to_string();
+            }
+            if section == "[general]" && t.starts_with("locale") && t[6..].trim_start().starts_with('=') {
+                if !done {
+                    out.push(line.clone());
+                    done = true;
+                }
+                continue;
+            }
+            out.push(l.to_string());
+        }
+        if !done {
+            if section != "[general]" {
+                out.push("[general]".into());
+            }
+            out.push(line);
+        }
+        write_private(&paths.config, (out.join("\n") + "\n").as_bytes())
+    }
+
     /// Reads config.toml, writing the default file first if there is none.
     /// A malformed file falls back to defaults rather than stopping capture.
     pub fn load(paths: &Paths) -> Config {
@@ -126,6 +172,24 @@ mod tests {
         assert_eq!(c.general.weekly_target, 0.0);
         assert!(c.sources.claude_code && c.sources.codex);
         assert_eq!(c.ceremony.grand_cooldown_hours, 4.0);
-        assert_eq!(c.character.name, "Claude");
+        assert_eq!(c.character_name(), "团子");
+        assert_eq!(c.lang(), dango_core::i18n::Lang::Zh);
+    }
+
+    #[test]
+    fn locale_is_written_in_place() {
+        let dir = std::env::temp_dir().join(format!("dango-cfg-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let p = Paths::at(&dir);
+        Config::set_locale(&p, "en").unwrap();
+        let c = Config::load(&p);
+        assert_eq!(c.lang(), dango_core::i18n::Lang::En);
+        assert_eq!(c.character_name(), "Dango");
+        assert_eq!(c.ceremony.grand_cooldown_hours, 4.0, "the rest is kept");
+        Config::set_locale(&p, "zh-CN").unwrap();
+        let s = fs::read_to_string(&p.config).unwrap();
+        assert_eq!(s.matches("locale").count(), 1, "{s}");
+        assert_eq!(Config::load(&p).lang(), dango_core::i18n::Lang::Zh);
+        let _ = fs::remove_dir_all(&dir);
     }
 }

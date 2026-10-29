@@ -1,4 +1,4 @@
-//! ~/.shadowcorp/widget.json: the state the desktop widget shows — the
+//! ~/.dango/widget.json: the state the desktop widget shows — the
 //! headline dollars and rank for the collapsed panel, the character's live
 //! mood and line, and the history the expanded dashboard draws. Rewritten
 //! by the daemon after new activity.
@@ -9,10 +9,11 @@ use std::fs;
 use chrono::{Datelike, Duration, Timelike};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
-use shadowcorp_core::occupation::{self, Table};
-use shadowcorp_core::pricing;
-use shadowcorp_core::render::{fmt_hours, fmt_usd};
-use shadowcorp_core::scoring::ScoringConstants;
+use dango_core::occupation::{self, Table};
+use dango_core::pricing;
+use dango_core::i18n::{a_job, Lang};
+use dango_core::render::{fmt_hours_in, fmt_usd};
+use dango_core::scoring::ScoringConstants;
 
 use crate::config::Config;
 use crate::ingest::{day_key, week_key, Result, Tz};
@@ -34,6 +35,29 @@ pub fn work_of(json: &str) -> BTreeMap<String, f64> {
         *out.entry(t.canon(&o).to_string()).or_default() += m;
     }
     out
+}
+
+/// Puts every occupation's name in `lang`: objects that carry an
+/// occupation as "id" (or "job") and a "name" (or "job_name").
+pub fn localize(v: &mut Value, lang: Lang) {
+    let t = Table::builtin();
+    match v {
+        Value::Object(m) => {
+            for (key, name_key) in [("id", "name"), ("job", "name"), ("job", "job_name")] {
+                let id = m.get(key).and_then(Value::as_str).map(str::to_string);
+                if let (Some(id), true) = (id, m.contains_key(name_key)) {
+                    if t.get(&id).is_some() {
+                        m.insert(name_key.into(), json!(t.name_in(&id, lang)));
+                    }
+                }
+            }
+            for x in m.values_mut() {
+                localize(x, lang);
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| localize(x, lang)),
+        _ => {}
+    }
 }
 
 /// Display name and colour of an agent (sessions.source).
@@ -232,50 +256,54 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
     let today = tz.date(now);
     let prev_week = snapshot::counter(conn, "usd", &format!("week:{}", week_key(today - Duration::days(7))));
     let days = days_together(conn, tz, now);
-    let job_name = job.map(|j| t.name(j).to_string());
+    let lang = cfg.lang();
+    let en = lang.en();
+    let job_name = job.map(|j| t.name_in(j, lang).to_string());
+    let s = |zh: &str, en: &str| lang.t(zh, en).to_string();
     let (mood, line) = if working > 0 && since < 20 * MIN_MS {
         if hour < 5 {
-            ("sleepy", "这么晚了，还在干。".to_string())
+            ("sleepy", s("这么晚了，还在干。", "Still at it this late."))
         } else if subagents > 0 {
-            ("focused", format!("带着 {subagents} 个帮手在干。"))
+            ("focused", if en { format!("Working with {subagents} helpers.") } else { format!("带着 {subagents} 个帮手在干。") })
         } else if let Some(j) = &job_name {
-            ("focused", format!("在当{j}，别催。"))
+            ("focused", if en { format!("Working as {} right now. Don't rush me.", a_job(j)) } else { format!("在当{j}，别催。") })
         } else {
-            ("focused", "在做了，别催。".to_string())
+            ("focused", s("在做了，别催。", "On it. Don't rush me."))
         }
     } else if since > 14 * DAY_MS && last_event.is_some() {
-        ("missing", "欢迎回来，灯一直亮着。".to_string())
+        ("missing", s("欢迎回来，灯一直亮着。", "Welcome back. I kept the lights on."))
     } else if since > 60 * MIN_MS {
         if hour < 11 {
-            ("waiting", "早。我在，随时开工。".to_string())
+            ("waiting", s("早。我在，随时开工。", "Morning. Ready when you are."))
         } else if hour >= 22 {
-            ("waiting", "不早了，要干就快。".to_string())
+            ("waiting", s("不早了，要干就快。", "It's late. Let's be quick."))
         } else {
-            ("waiting", "我在，随时开工。".to_string())
+            ("waiting", s("我在，随时开工。", "I'm here. Ready when you are."))
         }
     } else if o.today_usd >= 20.0 && o.today_usd + 1e-9 >= o.record_day_usd {
-        ("proud", "今天破了单日纪录。".to_string())
+        ("proud", s("今天破了单日纪录。", "A new daily record today."))
     } else if o.today_hours >= 16.0 {
-        ("proud", "今天顶一个人干两天。".to_string())
+        ("proud", s("今天顶一个人干两天。", "Two days of one person's work today."))
     } else if let Some((work, pd, _, test_run, passed, usd)) = last.filter(|l| now - l.2 < 30 * MIN_MS) {
         if test_run == 1 && passed == Some(1) {
-            ("happy", "这把测试全绿。".to_string())
+            ("happy", s("这把测试全绿。", "All tests green this time."))
         } else {
-            let job = occupation::main(&work_of(&work)).map(|o| t.name(&o).to_string()).unwrap_or_default();
-            ("happy", format!("刚干了 {} 的{}活，值 {}。", fmt_hours(pd * k.caps.minutes_per_day / 60.0), job, fmt_usd(usd)))
+            let job = occupation::main(&work_of(&work)).map(|o| t.name_in(&o, lang).to_string()).unwrap_or_default();
+            let h = fmt_hours_in(pd * k.caps.minutes_per_day / 60.0, lang);
+            ("happy", if en { format!("Just did {h} of {} work, worth {}.", dango_core::i18n::lower_first(&job), fmt_usd(usd)) } else { format!("刚干了 {h} 的{job}活，值 {}。", fmt_usd(usd)) })
         }
     } else if let Some(l) = o.week_leverage.filter(|l| *l >= 10.0 && o.week_cost >= 1.0) {
-        ("happy", format!("这周每花 $1，干出 ${:.0} 的活。", l))
+        ("happy", if en { format!("This week every $1 of model did ${l:.0} of work.") } else { format!("这周每花 $1，干出 ${l:.0} 的活。") })
     } else if prev_week > 0.0 && o.week_usd > prev_week * 1.2 && local.weekday().num_days_from_monday() >= 3 {
-        ("happy", format!("这周比上周多 {}。", fmt_usd(o.week_usd - prev_week)))
+        ("happy", if en { format!("Up {} on last week.", fmt_usd(o.week_usd - prev_week)) } else { format!("这周比上周多 {}。", fmt_usd(o.week_usd - prev_week)) })
     } else if o.today_usd > 0.0 && (days == 7 || days % 30 == 0 || days % 100 == 0) {
-        ("happy", format!("一起干活的第 {days} 天。"))
+        ("happy", if en { format!("Day {days} of working together.") } else { format!("一起干活的第 {days} 天。") })
     } else if o.today_usd > 0.0 {
-        ("happy", format!("今天干了 {} 的活。", fmt_usd(o.today_usd)))
+        ("happy", if en { format!("{} of work today.", fmt_usd(o.today_usd)) } else { format!("今天干了 {} 的活。", fmt_usd(o.today_usd)) })
     } else {
-        ("waiting", "我在，随时开工。".to_string())
+        ("waiting", s("我在，随时开工。", "I'm here. Ready when you are."))
     };
-    Ok(json!({ "name": cfg.character.name, "mood": mood, "line": line, "days_together": days }))
+    Ok(json!({ "name": cfg.character_name(), "mood": mood, "line": line, "days_together": days }))
 }
 
 /// The last ten turns, newest first, for all agents or one.
@@ -389,9 +417,11 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         views.insert(src.clone(), view(conn, tz, now, Some(&src))?);
     }
 
-    Ok(json!({
+    let lang = cfg.lang();
+    let mut out = json!({
         "generated_at": now,
-        "rates": { "source": t.source, "label": t.label, "as_of": t.as_of },
+        "lang": lang.code(),
+        "rates": { "source": t.source, "label": t.label_in(lang), "as_of": t.as_of },
         "occupations": t.occupation.iter().map(|o| json!({ "id": o.id, "name": o.name, "color": o.color, "scene": o.scene, "look": o.look })).collect::<Vec<_>>(),
         "character": character(conn, tz, cfg, &o, now, working, subagents, last_event, job.as_deref())?,
         "record": { "day_usd": o.record_day_usd },
@@ -414,7 +444,9 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         "views": views,
         "activity": { "working": working, "subagents": subagents, "last_event": last_event, "job": job_json },
         "office": office(conn, tz, now)?,
-    }))
+    });
+    localize(&mut out, lang);
+    Ok(out)
 }
 
 /// Writes widget.json through a temp file and a rename so the widget never

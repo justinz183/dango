@@ -69,13 +69,13 @@ pub fn respond(p: &mut Processor, paths: &Paths, req: &Value) -> Value {
         "ping" | "flush" => json!({ "ok": true }),
         "settle" => {
             let Some(summary) = sid.and_then(|s| p.settlements.remove(s)) else { return json!({ "ok": true }) };
-            let mut text = shadowcorp_core::render::settlement_box(&summary);
+            let mut text = dango_core::render::settlement_box(&summary);
             if let Ok(Some(badge)) = snapshot::take_grand(&p.conn, now, p.cfg.ceremony.grand_cooldown_hours) {
                 text = format!("{text}\n{badge}");
             }
             json!({ "ok": true, "text": text })
         }
-        "status" => match snapshot::status(&p.conn, p.tz, now, sid) {
+        "status" => match snapshot::status(&p.conn, p.tz, now, sid, p.cfg.lang()) {
             Ok(t) => json!({ "ok": true, "text": t }),
             Err(e) => json!({ "ok": false, "error": e.to_string() }),
         },
@@ -102,7 +102,7 @@ fn serve_client(stream: UnixStream, shared: &Mutex<Processor>, paths: &Paths) {
 /// the spool offset only advances in the same transaction as the work.
 pub fn run(paths: &Paths) -> Result<()> {
     let Some(_lock) = try_lock(paths)? else {
-        return Err("another shadowcorp daemon is already running".into());
+        return Err("another dango daemon is already running".into());
     };
     let shared = Arc::new(Mutex::new(open_processor(paths, Mode::Live)?));
     let _ = fs::remove_file(&paths.sock);
@@ -117,23 +117,32 @@ pub fn run(paths: &Paths) -> Result<()> {
             }
         });
     }
-    eprintln!("shadowcorp daemon: watching {}", paths.spool.display());
+    eprintln!("dango daemon: watching {}", paths.spool.display());
     {
         let p = shared.lock().unwrap_or_else(|e| e.into_inner());
         if let Err(e) = panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())
             .and_then(|_| widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms()))
         {
-            eprintln!("shadowcorp daemon: panel write failed: {e}");
+            eprintln!("dango daemon: panel write failed: {e}");
         }
     }
     let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
     let (claude_dir, codex_dir) = (home.join(".claude"), home.join(".codex"));
     let mut tick: u64 = 0;
+    let modified = |p: &Paths| fs::metadata(&p.config).and_then(|m| m.modified()).ok();
+    let mut config_at = modified(paths);
     loop {
         {
             let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+            // A changed config.toml (the language switch) applies right away.
+            let now_at = modified(paths);
+            if now_at != config_at {
+                config_at = now_at;
+                p.cfg = Config::load(paths);
+                let _ = widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms());
+            }
             if let Err(e) = ingest_and_refresh(&mut p, paths) {
-                eprintln!("shadowcorp daemon: ingest failed: {e}");
+                eprintln!("dango daemon: ingest failed: {e}");
             }
         }
         // Every ~10 s, price turns that ended a little while ago. The logs
@@ -151,7 +160,7 @@ pub fn run(paths: &Paths) -> Result<()> {
                         let _ = widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms());
                     }
                     Ok(_) => {}
-                    Err(e) => eprintln!("shadowcorp daemon: usage failed: {e}"),
+                    Err(e) => eprintln!("dango daemon: usage failed: {e}"),
                 }
             }
         }

@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 use serde_json::Value;
-use shadowcorp_core::event::{Event, Kind, Source};
-use shadowcorp_core::pricing::{price_key, Tokens};
+use dango_core::event::{Event, Kind, Source};
+use dango_core::pricing::{price_key, Tokens};
 
 use crate::backfill::{codex_files, ts_of};
 use crate::ingest::{Processor, Result};
@@ -192,7 +192,7 @@ pub fn apply(p: &mut Processor, events: &[Event]) -> Result<usize> {
         match p.handle(ev) {
             Ok(true) => n += 1,
             Ok(false) => {}
-            Err(e) => eprintln!("shadowcorp: skipped usage {}: {e}", ev.id),
+            Err(e) => eprintln!("dango: skipped usage {}: {e}", ev.id),
         }
     }
     p.commit()?;

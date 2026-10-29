@@ -9,8 +9,8 @@ use std::path::Path;
 use std::process::Command;
 
 use serde_json::{json, Value};
-use shadowcorp_core::{classify, occupation};
-use shadowcorp_core::event::{Event, Kind, Payload, Source};
+use dango_core::{classify, occupation};
+use dango_core::event::{Event, Kind, Payload, Source};
 
 use crate::paths::{short_hash, write_private, Paths};
 

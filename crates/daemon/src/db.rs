@@ -1,5 +1,5 @@
 //! SQLite schema (SPEC 13). `events` is the only source of truth; every other
-//! table can be rebuilt from it with `shadowcorp rebuild`.
+//! table can be rebuilt from it with `dango rebuild`.
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

@@ -19,6 +19,7 @@
 #              ASCII keywords match whole words; others match anywhere.
 source = "BLS OEWS May 2025, national hourly median"
 label = "按美国劳工统计局 2025 年 5 月各职业时薪中位数折算"
+label_en = "Priced at each job's US median hourly wage (BLS, May 2025)"
 as_of = "2026-10-29"
 
 # Occupations merged into their field's representative (2026-10-29). Old
@@ -136,7 +137,7 @@ default = "research"
 [[occupation]]
 id = "swe"
 name = "软件工程师"
-name_en = "Software developer"
+name_en = "Software engineer"
 soc = "15-1252"
 rate = 65.38
 color = "#4a78c4"
@@ -151,7 +152,7 @@ weak = ["写个", "实现", "脚本", "程序", "class", "function", "variable",
 [[occupation]]
 id = "web"
 name = "前端工程师"
-name_en = "Web developer"
+name_en = "Front-end engineer"
 soc = "15-1254"
 rate = 47.49
 color = "#2f9e9e"
@@ -166,7 +167,7 @@ weak = []
 [[occupation]]
 id = "qa"
 name = "测试工程师"
-name_en = "QA tester"
+name_en = "QA engineer"
 soc = "15-1253"
 rate = 50.14
 color = "#8a6fd1"
@@ -181,7 +182,7 @@ weak = []
 [[occupation]]
 id = "ops"
 name = "运维工程师"
-name_en = "Systems administrator"
+name_en = "Ops engineer"
 soc = "15-1244"
 rate = 47.66
 color = "#6f7f8f"
@@ -196,7 +197,7 @@ weak = []
 [[occupation]]
 id = "data"
 name = "数据分析师"
-name_en = "Data scientist"
+name_en = "Data analyst"
 soc = "15-2051"
 rate = 57.8
 color = "#3c9a5f"
@@ -212,7 +213,7 @@ weak = ["数据", "分析", "统计", "图表", "excel", "csv", "表格", "平�
 [[occupation]]
 id = "doctor"
 name = "医生"
-name_en = "Family medicine physician"
+name_en = "Doctor"
 soc = "29-1215"
 rate = 117.39
 color = "#e35d6a"
@@ -243,7 +244,7 @@ weak = ["运动", "锻炼", "减脂", "体能", "动作", "姿势", "分钟", "�
 [[occupation]]
 id = "counselor"
 name = "心理咨询师"
-name_en = "Mental health counselor"
+name_en = "Counselor"
 soc = "21-1018"
 rate = 28.53
 color = "#9575cd"
@@ -394,7 +395,7 @@ weak = ["成分", "反应", "混合", "分解", "稳定", "安全", "危险", "�
 [[occupation]]
 id = "biologist"
 name = "生物学家"
-name_en = "Biological scientist"
+name_en = "Biologist"
 soc = "19-1029"
 rate = 47.56
 color = "#43a047"
@@ -439,7 +440,7 @@ weak = ["责任", "规定", "可以吗", "能不能", "违规", "投诉", "举�
 [[occupation]]
 id = "research"
 name = "研究员"
-name_en = "Research analyst"
+name_en = "Researcher"
 soc = "13-1161"
 rate = 37.87
 color = "#8fb04a"
@@ -454,7 +455,7 @@ weak = ["研究", "分析", "对比", "区别", "哪个好", "推荐", "评测",
 [[occupation]]
 id = "entry"
 name = "资料录入"
-name_en = "Data entry"
+name_en = "Data entry clerk"
 soc = "43-9021"
 rate = 19.88
 color = "#a39a8a"

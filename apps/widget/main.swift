@@ -1,12 +1,12 @@
-// shadowcorp-widget: a small always-on-top panel in the bottom-right corner
+// dango-widget: a small always-on-top panel in the bottom-right corner
 // of the screen showing what the agent's output would have cost to hire
 // out ($), rank and XP. Click it to expand a dashboard (today / week / month
 // / total, 30-day chart, rank road, who you would have hired, recent turns);
 // click its header or anywhere else to collapse.
-// Reads ~/.shadowcorp/widget.json (written by the daemon) every 2 seconds.
+// Reads ~/.dango/widget.json (written by the daemon) every 2 seconds.
 // No dock icon, no menu bar item; right-click for the menu.
 //
-// Build: apps/widget/build.sh (binary) or apps/widget/bundle.sh (ShadowCorp.app)
+// Build: apps/widget/build.sh (binary) or apps/widget/bundle.sh (Dango.app)
 // Snapshots (no window): --snapshot-dashboard out.png
 // [--board claude_code|codex] [--range 1|7|30] [--open-jobs] [--office N], --snapshot-office out.png
 // [--jobs id,…] [--working K] [--walk SEC], --snapshot-pet out.png [--state S]
@@ -17,12 +17,28 @@ import Foundation
 
 signal(SIGHUP, SIG_IGN)
 
-let home = ProcessInfo.processInfo.environment["SHADOWCORP_HOME"].flatMap { $0.isEmpty ? nil : $0 }
-    ?? NSHomeDirectory() + "/.shadowcorp"
+/// ~/.dango, or $DANGO_HOME; an install from before the rename keeps ~/.shadowcorp.
+let home: String = {
+    let env = ProcessInfo.processInfo.environment
+    if let h = (env["DANGO_HOME"] ?? env["SHADOWCORP_HOME"]).flatMap({ $0.isEmpty ? nil : $0 }) { return h }
+    let (new, old) = (NSHomeDirectory() + "/.dango", NSHomeDirectory() + "/.shadowcorp")
+    return !FileManager.default.fileExists(atPath: new) && FileManager.default.fileExists(atPath: old) ? old : new
+}()
 let dataURL = URL(fileURLWithPath: home + "/widget.json")
-let agentLabel = "com.shadowcorp.widget"
+let agentLabel = "com.dango.widget"
 let agentPlist = NSHomeDirectory() + "/Library/LaunchAgents/\(agentLabel).plist"
 let dashboardWidth: CGFloat = 420
+/// The interface language ("zh" / "en"): from widget.json, or from a card's
+/// report while it is drawn; remembered for the next launch.
+var lang = UserDefaults.standard.string(forKey: "lang") ?? "zh"
+/// The Chinese or the English text.
+func L(_ zh: String, _ en: String) -> String { lang == "en" ? en : zh }
+
+/// The dango command, wherever it is installed (the old name still works).
+func cliPath() -> String? {
+    [NSHomeDirectory() + "/.local/bin/dango", "/usr/local/bin/dango", "/opt/homebrew/bin/dango", NSHomeDirectory() + "/.local/bin/shadowcorp"]
+        .first { FileManager.default.isExecutableFile(atPath: $0) }
+}
 let originKey = "petOrigin"
 
 // Output bars: one hue (single series), brighter for today.
@@ -117,7 +133,7 @@ struct Model {
 }
 
 /// Display name of an agent id for the dashboard switch.
-let boardNames = ["all": "全部", "claude_code": "Claude Code", "codex": "Codex"]
+var boardNames: [String: String] { ["all": L("全部", "All"), "claude_code": "Claude Code", "codex": "Codex"] }
 
 /// Reads the dashboard numbers (tiles, 30 days, jobs, turns) from the top
 /// level of widget.json or from one of its `views`.
@@ -169,6 +185,10 @@ func loadModel() -> Model? {
     func obj(_ k: String) -> [String: Any] { j[k] as? [String: Any] ?? [:] }
     func list(_ k: String) -> [[String: Any]] { j[k] as? [[String: Any]] ?? [] }
     var m = Model()
+    if let l = j["lang"] as? String, l != lang {
+        lang = l
+        UserDefaults.standard.set(l, forKey: "lang")
+    }
     let act = obj("activity")
     applyBoard(&m, j)
     m.weekLeverage = obj("week")["leverage"] as? Double
@@ -225,7 +245,7 @@ func fmtUSD(_ x: Double) -> String {
 
 /// "25 分钟" under an hour, "3.4h" under a hundred, "123h" above.
 func fmtHours(_ h: Double) -> String {
-    if h < 1 { return "\(Int((h * 60).rounded())) 分钟" }
+    if h < 1 { return "\(Int((h * 60).rounded())) " + L("分钟", "min") }
     if h < 100 { return String(format: "%.1fh", h) }
     return fmtInt(Int(h.rounded())) + "h"
 }
@@ -350,7 +370,7 @@ final class DashboardView: NSView {
         let inner = W - 2 * pad
         var y: CGFloat = 16
         guard let base = model, let m = shown else {
-            if draw { put(text("等待数据…", size: 13, weight: .medium, color: secondary), pad, y) }
+            if draw { put(text(L("等待数据…", "Waiting for data…"), size: 13, weight: .medium, color: secondary), pad, y) }
             return 80
         }
 
@@ -361,21 +381,22 @@ final class DashboardView: NSView {
             characterBadge(NSRect(x: pad, y: y, width: 48, height: 48), mood: base.mood, ring: tone, job: base.job)
             let total = text(fmtUSD(base.totalUSD), size: 20, weight: .bold, mono: true)
             put(total, pad + 60, y)
-            put(text("累计", size: 11, color: secondary), pad + 66 + total.size().width, y + 6)
+            put(text(L("累计", "total"), size: 11, color: secondary), pad + 66 + total.size().width, y + 6)
             if let j = base.job {
-                put(text("· 在当\(j.name)", size: 11, color: j.color), pad + 66 + total.size().width + 30, y + 6)
+                put(text(L("· 在当\(j.name)", "· working as \(j.name)"), size: 11, color: j.color), pad + 66 + total.size().width + 30, y + 6)
             }
-            put(text("\(base.name)：\(base.line)", size: 12, color: primary), pad + 60, y + 27)
-            put(text("收起 ⌄", size: 11, color: secondary), W - pad, y + 5, align: 2)
+            put(text(base.name + L("：", ": ") + base.line, size: 12, color: primary), pad + 60, y + 27)
+            put(text(L("收起 ⌄", "Close ⌄"), size: 11, color: secondary), W - pad, y + 5, align: 2)
         }
         y += 58
         let beating = base.recordUSD > 0 && base.todayUSD + 1e-9 >= base.recordUSD && base.todayUSD > 0
         if draw { bar(NSRect(x: pad, y: y, width: inner, height: 6), base.recordUSD > 0 ? base.todayUSD / base.recordUSD : 0, tone) }
         y += 12
         if draw {
-            let s = beating ? "今天就是单日纪录 ✦ \(fmtUSD(base.todayUSD))" : "今日 \(fmtUSD(base.todayUSD)) · 单日纪录 \(fmtUSD(base.recordUSD))"
+            let s = beating ? L("今天就是单日纪录 ✦ ", "New best day ✦ ") + fmtUSD(base.todayUSD)
+                : L("今日 \(fmtUSD(base.todayUSD)) · 单日纪录 \(fmtUSD(base.recordUSD))", "Today \(fmtUSD(base.todayUSD)) · best day \(fmtUSD(base.recordUSD))")
             put(text(s, size: 11, color: beating ? tone : secondary, mono: true), pad, y)
-            if base.daysTogether > 0 { put(text("一起干活第 \(base.daysTogether) 天", size: 11, color: secondary), W - pad, y, align: 2) }
+            if base.daysTogether > 0 { put(text(L("一起干活第 \(base.daysTogether) 天", "Day \(base.daysTogether) together"), size: 11, color: secondary), W - pad, y, align: 2) }
         }
         y += 22
         headerBottom = y
@@ -404,8 +425,9 @@ final class DashboardView: NSView {
         }
         var rx = W - pad
         for days in [30, 7, 1] {
-            let probe = pill("\(days) 天", on: days == range, x: 0, draw: false)
-            let r = pill("\(days) 天", on: days == range, x: rx - probe.width, draw: draw)
+            let label = L("\(days) 天", days == 1 ? "1 day" : "\(days) days")
+            let probe = pill(label, on: days == range, x: 0, draw: false)
+            let r = pill(label, on: days == range, x: rx - probe.width, draw: draw)
             rangeRects.append((days, r))
             rx = r.minX - 6
         }
@@ -416,8 +438,8 @@ final class DashboardView: NSView {
         let staff = base.office
         let atWork = staff.filter(\.working).count
         let slacking = staff.count - atWork
-        let who = [atWork > 0 ? "\(atWork) 人在干" : nil, slacking > 0 ? "\(slacking) 人摸鱼" : nil].compactMap { $0 }.joined(separator: " · ")
-        section("办公室", y, right: who.isEmpty ? nil : who, draw: draw)
+        let who = [atWork > 0 ? L("\(atWork) 人在干", "\(atWork) working") : nil, slacking > 0 ? L("\(slacking) 人摸鱼", "\(slacking) slacking") : nil].compactMap { $0 }.joined(separator: " · ")
+        section(L("办公室", "Office"), y, right: who.isEmpty ? nil : who, draw: draw)
         y += 22
         office.frame = NSRect(x: pad, y: y, width: inner, height: OfficeView.height)
         office.occupants = staff
@@ -431,12 +453,12 @@ final class DashboardView: NSView {
             if draw {
                 dot.setFill()
                 NSBezierPath(ovalIn: NSRect(x: pad, y: y + 4, width: 7, height: 7)).fill()
-                put(text("只看 \(name) 的", size: 11, weight: .semibold, color: dot), pad + 13, y)
+                put(text(L("只看 \(name) 的", "Only \(name)"), size: 11, weight: .semibold, color: dot), pad + 13, y)
             }
             y += 20
         }
-        let tiles: [(String, Double, Double, Double)] = [("今日", m.todayUSD, m.todayHours, m.todayCost), ("本周", m.weekUSD, m.weekHours, m.weekCost),
-                                                          ("本月", m.monthUSD, m.monthHours, m.monthCost), ("总计", m.totalUSD, m.totalHours, m.totalCost)]
+        let tiles: [(String, Double, Double, Double)] = [(L("今日", "Today"), m.todayUSD, m.todayHours, m.todayCost), (L("本周", "This week"), m.weekUSD, m.weekHours, m.weekCost),
+                                                          (L("本月", "This month"), m.monthUSD, m.monthHours, m.monthCost), (L("总计", "Total"), m.totalUSD, m.totalHours, m.totalCost)]
         let gap: CGFloat = 8
         let tw = (inner - gap * 3) / 4
         if draw {
@@ -447,19 +469,19 @@ final class DashboardView: NSView {
                 put(text(t.0, size: 10, color: secondary), r.minX + 9, r.minY + 8)
                 put(text(fmtUSD(t.1), size: 15, weight: .bold, mono: true), r.minX + 9, r.minY + 22)
                 // Under the dollars: the model cost and the leverage, else the hours.
-                let sub = t.3 >= 0.01 ? "花 \(fmtUSD(t.3)) · \(fmtLev(t.1, t.3))" : fmtHours(t.2) + " 的活"
+                let sub = t.3 >= 0.01 ? L("花 ", "cost ") + "\(fmtUSD(t.3)) · \(fmtLev(t.1, t.3))" : fmtHours(t.2) + L(" 的活", " of work")
                 put(text(sub, size: 9, color: secondary, mono: true), r.minX + 9, r.minY + 41)
             }
         }
         y += 58 + 22
 
-        let window = range == 1 ? "今天" : "\(range) 天"
+        let window = range == 1 ? L("今天", "today") : L("\(range) 天", "\(range) days")
         let jobsSel = (range == 1 ? m.jobs1 : range == 7 ? m.jobs7 : m.jobs).filter { $0.usd > 0 }
         let toolsSel = (range == 1 ? base.tools1 : range == 7 ? base.tools7 : base.tools).filter { $0.usd > 0 }
 
         // Claude Code and Codex side by side over the window.
         if filter == "all" && !toolsSel.isEmpty {
-            section("Claude Code 与 Codex（\(window)）", y, draw: draw)
+            section(L("Claude Code 与 Codex（\(window)）", "Claude Code and Codex (\(window))"), y, draw: draw)
             y += 22
             if draw {
                 var x = pad
@@ -501,19 +523,19 @@ final class DashboardView: NSView {
         } else {
             let days = Array(m.days.suffix(range))
             for d in days {
-                bars.append((d.usd, "\(shortDay(d.day)) · \(fmtUSD(d.usd)) · \(fmtHours(d.hours)) · \(d.turns) 个回合"))
+                bars.append((d.usd, "\(shortDay(d.day)) · \(fmtUSD(d.usd)) · \(fmtHours(d.hours)) · " + L("\(d.turns) 个回合", "\(d.turns) turns")))
             }
             if range == 7 {
-                ticks = days.indices.map { ($0, $0 == days.count - 1 ? "今天" : weekday(days[$0].day)) }
+                ticks = days.indices.map { ($0, $0 == days.count - 1 ? L("今天", "Today") : weekday(days[$0].day)) }
             } else {
-                ticks = [(0, shortDay(days.first?.day ?? "")), (days.count / 2, shortDay(days[max(0, days.count / 2)].day)), (days.count - 1, "今天")]
+                ticks = [(0, shortDay(days.first?.day ?? "")), (days.count / 2, shortDay(days[max(0, days.count / 2)].day)), (days.count - 1, L("今天", "Today"))]
             }
             current = days.count - 1
         }
         let total = bars.map(\.usd).reduce(0, +)
-        let rightLabel = range == 1 ? "共 " + fmtUSD(total) : "日均 " + fmtUSD(bars.isEmpty ? 0 : total / Double(bars.count))
+        let rightLabel = range == 1 ? L("共 ", "Total ") + fmtUSD(total) : L("日均 ", "Daily avg ") + fmtUSD(bars.isEmpty ? 0 : total / Double(bars.count))
         let agent = filter == "all" ? "" : (boardNames[filter] ?? filter) + " · "
-        section(agent + (range == 1 ? "今天每小时产出" : "最近 \(range) 天每日产出"), y, right: rightLabel, draw: draw)
+        section(agent + (range == 1 ? L("今天每小时产出", "Output by hour today") : L("最近 \(range) 天每日产出", "Daily output, last \(range) days")), y, right: rightLabel, draw: draw)
         y += 22
         let chartH: CGFloat = 112
         chartRect = NSRect(x: pad, y: y, width: inner, height: chartH)
@@ -522,17 +544,22 @@ final class DashboardView: NSView {
         y += chartH + 20
 
         // Who the window's work would have needed.
-        section(agent + "都当了谁（\(window)）", y, draw: draw)
+        section(agent + L("都当了谁（\(window)）", "Who you hired (\(window))"), y, draw: draw)
         y += 22
         if jobsSel.isEmpty {
-            if draw { put(text(filter == "all" ? "还没有回合" : "\(boardNames[filter] ?? filter)\(range == 1 ? "今天" : "这 \(range) 天")还没有回合", size: 11, color: secondary), pad, y) }
+            if draw { put(text(filter == "all" ? L("还没有回合", "No turns yet")
+                                     : L("\(boardNames[filter] ?? filter)\(range == 1 ? "今天" : "这 \(range) 天")还没有回合", "No \(boardNames[filter] ?? filter) turns \(range == 1 ? "today" : "in \(range) days")"),
+                              size: 11, color: secondary), pad, y) }
             y += 18
         } else {
             let maxU = max(jobsSel.map(\.usd).max() ?? 1, 0.01)
-            for c in jobsSel.prefix(jobsOpen ? jobsSel.count : 6) {
+            let rows = jobsSel.prefix(jobsOpen ? jobsSel.count : 6)
+            // The bars start after the longest name (English names run longer).
+            let nameW = min(130, max(66, (rows.map { text($0.name, size: 11).size().width }.max() ?? 0) + 10))
+            for c in rows {
                 if draw {
                     put(text(c.name, size: 11), pad, y)
-                    let br = NSRect(x: pad + 66, y: y + 5, width: inner - 66 - 150, height: 6)
+                    let br = NSRect(x: pad + nameW, y: y + 5, width: inner - nameW - 150, height: 6)
                     bar(br, c.usd / maxU, c.color)
                     let detail = String(format: "%@ × $%.0f = %@", fmtHours(c.hours), c.rate, fmtUSD(c.usd))
                     put(text(detail, size: 10, color: secondary, mono: true), W - pad, y + 1, align: 2)
@@ -543,7 +570,7 @@ final class DashboardView: NSView {
             if jobsSel.count > 6 {
                 // A dropdown: "还有 N 种 ▾" opens the rest, "收起 ▴" closes it.
                 let rest = jobsSel.dropFirst(6).map(\.usd).reduce(0, +)
-                let label = text(jobsOpen ? "收起 ▴" : "还有 \(jobsSel.count - 6) 种 · \(fmtUSD(rest))  展开 ▾", size: 10, weight: .medium, color: secondary)
+                let label = text(jobsOpen ? L("收起 ▴", "Less ▴") : L("还有 \(jobsSel.count - 6) 种 · \(fmtUSD(rest))  展开 ▾", "\(jobsSel.count - 6) more · \(fmtUSD(rest))  Show ▾"), size: 10, weight: .medium, color: secondary)
                 moreRect = NSRect(x: pad - 4, y: y - 3, width: label.size().width + 8, height: label.size().height + 6)
                 if draw {
                     NSColor.white.withAlphaComponent(0.05).setFill()
@@ -557,11 +584,11 @@ final class DashboardView: NSView {
 
         // Export: this period's card, for the agent the board shows; the
         // menu (right click) also has the period before.
-        section("导出报告", y, right: "存到 图片/ShadowCorp · 右键可导上一期", draw: draw)
+        section(L("导出报告", "Export"), y, right: L("存到 图片/Dango · 右键可导上一期", "To Pictures/Dango · right-click for earlier"), draw: draw)
         y += 22
         exportRects = []
         let bw = (inner - gap * 3) / 4
-        for (i, (kind, label)) in [("day", "今日日报"), ("week", "本周周报"), ("month", "本月月报"), ("year", "今年年报")].enumerated() {
+        for (i, (kind, label)) in [("day", L("今日日报", "Today")), ("week", L("本周周报", "This week")), ("month", L("本月月报", "This month")), ("year", L("今年年报", "This year"))].enumerated() {
             let r = NSRect(x: pad + CGFloat(i) * (bw + gap), y: y, width: bw, height: 32)
             exportRects.append((kind, r))
             if draw {
@@ -572,8 +599,8 @@ final class DashboardView: NSView {
         }
         y += 32 + 16
         if draw {
-            var foot = "按 BLS 各职业中位时薪折算"
-            if m.weekLeverage != nil { foot += " · 本周杠杆 " + fmtLev(m.weekUSD, m.weekCost) }
+            var foot = L("按 BLS 各职业中位时薪折算", "Priced at BLS median wages per job")
+            if m.weekLeverage != nil { foot += L(" · 本周杠杆 ", " · leverage this week ") + fmtLev(m.weekUSD, m.weekCost) }
             put(text(foot, size: 10, color: secondary), pad, y)
         }
         y += 30
@@ -633,7 +660,8 @@ final class DashboardView: NSView {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         guard let date = f.date(from: d) else { return d }
-        return ["日", "一", "二", "三", "四", "五", "六"][Calendar.current.component(.weekday, from: date) - 1]
+        let i = Calendar.current.component(.weekday, from: date) - 1
+        return lang == "en" ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i] : ["日", "一", "二", "三", "四", "五", "六"][i]
     }
 
     private func shortDay(_ d: String) -> String {
@@ -705,7 +733,7 @@ final class DashboardView: NSView {
 /// outfit, blinking, breathing), helpers behind it, and when `working` the
 /// job's scene (drawActivity) or, for desk jobs, a desk and laptop in front
 /// with hands typing. `c` is the character's box; everything else scales with it.
-func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, working: Bool, helpers: Int, desk: Bool? = nil, slump: CGFloat = 0) {
+func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, working: Bool, helpers: Int, desk: Bool? = nil, slump: CGFloat = 0, slab: Bool = true) {
     let s = c.width / 80
     // `slump` lowers the body only (asleep at the desk); the desk stays put.
     let bob = CGFloat(sin(t * (working ? 3.0 : 1.6))) * (working ? 1.3 : 0.9) * s - slump
@@ -728,8 +756,10 @@ func drawWorker(_ c: NSRect, job: Job?, mood: String, t: Double, blink: Bool, wo
     guard desk ?? working else { return }
     // Desk and laptop in front of the body; when working the laptop is open
     // with lines scrolling up the screen, a blinking cursor, hands typing.
-    NSColor(calibratedRed: 0.55, green: 0.47, blue: 0.4, alpha: 1).setFill()
-    NSBezierPath(roundedRect: NSRect(x: c.minX - 10 * s, y: c.minY - 8 * s, width: c.width + 20 * s, height: 9 * s), xRadius: 3 * s, yRadius: 3 * s).fill()
+    if slab {
+        NSColor(calibratedRed: 0.55, green: 0.47, blue: 0.4, alpha: 1).setFill()
+        NSBezierPath(roundedRect: NSRect(x: c.minX - 10 * s, y: c.minY - 8 * s, width: c.width + 20 * s, height: 9 * s), xRadius: 3 * s, yRadius: 3 * s).fill()
+    }
     NSColor(calibratedWhite: 0.22, alpha: 1).setFill()
     NSBezierPath(roundedRect: NSRect(x: c.midX - 24 * s, y: c.minY, width: 48 * s, height: 5 * s), xRadius: 2 * s, yRadius: 2 * s).fill()
     guard working else {
@@ -816,8 +846,13 @@ let leafGreen = NSColor(calibratedRed: 0.36, green: 0.62, blue: 0.38, alpha: 1)
 let glassTint = NSColor.white.withAlphaComponent(0.55)
 
 /// What each scene is called, on the sign over the stage.
-let sceneNames = ["desk": "工位", "studio": "工作室", "clinic": "诊室", "gym": "健身房", "kitchen": "后厨", "classroom": "教室",
-                  "court": "法庭", "lab": "实验室", "workshop": "车间", "garden": "花园", "lounge": "游戏角"]
+var sceneNames: [String: String] {
+    lang == "en"
+        ? ["desk": "Desks", "studio": "Studio", "clinic": "Clinic", "gym": "Gym", "kitchen": "Kitchen", "classroom": "Classroom",
+           "court": "Court", "lab": "Lab", "workshop": "Workshop", "garden": "Garden", "lounge": "Playroom"]
+        : ["desk": "工位", "studio": "工作室", "clinic": "诊室", "gym": "健身房", "kitchen": "后厨", "classroom": "教室",
+           "court": "法庭", "lab": "实验室", "workshop": "车间", "garden": "花园", "lounge": "游戏角"]
+}
 
 /// A job at work in its scene (`Job.scene`, any but "desk"), around the
 /// character in box `c`: the place's equipment, moving. The hands are on
@@ -1380,7 +1415,7 @@ func drawBackdrop(_ scene: String, _ r: NSRect, _ color: NSColor) {
         break
     }
     // The sign: what the place is.
-    let label = text(sceneNames[scene] ?? "工位", size: 9, weight: .semibold, color: color)
+    let label = text(sceneNames[scene] ?? L("工位", "Desks"), size: 9, weight: .semibold, color: color)
     let w = label.size().width + 14
     let plaque = NSRect(x: r.midX - w / 2, y: r.maxY - 17, width: w, height: 15)
     fillRound(plaque, 7.5, NSColor(calibratedWhite: 0.08, alpha: 0.7))
@@ -1516,9 +1551,9 @@ final class PetView: NSView {
         if t < flashUntil {
             caption = text(flashText, size: 11, weight: .semibold, color: tone, mono: true)
         } else if hovering, !m.line.isEmpty {
-            caption = text(truncate("\(m.name)：\(m.line)", size: 11, weight: .medium, width: bounds.width - 28), size: 11, weight: .medium)
+            caption = text(truncate(m.name + L("：", ": ") + m.line, size: 11, weight: .medium, width: bounds.width - 28), size: 11, weight: .medium)
         } else {
-            caption = text("今日 " + fmtUSD(m.todayUSD), size: 11, weight: .medium, color: secondary, mono: true)
+            caption = text(L("今日 ", "Today ") + fmtUSD(m.todayUSD), size: 11, weight: .medium, color: secondary, mono: true)
         }
         let w = min(bounds.width - 8, caption.size().width + 20)
         captionRect = NSRect(x: (bounds.width - w) / 2, y: 6, width: w, height: 22)
@@ -1586,28 +1621,65 @@ final class OfficeView: NSView {
     /// Walking speed, points a second.
     private let speed: CGFloat = 40
 
-    // The room's places, from the left wall.
+    // The room's places, from the left wall: door, coffee, sofa, the corner
+    // with the window and the flowers, then the stage to the right wall.
     private let floorH: CGFloat = 50
     private let doorX: CGFloat = 16
-    private let coffeeX: CGFloat = 62
-    private let seats: [CGFloat] = [102, 142]
-    private var stage: NSRect { NSRect(x: 168, y: floorH + 4, width: max(80, bounds.width - 168 - 66), height: bounds.height - floorH - 12) }
-    private var cornerX: CGFloat { bounds.width - 40 }
+    private let coffeeX: CGFloat = 58
+    private let seats: [CGFloat] = [90, 124]
+    private let cornerX: CGFloat = 160
+    /// The flower pot's centre, right of whoever waters it, under the spout.
+    private var plantX: CGFloat { cornerX + 40 }
+    private var stage: NSRect { NSRect(x: 212, y: floorH + 4, width: max(80, bounds.width - 212 - 8), height: bounds.height - floorH - 12) }
 
-    /// Where everyone should be now. Workers take the stage (two at most);
-    /// the rest share the break room's four places, in turns every two
-    /// minutes when there are more of them, each with a pastime that
-    /// changes every three.
+    /// Part of the stage: the people working in one scene. Everyone at a
+    /// desk shares one long desk.
+    private struct Bay { var scene: String; var rect: NSRect; var color: NSColor; var members: [(Occupant, CGFloat)] }
+
+    /// Workers on the stage, grouped by scene into bays as wide as their
+    /// people need (spare room shared out), four people at most; whoever
+    /// does not fit is named on the stage's edge. Characters shrink as the
+    /// stage fills.
+    private func stageLayout() -> (bays: [Bay], size: CGFloat, overflow: [Occupant]) {
+        let st = stage
+        let working = occupants.filter(\.working)
+        let first = Array(working.prefix(4))
+        let size: CGFloat = first.count <= 1 ? 54 : first.count == 2 ? 48 : 42
+        func need(_ scene: String, _ n: Int) -> CGFloat { scene == "desk" ? CGFloat(n) * (size - 10) + 28 : CGFloat(n) * (size + 4) + 22 }
+        var groups: [(String, [Occupant])] = []
+        for o in first {
+            if let i = groups.firstIndex(where: { $0.0 == o.job.scene }) { groups[i].1.append(o) } else { groups.append((o.job.scene, [o])) }
+        }
+        while groups.map({ need($0.0, $0.1.count) }).reduce(0, +) > st.width, let last = groups.indices.last {
+            groups[last].1.removeLast()
+            if groups[last].1.isEmpty { groups.removeLast() }
+        }
+        let spare = (st.width - groups.map { need($0.0, $0.1.count) }.reduce(0, +)) / CGFloat(max(groups.count, 1))
+        var x = st.minX
+        var bays: [Bay] = []
+        for (scene, members) in groups {
+            let w = need(scene, members.count) + spare
+            let r = NSRect(x: x, y: st.minY, width: w, height: st.height)
+            let step = (w - 20) / CGFloat(members.count)
+            bays.append(Bay(scene: scene, rect: r, color: members[0].job.color,
+                            members: members.enumerated().map { i, o in (o, r.minX + 10 + step * (CGFloat(i) + 0.5)) }))
+            x += w
+        }
+        let shown = Set(bays.flatMap { $0.members.map(\.0.job.id) })
+        return (bays, size, working.filter { !shown.contains($0.job.id) })
+    }
+
+    /// Where everyone should be now. Workers take the stage (four at most,
+    /// see `stageLayout`); the rest share the break room's four places, in
+    /// turns every two minutes when there are more of them, each with a
+    /// pastime that changes every three.
     private func plan(_ now: Double) -> [(Occupant, Pastime, CGFloat)] {
-        let workers = Array(occupants.filter(\.working).prefix(2))
         var idle = occupants.filter { !$0.working }
         if idle.count > 4 {
             let k = Int(now / 120_000) % idle.count
             idle = Array((idle + idle)[k..<k + 4])
         }
-        var out: [(Occupant, Pastime, CGFloat)] = workers.enumerated().map { i, o in
-            (o, .working, workers.count == 1 ? stage.midX : stage.minX + stage.width * (i == 0 ? 0.27 : 0.73))
-        }
+        var out: [(Occupant, Pastime, CGFloat)] = stageLayout().bays.flatMap { $0.members.map { ($0.0, Pastime.working, $0.1) } }
         let wants: [(Occupant, Pastime)] = idle.map { o in
             let mins = (now - o.since) / 60_000
             if mins < 15 { return (o, .coffee) }
@@ -1686,11 +1758,16 @@ final class OfficeView: NSView {
         let b = bounds
         let now = Date().timeIntervalSince1970 * 1000
         let plan = plan(now)
-        let workers = plan.filter { $0.1 == .working }
-        drawRoom(b, workers: workers, doorOpen: walkers.values.contains { $0.alpha < 1 })
+        let layout = stageLayout()
+        stageSize = layout.size
+        // Names only once people stand too close for a second line.
+        let xs = layout.bays.flatMap { $0.members.map(\.1) }.sorted()
+        crowded = xs.count > 2 || zip(xs, xs.dropFirst()).contains { $1 - $0 < 92 }
+        sharing = Set(layout.bays.filter { $0.scene == "desk" && $0.members.count > 1 }.flatMap { $0.members.map(\.0.job.id) })
+        drawRoom(b, layout: layout, doorOpen: walkers.values.contains { $0.alpha < 1 })
         if walkers.isEmpty {
-            put(text("现在没人在干活", size: 12, color: secondary), b.midX, floorH + 40, align: 1)
-            put(text("有 agent 开工，它就会走上舞台。", size: 10, color: secondary), b.midX, floorH + 22, align: 1)
+            put(text(L("现在没人在干活", "Nobody is working right now"), size: 12, color: secondary), b.midX, floorH + 40, align: 1)
+            put(text(L("有 agent 开工，它就会走上舞台。", "When an agent starts, someone walks on stage."), size: 10, color: secondary), b.midX, floorH + 22, align: 1)
             return
         }
         let target = Dictionary(plan.map { ($0.0.job.id, ($0.1, $0.2)) }, uniquingKeysWith: { a, _ in a })
@@ -1705,13 +1782,30 @@ final class OfficeView: NSView {
         for w in seated { person(w, doing(w)) }
         drawSofaFront()
         for w in all where !seated.contains(where: { $0.o.job.id == w.o.job.id }) { person(w, doing(w)) }
+        // A shared desk goes in front of everyone sitting at it.
+        let s = stageSize / 80
+        for bay in layout.bays where bay.scene == "desk" && bay.members.count > 1 {
+            let (x0, x1) = (bay.members.first!.1 - stageSize / 2 - 10 * s, bay.members.last!.1 + stageSize / 2 + 10 * s)
+            fillRound(NSRect(x: x0, y: floorH + 8 - 8 * s, width: x1 - x0, height: 9 * s), 3 * s, NSColor(calibratedRed: 0.55, green: 0.47, blue: 0.4, alpha: 1))
+        }
         // Names on the floor in two rows, never on top of each other. Whoever
         // is on the stage also says what they do and earn.
         var taken: [[ClosedRange<CGFloat>]] = [[], []]
-        for w in all where doing(w) == .working {
-            let width = workers.count > 1 ? stage.width / 2 - 6 : stage.width - 12
+        let onStage = all.filter { doing($0) == .working }.sorted { $0.x < $1.x }
+        for w in onStage {
+            if crowded {
+                // A full stage: names only, in whichever row is free.
+                let name = text(truncate(w.o.job.name, size: 9, weight: .semibold, width: 86), size: 9, weight: .semibold, color: w.o.job.color)
+                let half = name.size().width / 2 + 3
+                let span = w.x - half...w.x + half
+                guard let row = [0, 1].first(where: { r in !taken[r].contains { $0.overlaps(span) } }) else { continue }
+                taken[row].append(span)
+                put(name, w.x, row == 0 ? 22 : 8, align: 1)
+                continue
+            }
+            let width = onStage.count > 1 ? stage.width / 2 - 6 : stage.width - 12
             let name = text(truncate(w.o.job.name, size: 10, weight: .semibold, width: width), size: 10, weight: .semibold, color: w.o.job.color)
-            let sub = "在干" + (w.o.helpers > 0 ? " · +\(w.o.helpers)" : "") + " · " + fmtUSD(w.o.usd)
+            let sub = L("在干", "working") + (w.o.helpers > 0 ? " · +\(w.o.helpers)" : "") + " · " + fmtUSD(w.o.usd)
             let line = text(truncate(sub, size: 9, weight: .regular, width: width), size: 9, color: secondary, mono: true)
             put(name, w.x, 22, align: 1)
             put(line, w.x, 8, align: 1)
@@ -1729,12 +1823,17 @@ final class OfficeView: NSView {
         }
     }
 
+    /// Set from the stage layout on each draw.
+    private var stageSize: CGFloat = 54
+    private var crowded = false
+    private var sharing: Set<String> = []
+
     /// One person: walking, at work on the stage, or at a pastime.
     private func person(_ w: Walker, _ p: Pastime?) {
         let job = w.o.job
         let phase = t + Double(stableHash(job.id) % 100) * 0.07
         let blink = fmod(phase, 4.3) < 0.12
-        let size: CGFloat = p == .working ? 54 : 42
+        let size: CGFloat = p == .working ? stageSize : 42
         var c = NSRect(x: w.x - size / 2, y: floorH + (p == .working ? 8 : 4), width: size, height: size)
         faded(w.alpha) {
             switch p {
@@ -1742,7 +1841,9 @@ final class OfficeView: NSView {
                 let hop = CGFloat(abs(sin(phase * 9))) * 3
                 drawWorker(c.offsetBy(dx: 0, dy: hop), job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
             case .working:
-                drawWorker(c, job: job, mood: "focused", t: phase, blink: blink, working: true, helpers: w.o.helpers)
+                // Helpers stand behind the worker unless the stage is full.
+                drawWorker(c, job: job, mood: "focused", t: phase, blink: blink, working: true, helpers: crowded ? 0 : w.o.helpers,
+                           slab: !sharing.contains(job.id))
             case .coffee:
                 drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
                 // A mug in the hand toward the machine, steam rising.
@@ -1763,7 +1864,7 @@ final class OfficeView: NSView {
                     fillRound(NSRect(x: c.midX - 4.5, y: c.minY + 10, width: 9, height: 14), 1, job.color.withAlphaComponent(0.55 + 0.3 * CGFloat(sin(phase * 2.6))))
                 } else if Int(t / 2.2) % 2 == (w.x < (seats[0] + seats[1]) / 2 ? 0 : 1) {
                     // Taking turns to talk.
-                    let words = ["哈哈", "真的？", "…", "绝了"][Int(t / 4.4 + Double(stableHash(job.id) % 4)) % 4]
+                    let words = (lang == "en" ? ["haha", "really?", "…", "no way"] : ["哈哈", "真的？", "…", "绝了"])[Int(t / 4.4 + Double(stableHash(job.id) % 4)) % 4]
                     let label = text(words, size: 8, weight: .medium, color: ink)
                     let bw = label.size().width + 10
                     let bubble = NSRect(x: c.midX - bw / 2, y: c.maxY + 4, width: bw, height: 14)
@@ -1783,18 +1884,25 @@ final class OfficeView: NSView {
                 drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
             case .plant:
                 drawWorker(c, job: job, mood: "idle", t: phase, blink: blink, working: false, helpers: 0, desk: false)
-                // A watering can that tips toward the plant; drops when tipped.
-                let tilt = -20 - 15 * CGFloat(sin(phase * 1.5))
-                let hold = NSPoint(x: c.maxX - 2, y: c.minY + 18)
+                // A watering can held out at the body's right side, below
+                // the eyes, its spout over the flower pot; when it tips,
+                // drops fall from the spout's tip onto the soil.
+                let tilt = -17 - 15 * CGFloat(sin(phase * 1.5))
+                let hold = NSPoint(x: c.maxX + 1, y: c.minY + 20)
+                let can = NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.75, alpha: 1)
+                strokeLine(NSPoint(x: c.maxX - 6, y: c.minY + 14), hold, 5, ink)
                 rotated(hold, tilt) {
-                    fillRound(NSRect(x: hold.x, y: hold.y - 5, width: 13, height: 10), 2, NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.75, alpha: 1))
-                    fillPoly([NSPoint(x: hold.x + 12, y: hold.y + 2), NSPoint(x: hold.x + 20, y: hold.y + 6), NSPoint(x: hold.x + 20, y: hold.y + 4), NSPoint(x: hold.x + 12, y: hold.y - 2)],
-                             NSColor(calibratedRed: 0.45, green: 0.62, blue: 0.75, alpha: 1))
+                    fillRound(NSRect(x: hold.x, y: hold.y - 5, width: 13, height: 10), 2, can)
+                    fillPoly([NSPoint(x: hold.x + 12, y: hold.y + 2), NSPoint(x: hold.x + 20, y: hold.y + 6), NSPoint(x: hold.x + 20, y: hold.y + 4), NSPoint(x: hold.x + 12, y: hold.y - 2)], can)
                 }
-                if tilt < -28 {
-                    for k in 0..<2 {
-                        let fall = CGFloat(fmod(phase * 24 + Double(k) * 6, 12))
-                        fillOval(NSRect(x: hold.x + 17 + CGFloat(k) * 3, y: hold.y - 4 - fall, width: 2, height: 3), NSColor(calibratedRed: 0.55, green: 0.75, blue: 0.95, alpha: 0.9))
+                if tilt < -26 {
+                    let a = tilt * .pi / 180
+                    let tip = NSPoint(x: hold.x + 20 * cos(a) - 5 * sin(a), y: hold.y + 20 * sin(a) + 5 * cos(a))
+                    let soil = floorH + 9
+                    for k in 0..<3 {
+                        let f = CGFloat(fmod(phase * 2.2 + Double(k) / 3, 1.0))
+                        fillOval(NSRect(x: tip.x - 1 + CGFloat(k) - 1, y: tip.y - f * max(0, tip.y - soil), width: 2, height: 3),
+                                 NSColor(calibratedRed: 0.55, green: 0.75, blue: 0.95, alpha: 0.9))
                     }
                 }
             }
@@ -1802,7 +1910,7 @@ final class OfficeView: NSView {
     }
 
     /// Walls, floor, the break room, the stage with each worker's scene, the corner.
-    private func drawRoom(_ b: NSRect, workers: [(Occupant, Pastime, CGFloat)], doorOpen: Bool) {
+    private func drawRoom(_ b: NSRect, layout: (bays: [Bay], size: CGFloat, overflow: [Occupant]), doorOpen: Bool) {
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(roundedRect: b, xRadius: 12, yRadius: 12).addClip()
         NSColor(calibratedWhite: 0.165, alpha: 1).setFill()
@@ -1826,46 +1934,45 @@ final class OfficeView: NSView {
             fillOval(NSRect(x: door.maxX - 7, y: door.minY + 30, width: 4, height: 4), steel)
         }
         // A counter with the coffee machine; its light blinks while it brews.
-        let counter = NSRect(x: 32, y: floorH - 2, width: 20, height: 30)
+        let counter = NSRect(x: 30, y: floorH - 2, width: 18, height: 30)
         fillRound(counter, 2, wood)
         fillRound(NSRect(x: counter.minX - 2, y: counter.maxY - 3, width: counter.width + 4, height: 4), 1, woodDark)
-        let machine = NSRect(x: counter.minX + 2, y: counter.maxY, width: 16, height: 22)
+        let machine = NSRect(x: counter.minX + 1, y: counter.maxY, width: 16, height: 22)
         fillRound(machine, 3, coal)
         fillRound(NSRect(x: machine.minX + 3, y: machine.maxY - 8, width: 10, height: 5), 1, NSColor(calibratedWhite: 0.3, alpha: 1))
         fillOval(NSRect(x: machine.maxX - 6, y: machine.maxY - 7, width: 3, height: 3),
                  fmod(t, 1.4) < 0.7 ? NSColor(calibratedRed: 0.95, green: 0.4, blue: 0.35, alpha: 1) : NSColor(calibratedRed: 0.4, green: 0.25, blue: 0.25, alpha: 1))
         fillRound(NSRect(x: machine.midX - 3, y: machine.minY + 2, width: 6, height: 6), 1, paper)
         // The sofa's back, and the room's name above it.
-        fillRound(NSRect(x: 84, y: floorH + 6, width: 76, height: 30), 8, NSColor(calibratedRed: 0.24, green: 0.33, blue: 0.36, alpha: 1))
-        put(text("茶水间", size: 9, weight: .medium, color: secondary.withAlphaComponent(0.5)), 122, b.maxY - 22, align: 1)
+        fillRound(NSRect(x: 72, y: floorH + 6, width: 70, height: 30), 8, NSColor(calibratedRed: 0.24, green: 0.33, blue: 0.36, alpha: 1))
+        put(text(L("茶水间", "Break room"), size: 9, weight: .medium, color: secondary.withAlphaComponent(0.5)), 92, b.maxY - 22, align: 1)
 
         // The stage: one scene per worker, or an empty one waiting.
         let st = stage
         fillRound(NSRect(x: st.minX - 2, y: floorH - 8, width: st.width + 4, height: 12), 3, NSColor(calibratedWhite: 0.21, alpha: 1))
         fillRound(NSRect(x: st.minX - 2, y: floorH + 1, width: st.width + 4, height: 3), 1.5, NSColor.white.withAlphaComponent(0.08))
-        // The stage holds two; anyone else at work is named on its edge.
-        let more = occupants.filter(\.working).dropFirst(workers.count)
+        // Anyone at work who does not fit is named on the stage's edge.
+        let more = layout.overflow
         if let first = more.first {
-            let note = more.count == 1 ? "\(first.job.name) 也在干" : "还有 \(more.count) 人也在干"
+            let note = more.count == 1 ? L("\(first.job.name) 也在干", "\(first.job.name) is working too") : L("还有 \(more.count) 人也在干", "\(more.count) more are working")
             put(text(truncate(note, size: 8, weight: .medium, width: st.width - 8), size: 8, weight: .medium, color: secondary), st.midX, floorH - 7, align: 1)
         }
-        if workers.isEmpty {
+        if layout.bays.isEmpty {
             fillRound(st, 6, NSColor.white.withAlphaComponent(0.025))
-            put(text("舞台空着", size: 10, weight: .medium, color: secondary.withAlphaComponent(0.7)), st.midX, st.midY + 4, align: 1)
-            put(text("有活就有人上来", size: 9, color: secondary.withAlphaComponent(0.5)), st.midX, st.midY - 10, align: 1)
+            put(text(L("舞台空着", "The stage is empty"), size: 10, weight: .medium, color: secondary.withAlphaComponent(0.7)), st.midX, st.midY + 4, align: 1)
+            put(text(L("有活就有人上来", "Someone steps up when there's work"), size: 9, color: secondary.withAlphaComponent(0.5)), st.midX, st.midY - 10, align: 1)
         }
-        for (i, (o, _, x)) in workers.enumerated() {
-            let half = workers.count > 1
-            let r = half ? NSRect(x: i == 0 ? st.minX : st.midX + 2, y: st.minY, width: st.width / 2 - 2, height: st.height) : st
-            drawBackdrop(o.job.scene, r, o.job.color)
-            // A spotlight on whoever works there.
-            fillPoly([NSPoint(x: x - 8, y: r.maxY - 20), NSPoint(x: x + 8, y: r.maxY - 20), NSPoint(x: x + 36, y: floorH + 2), NSPoint(x: x - 36, y: floorH + 2)],
-                     NSColor.white.withAlphaComponent(0.035))
+        for bay in layout.bays {
+            drawBackdrop(bay.scene, bay.rect.insetBy(dx: 1, dy: 0), bay.color)
+            // A spotlight over the bay.
+            let (x0, x1) = (bay.members.first!.1, bay.members.last!.1)
+            fillPoly([NSPoint(x: (x0 + x1) / 2 - 8, y: bay.rect.maxY - 20), NSPoint(x: (x0 + x1) / 2 + 8, y: bay.rect.maxY - 20),
+                      NSPoint(x: x1 + 30, y: floorH + 2), NSPoint(x: x0 - 30, y: floorH + 2)], NSColor.white.withAlphaComponent(0.035))
         }
 
         // The corner: the window shows the hour's sky; the plant below.
         let hour = Calendar.current.component(.hour, from: Date())
-        let win = NSRect(x: b.maxX - 70, y: b.maxY - 66, width: 56, height: 46)
+        let win = NSRect(x: cornerX - 22, y: b.maxY - 66, width: 56, height: 46)
         let night = hour < 6 || hour >= 19
         let sky = NSGradient(starting: night ? NSColor(calibratedRed: 0.12, green: 0.16, blue: 0.3, alpha: 1) : NSColor(calibratedRed: 0.55, green: 0.75, blue: 0.92, alpha: 1),
                              ending: night ? NSColor(calibratedRed: 0.2, green: 0.22, blue: 0.4, alpha: 1) : NSColor(calibratedRed: 0.82, green: 0.9, blue: 0.96, alpha: 1))
@@ -1892,24 +1999,45 @@ final class OfficeView: NSView {
         frame.stroke()
         strokeLine(NSPoint(x: win.midX, y: win.minY), NSPoint(x: win.midX, y: win.maxY), 2, NSColor(calibratedWhite: 0.3, alpha: 1))
         strokeLine(NSPoint(x: win.minX, y: win.midY), NSPoint(x: win.maxX, y: win.midY), 2, NSColor(calibratedWhite: 0.3, alpha: 1))
-        fillRound(NSRect(x: b.maxX - 30, y: floorH - 2, width: 20, height: 16), 3, NSColor(calibratedRed: 0.62, green: 0.4, blue: 0.3, alpha: 1))
-        for (dx, dy, rot) in [(-6.0, 14.0, -30.0), (6.0, 16.0, 30.0), (0.0, 22.0, 0.0)] {
-            let leaf = NSBezierPath(ovalIn: NSRect(x: -5, y: -10, width: 10, height: 22))
-            leaf.transform(using: AffineTransform(rotationByDegrees: rot + 4 * sin(t * 0.8 + dx)))
-            leaf.transform(using: AffineTransform(translationByX: b.maxX - 20 + dx, byY: floorH + dy))
-            leafGreen.setFill()
-            leaf.fill()
-        }
+        drawFlowers(NSPoint(x: plantX, y: floorH - 2))
         NSGraphicsContext.restoreGraphicsState()
     }
 
     /// The sofa's seat and arms, drawn over whoever sits on it.
     private func drawSofaFront() {
         let sofa = NSColor(calibratedRed: 0.3, green: 0.41, blue: 0.44, alpha: 1)
-        fillRound(NSRect(x: 82, y: floorH - 4, width: 80, height: 18), 6, sofa)
-        fillRound(NSRect(x: 84, y: floorH + 9, width: 76, height: 4), 2, NSColor.white.withAlphaComponent(0.06))
-        for x: CGFloat in [78, 156] { fillRound(NSRect(x: x, y: floorH - 4, width: 10, height: 26), 4, sofa.blended(withFraction: 0.15, of: .black) ?? sofa) }
-        for x: CGFloat in [88, 152] { fillRound(NSRect(x: x, y: floorH - 8, width: 4, height: 5), 1, coal) }
+        fillRound(NSRect(x: 70, y: floorH - 4, width: 74, height: 18), 6, sofa)
+        fillRound(NSRect(x: 72, y: floorH + 9, width: 70, height: 4), 2, NSColor.white.withAlphaComponent(0.06))
+        for x: CGFloat in [66, 138] { fillRound(NSRect(x: x, y: floorH - 4, width: 10, height: 26), 4, sofa.blended(withFraction: 0.15, of: .black) ?? sofa) }
+        for x: CGFloat in [76, 134] { fillRound(NSRect(x: x, y: floorH - 8, width: 4, height: 5), 1, coal) }
+    }
+
+    /// A pot of flowers standing at `base` (bottom centre): three stems with
+    /// leaves, each with a five-petal bloom, swaying a little.
+    private func drawFlowers(_ base: NSPoint) {
+        let pot = NSRect(x: base.x - 10, y: base.y, width: 20, height: 12)
+        fillPoly([NSPoint(x: pot.minX, y: pot.maxY), NSPoint(x: pot.maxX, y: pot.maxY), NSPoint(x: pot.maxX - 3, y: pot.minY), NSPoint(x: pot.minX + 3, y: pot.minY)],
+                 NSColor(calibratedRed: 0.72, green: 0.42, blue: 0.3, alpha: 1))
+        fillRound(NSRect(x: pot.minX - 1, y: pot.maxY - 4, width: pot.width + 2, height: 4), 1.5, NSColor(calibratedRed: 0.62, green: 0.35, blue: 0.25, alpha: 1))
+        let blooms: [(CGFloat, CGFloat, NSColor)] = [(-6, 22, NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.65, alpha: 1)),
+                                                     (1, 30, NSColor(calibratedRed: 0.98, green: 0.82, blue: 0.35, alpha: 1)),
+                                                     (7, 19, NSColor(calibratedRed: 0.92, green: 0.45, blue: 0.4, alpha: 1))]
+        for (k, (dx, h, petal)) in blooms.enumerated() {
+            let sway = CGFloat(sin(t * 0.9 + Double(k) * 1.3)) * 1.5
+            let foot = NSPoint(x: base.x + dx * 0.4, y: pot.maxY - 1)
+            let head = NSPoint(x: base.x + dx + sway, y: pot.maxY + h)
+            strokeLine(foot, head, 1.6, leafGreen)
+            // A leaf half way up.
+            let mid = NSPoint(x: (foot.x + head.x) / 2, y: (foot.y + head.y) / 2)
+            rotated(mid, k % 2 == 0 ? 35 : -35) {
+                fillOval(NSRect(x: mid.x + (k % 2 == 0 ? -8 : 0), y: mid.y - 2, width: 8, height: 4), leafGreen)
+            }
+            for p in 0..<5 {
+                let a = CGFloat(p) * 2 * .pi / 5 + CGFloat(t * 0.2)
+                fillOval(NSRect(x: head.x + cos(a) * 3.2 - 2.6, y: head.y + sin(a) * 3.2 - 2.6, width: 5.2, height: 5.2), petal)
+            }
+            fillOval(NSRect(x: head.x - 1.8, y: head.y - 1.8, width: 3.6, height: 3.6), NSColor(calibratedRed: 0.98, green: 0.9, blue: 0.55, alpha: 1))
+        }
     }
 }
 
@@ -2104,14 +2232,14 @@ final class App: NSObject, NSApplicationDelegate {
         panel.setFrame(f, display: true)
     }
 
-    /// Runs `shadowcorp card` for a day, week, month or year — this one, or
+    /// Runs `dango card` for a day, week, month or year — this one, or
     /// with `back` 1 the one before — for one agent or all. The CLI renders
     /// the card, saves it, copies it and opens it; the pet says when.
     func makeCard(kind: String, back: Int = 0, tool: String = "all") {
-        let name = ["day": "日报", "week": "周报", "month": "月报", "year": "年报"][kind] ?? "日报"
-        let candidates = [NSHomeDirectory() + "/.local/bin/shadowcorp", "/usr/local/bin/shadowcorp", "/opt/homebrew/bin/shadowcorp"]
-        guard let cli = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-            pet?.flash("没找到 shadowcorp 命令")
+        let name = lang == "en" ? (["day": "day card", "week": "week card", "month": "month card", "year": "year card"][kind] ?? "day card")
+                                : (["day": "日报", "week": "周报", "month": "月报", "year": "年报"][kind] ?? "日报")
+        guard let cli = cliPath() else {
+            pet?.flash(L("没找到 dango 命令", "Can't find the dango command"))
             return
         }
         let unit: Calendar.Component = ["week": .weekOfYear, "month": .month, "year": .year][kind] ?? .day
@@ -2126,9 +2254,11 @@ final class App: NSObject, NSApplicationDelegate {
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
         p.terminationHandler = { [weak self] proc in
-            DispatchQueue.main.async { self?.pet?.flash(proc.terminationStatus == 0 ? "\(name)已复制到剪贴板" : "\(name)没生成出来") }
+            DispatchQueue.main.async {
+                self?.pet?.flash(proc.terminationStatus == 0 ? L("\(name)已复制到剪贴板", "\(name.prefix(1).uppercased() + name.dropFirst()) copied") : L("\(name)没生成出来", "Couldn't make the \(name)"))
+            }
         }
-        pet?.flash("正在生成\(name)…")
+        pet?.flash(L("正在生成\(name)…", "Making the \(name)…"))
         try? p.run()
         collapse()
     }
@@ -2143,10 +2273,10 @@ final class App: NSObject, NSApplicationDelegate {
 
     func popMenu(_ event: NSEvent, in view: NSView) {
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: isExpanded ? "收起仪表盘" : "打开仪表盘", action: #selector(toggle), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: isExpanded ? L("收起仪表盘", "Close dashboard") : L("打开仪表盘", "Open dashboard"), action: #selector(toggle), keyEquivalent: ""))
         let export = NSMenu()
-        for (i, (kind, now, before)) in [("day", "今日日报", "昨日日报"), ("week", "本周周报", "上周周报"),
-                                         ("month", "本月月报", "上月月报"), ("year", "今年年报", "去年年报")].enumerated() {
+        for (i, (kind, now, before)) in [("day", L("今日日报", "Today"), L("昨日日报", "Yesterday")), ("week", L("本周周报", "This week"), L("上周周报", "Last week")),
+                                         ("month", L("本月月报", "This month"), L("上月月报", "Last month")), ("year", L("今年年报", "This year"), L("去年年报", "Last year"))].enumerated() {
             if i > 0 { export.addItem(.separator()) }
             for (back, title) in [(0, now), (1, before)] {
                 let item = NSMenuItem(title: title, action: #selector(exportFromMenu(_:)), keyEquivalent: "")
@@ -2155,18 +2285,29 @@ final class App: NSObject, NSApplicationDelegate {
                 export.addItem(item)
             }
         }
-        let exportItem = NSMenuItem(title: "导出报告", action: nil, keyEquivalent: "")
+        let exportItem = NSMenuItem(title: L("导出报告", "Export report"), action: nil, keyEquivalent: "")
         exportItem.submenu = export
         menu.addItem(exportItem)
-        let auto = NSMenuItem(title: "登录时自动启动", action: #selector(toggleAutostart), keyEquivalent: "")
+        let langs = NSMenu()
+        for (code, title) in [("zh", "中文"), ("en", "English")] {
+            let item = NSMenuItem(title: title, action: #selector(setLanguage(_:)), keyEquivalent: "")
+            item.representedObject = code
+            item.state = lang == code ? .on : .off
+            item.target = self
+            langs.addItem(item)
+        }
+        let langItem = NSMenuItem(title: "语言 / Language", action: nil, keyEquivalent: "")
+        langItem.submenu = langs
+        menu.addItem(langItem)
+        let auto = NSMenuItem(title: L("登录时自动启动", "Start at login"), action: #selector(toggleAutostart), keyEquivalent: "")
         auto.state = FileManager.default.fileExists(atPath: agentPlist) ? .on : .off
         menu.addItem(auto)
-        let snd = NSMenuItem(title: "结算提示音", action: #selector(toggleSound), keyEquivalent: "")
+        let snd = NSMenuItem(title: L("结算提示音", "Sounds"), action: #selector(toggleSound), keyEquivalent: "")
         snd.state = Sounds.enabled ? .on : .off
         menu.addItem(snd)
-        menu.addItem(NSMenuItem(title: "回到右下角", action: #selector(resetPosition), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L("回到右下角", "Back to the corner"), action: #selector(resetPosition), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L("退出", "Quit"), action: #selector(quit), keyEquivalent: ""))
         for item in menu.items { item.target = self }
         NSMenu.popUpContextMenu(menu, with: event, for: view)
     }
@@ -2174,6 +2315,24 @@ final class App: NSObject, NSApplicationDelegate {
     @objc func quit() { NSApp.terminate(nil) }
 
     @objc func toggleSound() { Sounds.enabled.toggle() }
+
+    /// The language menu: switches here at once and tells the daemon
+    /// (`dango lang`), which rewrites widget.json in that language.
+    @objc func setLanguage(_ sender: NSMenuItem) {
+        guard let code = sender.representedObject as? String, code != lang else { return }
+        lang = code
+        UserDefaults.standard.set(code, forKey: "lang")
+        dashboard.needsDisplay = true
+        pet?.needsDisplay = true
+        guard let cli = cliPath() else { return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: cli)
+        p.arguments = ["lang", code]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        p.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.reload() } }
+        try? p.run()
+    }
 
     @objc func toggleAutostart() {
         let uid = getuid()
@@ -2212,7 +2371,7 @@ final class App: NSObject, NSApplicationDelegate {
     func reload() {
         guard let m = loadModel() else { return }
         if let old = last, old.recordUSD > 0, old.todayUSD < old.recordUSD, m.todayUSD >= m.recordUSD, m.recordUSD > 0 {
-            pet?.flash("单日新高 ✦ \(fmtUSD(m.todayUSD))")
+            pet?.flash(L("单日新高 ✦ ", "New best day ✦ ") + fmtUSD(m.todayUSD))
             pet?.celebrate()
         }
         if last.map({ $0.generatedAt != m.generatedAt }) ?? true {
@@ -2747,7 +2906,7 @@ class CardView: NSView {
         bounds.fill()
         let ch = Report(j: r.o("character"))
         put(text(r.s("label"), size: 30, weight: .medium, color: ink2), pad, 64)
-        put(text("ShadowCorp", size: 22, weight: .semibold, color: ink2.withAlphaComponent(0.6)), W - pad, 68, align: 2)
+        put(text(L("打工团子", "Dango"), size: 22, weight: .semibold, color: ink2.withAlphaComponent(0.6)), W - pad, 68, align: 2)
         let top = r.l("jobs").first
         drawCharacter(NSRect(x: pad, y: 130, width: 150, height: 150), mood: ch.s("mood"), ink: ink,
                       look: top?["look"] as? [String] ?? [], jobColor: (top?["color"] as? String).map { color(hex: $0) })
@@ -2799,14 +2958,16 @@ class CardView: NSView {
     func jobs(_ r: Report, _ y0: CGFloat) -> CGFloat {
         var y = y0
         let all = r.l("jobs").filter { (($0["usd"] as? Double) ?? 0) > 0 }
-        title("都当了谁", y, right: all.isEmpty ? nil : "\(all.count) 种工作")
+        title(L("都当了谁", "Who you hired"), y, right: all.isEmpty ? nil : L("\(all.count) 种工作", "\(all.count) jobs"))
         y += 42
         let shown = Array(all.prefix(6))
         let maxU = max(shown.map { ($0["usd"] as? Double) ?? 0 }.max() ?? 1, 0.1)
+        // The bars start after the longest name (English names run longer).
+        let nameW = min(270, max(150, (shown.map { text(($0["name"] as? String) ?? "", size: 26, weight: .semibold).size().width }.max() ?? 0) + 20))
         for c in shown {
             let cr = Report(j: c)
             put(text(cr.s("name"), size: 26, weight: .semibold, color: ink), pad, y)
-            let br = NSRect(x: pad + 150, y: y + 10, width: inner - 150 - 300, height: 16)
+            let br = NSRect(x: pad + nameW, y: y + 10, width: inner - nameW - 300, height: 16)
             paper2.setFill()
             NSBezierPath(roundedRect: br, xRadius: 8, yRadius: 8).fill()
             color(hex: cr.s("color")).setFill()
@@ -2820,7 +2981,7 @@ class CardView: NSView {
         }
         if all.count > shown.count {
             let rest = all.dropFirst(shown.count).map { ($0["usd"] as? Double) ?? 0 }.reduce(0, +)
-            put(text("还有 \(all.count - shown.count) 种 · \(fmtUSD(rest))", size: 22, color: ink2), pad, y)
+            put(text(L("还有 \(all.count - shown.count) 种 · \(fmtUSD(rest))", "\(all.count - shown.count) more · \(fmtUSD(rest))"), size: 22, color: ink2), pad, y)
             y += 40
         }
         if all.isEmpty {
@@ -2851,10 +3012,11 @@ class CardView: NSView {
         let today = r.d("usd"), best = r.d("record_day_usd")
         let beating = today > 0 && best > 0 && today + 1e-9 >= best
         let tone = beating ? gold : (r.l("jobs").first?["color"] as? String).map { color(hex: $0) } ?? ink
-        put(text(beating ? "今天就是单日纪录 ✦" : "单日纪录 \(fmtUSD(best))", size: 26, weight: .semibold, color: tone), pad, y)
+        put(text(beating ? L("今天就是单日纪录 ✦", "New best day ✦") : L("单日纪录 ", "Best day ") + fmtUSD(best), size: 26, weight: .semibold, color: tone), pad, y)
         let before = Report(j: r.o("prev"))
-        var right = (before.s("label") == "昨天" || before.s("label").isEmpty ? "比昨天 " : "比 \(before.s("label")) ") + delta(today - before.d("usd"))
-        if r.i("streak") > 1 { right += " · 连续 \(r.i("streak")) 天" }
+        let label = before.s("label")
+        var right = (label.isEmpty || label == "昨天" || label == "Yesterday" ? L("比昨天 ", "vs yesterday ") : L("比 \(label) ", "vs \(label) ")) + delta(today - before.d("usd"))
+        if r.i("streak") > 1 { right += L(" · 连续 \(r.i("streak")) 天", " · \(r.i("streak"))-day streak") }
         put(text(right, size: 24, color: ink2, mono: true), W - pad, y + 2, align: 2)
         let track = NSRect(x: pad, y: y + 46, width: inner, height: 12)
         paper2.setFill()
@@ -2862,7 +3024,34 @@ class CardView: NSView {
         tone.setFill()
         let f = best > 0 ? min(1, today / best) : 0
         NSBezierPath(roundedRect: NSRect(x: pad, y: y + 46, width: max(12, inner * CGFloat(f)), height: 12), xRadius: 6, yRadius: 6).fill()
-        return y + 90
+        put(text(standingLine(r), size: 22, color: ink2), pad, y + 72)
+        return y + 118
+    }
+
+    /// Against your own history and in full-time people: "超过你 95% 的日子
+    /// · 相当于 4.3 个人全职干一天".
+    func standingLine(_ r: Report) -> String {
+        let s = Report(j: r.o("standing")), p = Report(j: r.o("people"))
+        let unit = s.s("unit").isEmpty ? r.s("kind") : s.s("unit")
+        let (zhUnit, zhOne, enUnit) = ["week": ("周", "一周", "week"), "month": ("个月", "一个月", "month"), "year": ("年", "一年", "year")][unit] ?? ("天", "一天", "day")
+        let (count, rank) = (s.i("count"), s.i("rank"))
+        var parts: [String] = []
+        if count <= 1 {
+            parts.append(L("这是你的第一\(zhUnit)", "Your first \(enUnit)"))
+        } else if rank == 1 {
+            parts.append(L("你最好的\(zhOne)（共 \(count) \(zhUnit)）", "Your best \(enUnit) of \(count)"))
+        } else if unit == "day", let beats = s.j["beats"] as? Double {
+            let pct = Int((beats * 100).rounded())
+            parts.append(L("超过你 \(pct)% 的日子", "Better than \(pct)% of your days"))
+        } else {
+            parts.append(L("你第 \(rank) 好的\(zhOne)（共 \(count) \(zhUnit)）", "Your #\(rank) \(enUnit) of \(count)"))
+        }
+        let n = p.d("people")
+        if n > 0 {
+            let x = n >= 10 ? "\(Int(n.rounded()))" : (n == n.rounded() ? "\(Int(n))" : String(format: "%.1f", n))
+            parts.append(L("相当于 \(x) 个人全职干\(zhOne)", "≈ \(x) full-time people for a \(enUnit)"))
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// This period against the previous one, and the best day so far.
@@ -2874,13 +3063,13 @@ class CardView: NSView {
         var x = pad + a.size().width + 20
         put(text("→", size: 28, color: ink2), x, y + 8)
         x += 44
-        let name = r.s("now_label").isEmpty ? (r.s("kind") == "week" ? "本周" : "本月") : r.s("now_label")
+        let name = r.s("now_label").isEmpty ? (r.s("kind") == "week" ? L("本周", "This week") : L("本月", "This month")) : r.s("now_label")
         put(text("\(name) \(fmtUSD(now))", size: 28, weight: .bold, color: ink), x, y + 8)
         let d = now - before
         var s = delta(d)
         if before > 0 { s += String(format: " · %@%.0f%%", d >= 0 ? "+" : "−", abs(d / before * 100)) }
         put(text(s, size: 28, weight: .semibold, color: d >= 0 ? ink : ink2, mono: true), W - pad, y + 8, align: 2)
-        put(text("单日纪录 \(fmtUSD(r.d("record_day_usd")))", size: 22, color: ink2, mono: true), pad, y + 52)
+        put(text(standingLine(r), size: 22, color: ink2), pad, y + 52)
         return y + 96
     }
 
@@ -2890,14 +3079,14 @@ class CardView: NSView {
         let bubble = NSRect(x: pad, y: y, width: inner, height: 96)
         NSColor.white.withAlphaComponent(0.7).setFill()
         NSBezierPath(roundedRect: bubble, xRadius: 20, yRadius: 20).fill()
-        put(text("「\(ch.s("signoff"))」", size: 30, weight: .medium, color: ink), pad + 28, y + 20)
+        put(text(L("「\(ch.s("signoff"))」", "“\(ch.s("signoff"))”"), size: 30, weight: .medium, color: ink), pad + 28, y + 20)
         put(text("— \(ch.s("name"))", size: 22, color: ink2), W - pad - 28, y + 58, align: 2)
         return y + 96
     }
 
     func footer(_ r: Report) {
         let foot = (r.o("rates")["label"] as? String) ?? ""
-        put(text(foot + " · 不含福利 · 模型花费按官方 API 价", size: 20, color: ink2.withAlphaComponent(0.7)), pad, bounds.height - 58)
+        put(text(foot + L(" · 不含福利 · 模型花费按官方 API 价", " · wages only · model cost at official API prices"), size: 20, color: ink2.withAlphaComponent(0.7)), pad, bounds.height - 58)
     }
 
     func leverageText(_ r: Report) -> String { fmtLev(r.d("usd"), r.d("cost")) }
@@ -2908,7 +3097,7 @@ final class DayCardView: CardView {
     override func draw(_ dirtyRect: NSRect) {
         guard let r = report else { return }
         var y = header(r)
-        title("时间线", y)
+        title(L("时间线", "Timeline"), y)
         y += 42
         let track = NSRect(x: pad, y: y, width: inner, height: 60)
         paper2.setFill()
@@ -2924,10 +3113,10 @@ final class DayCardView: CardView {
             put(text("\(h)", size: 20, color: ink2, mono: true), x, track.maxY + 8, align: h == 0 ? 0 : h == 24 ? 2 : 1)
         }
         y = track.maxY + 48
-        y = sessions(r, y, empty: "今天没有回合")
+        y = sessions(r, y, empty: L("今天没有回合", "No turns this day"))
         y = jobs(r, y)
-        y = tiles([("回合", "\(r.i("turns"))"), ("改动文件", "\(r.i("files"))"),
-                   ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"), ("一次过", "\(r.i("clean_turns"))/\(r.i("turns"))")], y)
+        y = tiles([(L("回合", "Turns"), "\(r.i("turns"))"), (L("改动文件", "Files changed"), "\(r.i("files"))"),
+                   (L("测试通过", "Tests passed"), "\(r.i("tests_passed"))/\(r.i("tests_run"))"), (L("一次过", "First try"), "\(r.i("clean_turns"))/\(r.i("turns"))")], y)
         y = dayRecord(r, y)
         _ = signoff(r, y)
         footer(r)
@@ -2939,7 +3128,7 @@ final class WeekCardView: CardView {
     override func draw(_ dirtyRect: NSRect) {
         guard let r = report else { return }
         var y = header(r)
-        title("每天", y, right: "活跃 \(r.i("active_days"))/7 天")
+        title(L("每天", "Each day"), y, right: L("活跃 \(r.i("active_days"))/7 天", "active \(r.i("active_days"))/7 days"))
         y += 48
         let days = r.l("days")
         let chart = NSRect(x: pad, y: y, width: inner, height: 300)
@@ -2973,11 +3162,11 @@ final class WeekCardView: CardView {
         }
         y = chart.maxY + 30
         y = jobs(r, y)
-        title("花时间最多的事", y)
+        title(L("花时间最多的事", "Where the time went"), y)
         y += 42
-        y = sessions(r, y, empty: "这周没有回合")
-        y = tiles([("活跃天数", "\(r.i("active_days"))/7"), ("回合", "\(r.i("turns"))"),
-                   ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"), ("杠杆", leverageText(r))], y)
+        y = sessions(r, y, empty: L("这周没有回合", "No turns this week"))
+        y = tiles([(L("活跃天数", "Active days"), "\(r.i("active_days"))/7"), (L("回合", "Turns"), "\(r.i("turns"))"),
+                   (L("测试通过", "Tests passed"), "\(r.i("tests_passed"))/\(r.i("tests_run"))"), (L("杠杆", "Leverage"), leverageText(r))], y)
         y = compare(r, y)
         _ = signoff(r, y + 20)
         footer(r)
@@ -2989,12 +3178,12 @@ final class MonthCardView: CardView {
     override func draw(_ dirtyRect: NSRect) {
         guard let r = report else { return }
         var y = header(r)
-        title("日历", y, right: "活跃 \(r.i("active_days")) 天 · 最长连续 \(r.i("longest_run")) 天")
+        title(L("日历", "Calendar"), y, right: L("活跃 \(r.i("active_days")) 天 · 最长连续 \(r.i("longest_run")) 天", "active \(r.i("active_days")) days · longest run \(r.i("longest_run"))"))
         y += 46
         let gap: CGFloat = 8
         let cw = (inner - gap * 6) / 7
         let chH: CGFloat = 56
-        for (i, w) in ["一", "二", "三", "四", "五", "六", "日"].enumerated() {
+        for (i, w) in (lang == "en" ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["一", "二", "三", "四", "五", "六", "日"]).enumerated() {
             put(text(w, size: 20, color: ink2), pad + CGFloat(i) * (cw + gap) + cw / 2, y, align: 1)
         }
         y += 34
@@ -3011,6 +3200,8 @@ final class MonthCardView: CardView {
             let cell = NSRect(x: pad + CGFloat(col) * (cw + gap), y: y + CGFloat(row) * (chH + gap), width: cw, height: chH)
             let usd = dr.d("usd")
             let future = dr.j["future"] as? Bool ?? false
+            // Days before tracking began are blank, not idle.
+            let untracked = dr.j["untracked"] as? Bool ?? false
             var fill = paper2
             var label = ink2
             if usd > 0 {
@@ -3019,18 +3210,21 @@ final class MonthCardView: CardView {
                 fill = NSColor(calibratedRed: light.0 + (dark.0 - light.0) * f, green: light.1 + (dark.1 - light.1) * f,
                                blue: light.2 + (dark.2 - light.2) * f, alpha: 1)
                 label = f > 0.55 ? NSColor.white : ink
-            } else if future {
-                fill = paper2.withAlphaComponent(0.45)
+            } else if future || untracked {
+                fill = paper2.withAlphaComponent(untracked ? 0.3 : 0.45)
             }
             fill.setFill()
             NSBezierPath(roundedRect: cell, xRadius: 10, yRadius: 10).fill()
+            if dr.j["first_tracked"] as? Bool ?? false {
+                put(text(L("开始记录", "Started"), size: 14, weight: .medium, color: ink2.withAlphaComponent(0.8)), cell.minX + 10, cell.maxY - 22)
+            }
             if dr.j["today"] as? Bool ?? false {
                 ink.setStroke()
                 let o = NSBezierPath(roundedRect: cell.insetBy(dx: 1.5, dy: 1.5), xRadius: 9, yRadius: 9)
                 o.lineWidth = 3
                 o.stroke()
             }
-            put(text("\(dr.i("day"))", size: 18, color: label.withAlphaComponent(future ? 0.4 : 0.8), mono: true), cell.minX + 10, cell.minY + 6)
+            put(text("\(dr.i("day"))", size: 18, color: label.withAlphaComponent(future || untracked ? 0.4 : 0.8), mono: true), cell.minX + 10, cell.minY + 6)
             if usd > 0 {
                 put(text(fmtUSD(usd), size: 18, weight: .semibold, color: label, mono: true), cell.maxX - 10, cell.maxY - 26, align: 2)
             }
@@ -3038,7 +3232,7 @@ final class MonthCardView: CardView {
         y += CGFloat(rows) * (chH + gap) + 30
 
         // When the work happens.
-        title("你的作息", y, right: (r.j["peak_window"] as? String).map { "最常在 \($0)开工" })
+        title(L("你的作息", "Your hours"), y, right: (r.j["peak_window"] as? String).map { L("最常在 \($0)开工", "usually starts \($0)") })
         y += 46
         let hist = (r.j["by_hour"] as? [Double]) ?? []
         let hh: CGFloat = 110
@@ -3055,9 +3249,9 @@ final class MonthCardView: CardView {
         }
         y += hh + 60
         y = jobs(r, y)
-        title("花时间最多的事", y)
+        title(L("花时间最多的事", "Where the time went"), y)
         y += 42
-        y = sessions(r, y, empty: "这个月没有回合")
+        y = sessions(r, y, empty: L("这个月没有回合", "No turns this month"))
         y = compare(r, y)
         _ = signoff(r, y + 10)
         footer(r)
@@ -3077,7 +3271,7 @@ final class YearCardView: CardView {
         var y = header(r)
         let months = r.l("months")
         let best = r.j["best_month"] as? Int
-        title("每个月", y, right: best.map { "最好的是 \($0 + 1) 月" })
+        title(L("每个月", "Each month"), y, right: best.map { L("最好的是 \($0 + 1) 月", "best: " + DateFormatter().monthSymbols[$0]) })
         y += 48
         let chart = NSRect(x: pad, y: y, width: inner, height: 270)
         let base = chart.maxY - 40, top = chart.minY + 36
@@ -3106,11 +3300,12 @@ final class YearCardView: CardView {
         y = chart.maxY + 26
 
         // Every day, a column per week from the first Monday on or before 1 January.
-        title("全年", y, right: "活跃 \(r.i("active_days")) 天 · 最长连续 \(r.i("longest_run")) 天")
+        title(L("全年", "The year"), y, right: L("活跃 \(r.i("active_days")) 天 · 最长连续 \(r.i("longest_run")) 天", "active \(r.i("active_days")) days · longest run \(r.i("longest_run"))"))
         y += 46
         let heat = (r.j["heat"] as? [Double]) ?? []
         let first = r.i("first_weekday")
         let todayIndex = r.j["today_index"] as? Int
+        let firstIndex = r.j["first_index"] as? Int
         let cols = (first + heat.count + 6) / 7
         let gap: CGFloat = 3
         let cw = (inner - gap * CGFloat(cols - 1)) / CGFloat(cols)
@@ -3121,7 +3316,7 @@ final class YearCardView: CardView {
         let year = Int(r.s("date")) ?? 2026
         for mth in 1...12 {
             let col = (first + dayOfYear + 6) / 7
-            put(text("\(mth)月", size: 17, color: ink2), pad + CGFloat(col) * (cw + gap), y, align: 0)
+            put(text(lang == "en" ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][mth - 1] : "\(mth)月", size: 17, color: ink2), pad + CGFloat(col) * (cw + gap), y, align: 0)
             let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
             dayOfYear += [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mth - 1]
         }
@@ -3135,6 +3330,8 @@ final class YearCardView: CardView {
                 fill = NSColor(calibratedRed: light.0 + (dark.0 - light.0) * f, green: light.1 + (dark.1 - light.1) * f, blue: light.2 + (dark.2 - light.2) * f, alpha: 1)
             } else if let ti = todayIndex, k > ti {
                 fill = paper2.withAlphaComponent(0.45)
+            } else if let fi = firstIndex, k < fi {
+                fill = paper2.withAlphaComponent(0.3)
             }
             fill.setFill()
             NSBezierPath(roundedRect: cell, xRadius: 3, yRadius: 3).fill()
@@ -3147,7 +3344,7 @@ final class YearCardView: CardView {
         }
         y += 7 * (cw + gap) + 12
         // Legend: less → more.
-        let legend = text("多", size: 17, color: ink2)
+        let legend = text(L("多", "More"), size: 17, color: ink2)
         var lx = W - pad - legend.size().width
         put(legend, lx, y)
         for f in [1.0, 0.7, 0.45, 0.2] {
@@ -3155,14 +3352,14 @@ final class YearCardView: CardView {
             NSColor(calibratedRed: light.0 + (dark.0 - light.0) * f, green: light.1 + (dark.1 - light.1) * f, blue: light.2 + (dark.2 - light.2) * f, alpha: 1).setFill()
             NSBezierPath(roundedRect: NSRect(x: lx, y: y + 3, width: 16, height: 16), xRadius: 3, yRadius: 3).fill()
         }
-        put(text("少", size: 17, color: ink2), lx - 8, y, align: 2)
+        put(text(L("少", "Less"), size: 17, color: ink2), lx - 8, y, align: 2)
         if let bd = r.j["best_day"] as? [String: Any] {
-            put(text("最好的一天 \(bd["date"] as? String ?? "") · \(fmtUSD((bd["usd"] as? Double) ?? 0))", size: 20, color: ink2, mono: true), pad, y)
+            put(text(L("最好的一天 ", "Best day ") + "\(bd["date"] as? String ?? "") · \(fmtUSD((bd["usd"] as? Double) ?? 0))", size: 20, color: ink2, mono: true), pad, y)
         }
         y += 52
         y = jobs(r, y)
-        y = tiles([("活跃天数", "\(r.i("active_days"))"), ("回合", "\(r.i("turns"))"),
-                   ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"), ("杠杆", leverageText(r))], y)
+        y = tiles([(L("活跃天数", "Active days"), "\(r.i("active_days"))"), (L("回合", "Turns"), "\(r.i("turns"))"),
+                   (L("测试通过", "Tests passed"), "\(r.i("tests_passed"))/\(r.i("tests_run"))"), (L("杠杆", "Leverage"), leverageText(r))], y)
         y = compare(r, y)
         _ = signoff(r, y + 10)
         footer(r)
@@ -3173,6 +3370,7 @@ func renderCard(_ jsonPath: String, _ outPath: String, copy: Bool) -> Bool {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: jsonPath)),
           let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
     let kind = j["kind"] as? String ?? "day"
+    if let l = j["lang"] as? String { lang = l }
     let tall = NSSize(width: 1080, height: 2400)
     let v: CardView = kind == "week" ? WeekCardView(frame: NSRect(origin: .zero, size: tall))
         : kind == "month" ? MonthCardView(frame: NSRect(origin: .zero, size: tall))
@@ -3297,7 +3495,7 @@ if let i = args.firstIndex(of: "--snapshot-office"), args.count > i + 1 {
 }
 
 // One instance at a time: a second launch (double-clicking the app again,
-// `shadowcorp widget`) just exits while the first keeps the lock.
+// `dango widget`) just exits while the first keeps the lock.
 let lockFD = open(home + "/widget.lock", O_CREAT | O_RDWR, 0o600)
 if lockFD < 0 || flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
     exit(0)

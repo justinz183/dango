@@ -86,9 +86,9 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "daemon",
+ "dango-core",
  "rusqlite",
  "serde_json",
- "shadowcorp-core",
 ]
 
 [[package]]
@@ -121,12 +121,23 @@ name = "daemon"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "dango-core",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2",
- "shadowcorp-core",
  "toml",
+]
+
+[[package]]
+name = "dango-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "toml",
+ "unicode-width",
 ]
 
 [[package]]
@@ -427,17 +438,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
-]
-
-[[package]]
-name = "shadowcorp-core"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "toml",
- "unicode-width",
 ]
 
 [[package]]

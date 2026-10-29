@@ -9,14 +9,14 @@ use std::io::{Read, Seek, SeekFrom};
 use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveDate, NaiveDateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use shadowcorp_core::achievements::{self, display_name, roman, Catalog, Category, Ctx, Rarity, Scopes, Store};
-use shadowcorp_core::classify::{final_class, turn_role};
-use shadowcorp_core::event::{Event, Kind, Role, Source, TaskClass};
-use shadowcorp_core::expr::Val;
-use shadowcorp_core::occupation::{self, Table};
-use shadowcorp_core::progress::{self, coins_for_pd, stage_for, Streak, ACTIVE_DAY_PD, DEFAULT_WEEKLY_TARGET};
-use shadowcorp_core::render::{fmt_pd, fmt_short, width, TurnSummary, HIGHLIGHT_WIDTH};
-use shadowcorp_core::scoring::{self, credit, leverage, ScoringConstants, TurnSignals};
+use dango_core::achievements::{self, display_name, roman, Catalog, Category, Ctx, Rarity, Scopes, Store};
+use dango_core::classify::{final_class, turn_role};
+use dango_core::event::{Event, Kind, Role, Source, TaskClass};
+use dango_core::expr::Val;
+use dango_core::occupation::{self, Table};
+use dango_core::progress::{self, coins_for_pd, stage_for, Streak, ACTIVE_DAY_PD, DEFAULT_WEEKLY_TARGET};
+use dango_core::render::{fmt_pd, fmt_short, width, TurnSummary, HIGHLIGHT_WIDTH};
+use dango_core::scoring::{self, credit, leverage, ScoringConstants, TurnSignals};
 
 use crate::config::Config;
 use crate::db::{get_meta, set_meta};
@@ -49,9 +49,9 @@ pub enum Tz {
 }
 
 impl Tz {
-    /// `SHADOWCORP_TZ=+08:00` pins the zone (tests and replays).
+    /// `DANGO_TZ=+08:00` (or the older `SHADOWCORP_TZ`) pins the zone (tests and replays).
     pub fn from_env() -> Tz {
-        std::env::var("SHADOWCORP_TZ").ok().and_then(|s| s.parse().ok()).map(Tz::Fixed).unwrap_or(Tz::Local)
+        std::env::var("DANGO_TZ").or_else(|_| std::env::var("SHADOWCORP_TZ")).ok().and_then(|s| s.parse().ok()).map(Tz::Fixed).unwrap_or(Tz::Local)
     }
 
     pub fn local(&self, ms: i64) -> NaiveDateTime {
@@ -444,7 +444,7 @@ impl Processor {
                     match self.handle(&ev) {
                         Ok(true) => n += 1,
                         Ok(false) => {}
-                        Err(e) => eprintln!("shadowcorp: skipped event {}: {e}", ev.id),
+                        Err(e) => eprintln!("dango: skipped event {}: {e}", ev.id),
                     }
                 }
             }
@@ -1036,7 +1036,7 @@ impl Processor {
                     .iter()
                     .enumerate()
                     .filter(|(i, (_, m))| *i == 0 || **m >= 0.2 * credited * mpd)
-                    .map(|(_, (o, _))| self.occ.name(o).to_string())
+                    .map(|(_, (o, _))| self.occ.name_in(o, self.cfg.lang()).to_string())
                     .collect(),
                 files: sig.files,
                 test_passed: agg.test_run.then_some(agg.test_last == Some(true)),
@@ -1045,7 +1045,8 @@ impl Processor {
                 week_usd: self.ctr("usd", &wkey),
                 total_usd: self.ctr("usd", "all"),
                 record_usd: self.record_value("max_day_usd")?,
-                leverage: shadowcorp_core::pricing::leverage(self.ctr("usd", &wkey), self.ctr("cost", &wkey)),
+                leverage: dango_core::pricing::leverage(self.ctr("usd", &wkey), self.ctr("cost", &wkey)),
+                lang: self.cfg.lang(),
                 highlight: self.take_highlight(),
             };
             self.settlements.insert(sid.to_string(), summary);
@@ -1104,7 +1105,7 @@ impl Processor {
             .query_row("SELECT session_id, ended_at, cost_done FROM turns WHERE id = ?1", [tid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .optional()?;
         let Some((sid, Some(end_ts), 0)) = row else { return Ok(()) };
-        let (cost, _) = shadowcorp_core::pricing::PriceTable::builtin().cost(&ev.payload.tokens);
+        let (cost, _) = dango_core::pricing::PriceTable::builtin().cost(&ev.payload.tokens);
         self.conn.execute(
             "UPDATE turns SET tokens = ?2, cost_usd = ?3, cost_done = 1 WHERE id = ?1",
             params![tid, serde_json::to_string(&ev.payload.tokens)?, cost],
@@ -1342,6 +1343,7 @@ impl Processor {
     /// The single line-4 text for the box: the most important thing that
     /// happened since the last box, plus how many others.
     fn take_highlight(&mut self) -> Option<String> {
+        let lang = self.cfg.lang();
         let mut all = std::mem::take(&mut self.pending);
         all.sort_by_key(|h| std::cmp::Reverse(self.highlight_rank(h)));
         let best = all.first()?.clone();
@@ -1359,18 +1361,23 @@ impl Processor {
                 }
                 t
             }
+            Highlight::Ring { pd, target } if lang.en() => format!("Weekly ring closed {} / {} person-days", fmt_short(pd), fmt_short(target)),
             Highlight::Ring { pd, target } => format!("本周合环 {} / {} 人日", fmt_short(pd), fmt_short(target)),
             Highlight::Record { key, new, old } => {
                 let fmt = |x: f64| match key.as_str() {
                     "max_leverage" => format!("{x:.1}x"),
-                    "max_streak" => format!("{x} 天"),
-                    "max_day_usd" => shadowcorp_core::render::fmt_usd(x),
+                    "max_streak" => format!("{x} {}", lang.t("天", "days")),
+                    "max_day_usd" => dango_core::render::fmt_usd(x),
                     _ => fmt_pd(x),
                 };
-                format!("新纪录：{} {}（之前 {}）", progress::record_label(&key), fmt(new), fmt(old))
+                if lang.en() {
+                    format!("New record: {} {} (was {})", progress::record_label_in(&key, lang), fmt(new), fmt(old))
+                } else {
+                    format!("新纪录：{} {}（之前 {}）", progress::record_label(&key), fmt(new), fmt(old))
+                }
             }
         };
-        let more = format!(" 等 {} 项", all.len());
+        let more = if lang.en() { format!(" +{} more", all.len() - 1) } else { format!(" 等 {} 项", all.len()) };
         if all.len() > 1 && width(&text) + width(&more) <= HIGHLIGHT_WIDTH {
             text += &more;
         }

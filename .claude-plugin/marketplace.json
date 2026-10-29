@@ -1,16 +1,16 @@
 {
-  "name": "shadowcorp",
+  "name": "dango",
   "owner": {
-    "name": "ShadowCorp"
+    "name": "Dango"
   },
   "metadata": {
-    "description": "影子公司：衡量产出的 AI 编码成就系统。"
+    "description": "打工团子 Dango：你的 AI 替你干了多少活、请人来做要花多少钱。"
   },
   "plugins": [
     {
-      "name": "shadowcorp",
+      "name": "dango",
       "source": "./plugins/claude-code",
-      "description": "影子公司：衡量产出的 AI 编码成就系统（人日、徽章、结算框、状态栏）。"
+      "description": "打工团子 Dango：把 agent 完成的每一步折算成请人来做要花多少钱（按职业 × BLS 时薪），结算框、日报卡、桌面宠物。"
     }
   ]
 }

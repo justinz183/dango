@@ -1,4 +1,4 @@
-//! `shadowcorp privacy-scan` (SPEC 14, 17.2): checks that nothing stored
+//! `dango privacy-scan` (SPEC 14, 17.2): checks that nothing stored
 //! locally looks like a path, code, a prompt or free text. Every stored
 //! string must be a short token (ids, hashes, enum values, timestamps);
 //! the only exceptions are UI strings that come from the bundled catalog.
@@ -11,8 +11,8 @@ use daemon::paths::Paths;
 use daemon::spool;
 use rusqlite::Connection;
 use serde_json::Value;
-use shadowcorp_core::achievements::Catalog;
-use shadowcorp_core::progress::STAGES;
+use dango_core::achievements::Catalog;
+use dango_core::progress::STAGES;
 
 fn token_ok(s: &str) -> bool {
     s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || "_.:+-".contains(c))

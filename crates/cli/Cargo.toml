@@ -2,14 +2,14 @@
 name = "cli"
 version.workspace = true
 edition.workspace = true
-description = "The shadowcorp binary: hook handler, daemon and CLI in one."
+description = "The dango binary: hook handler, daemon and CLI in one."
 
 [[bin]]
-name = "shadowcorp"
+name = "dango"
 path = "src/main.rs"
 
 [dependencies]
-shadowcorp-core.workspace = true
+dango-core.workspace = true
 daemon.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

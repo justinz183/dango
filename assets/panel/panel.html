@@ -222,12 +222,12 @@ const store = {
 function load() {
   const s = document.createElement("script");
   s.src = "panel-data.js?t=" + Date.now();
-  s.onload = () => { s.remove(); if (window.SHADOWCORP_DATA) render(window.SHADOWCORP_DATA); };
+  s.onload = () => { s.remove(); if (window.DANGO_DATA) render(window.DANGO_DATA); };
   s.onerror = () => { s.remove(); if (!D) empty(); };
   document.head.appendChild(s);
 }
 function empty() {
-  $("#caption").textContent = "还没有数据：在终端运行 shadowcorp panel。";
+  $("#caption").textContent = "还没有数据：在终端运行 dango panel。";
 }
 function render(d) {
   if (d.generated_at === lastGen) return;
@@ -679,7 +679,7 @@ if (saved) selectTab(saved);
 
 // Data written into the page renders even where a local page may not load
 // sibling files; polling then keeps it live where it can.
-if (window.SHADOWCORP_DATA) render(window.SHADOWCORP_DATA);
+if (window.DANGO_DATA) render(window.DANGO_DATA);
 load();
 setInterval(load, 2000);
 </script>

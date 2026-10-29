@@ -1,7 +1,14 @@
 {
-  "name": "shadowcorp",
-  "version": "0.2.0",
-  "description": "把 agent 完成的每一步折算成请人来做要花多少钱（按职业 × BLS 时薪），攒 XP、升段位。需要 PATH 上有 shadowcorp 二进制。",
-  "author": { "name": "ShadowCorp" },
-  "keywords": ["gamification", "achievements", "productivity"]
+  "name": "dango",
+  "version": "0.3.0",
+  "description": "打工团子 Dango：把 agent 完成的每一步折算成请人来做要花多少钱（按职业 × BLS 时薪）。需要 PATH 上有 dango 二进制。",
+  "author": {
+    "name": "Dango"
+  },
+  "keywords": [
+    "productivity",
+    "desktop-pet",
+    "claude-code",
+    "codex"
+  ]
 }

@@ -12,8 +12,8 @@ use std::time::Instant;
 
 use chrono::DateTime;
 use serde_json::{json, Value};
-use shadowcorp_core::{classify, occupation};
-use shadowcorp_core::event::{Event, Kind, Payload, Source};
+use dango_core::{classify, occupation};
+use dango_core::event::{Event, Kind, Payload, Source};
 
 use crate::capture::{command_text, edit_hook, from_claude_hook, CaptureEnv};
 use crate::ingest::{Processor, Result};
@@ -407,7 +407,7 @@ pub fn run(p: &mut Processor, paths: &Paths, claude_dir: &Path, cutoff: i64, cod
         match p.handle(ev) {
             Ok(true) => report.new_events += 1,
             Ok(false) => {}
-            Err(e) => eprintln!("shadowcorp: skipped {}: {e}", ev.id),
+            Err(e) => eprintln!("dango: skipped {}: {e}", ev.id),
         }
     }
     p.commit()?;

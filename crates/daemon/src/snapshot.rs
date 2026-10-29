@@ -3,11 +3,11 @@
 //! processor has flushed; never writes progress.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use shadowcorp_core::achievements::{self, display_name, Catalog, Category, Rarity, Store};
-use shadowcorp_core::progress::{self, stage_for, Stage, Streak};
-use shadowcorp_core::render::{fmt_int, fmt_short, grand_badge, StatusInfo};
-use shadowcorp_core::pricing;
-use shadowcorp_core::scoring::ScoringConstants;
+use dango_core::achievements::{self, display_name, Catalog, Category, Rarity, Store};
+use dango_core::progress::{self, stage_for, Stage, Streak};
+use dango_core::render::{fmt_int, fmt_short, grand_badge, StatusInfo};
+use dango_core::pricing;
+use dango_core::scoring::ScoringConstants;
 
 use crate::db::{get_meta, set_meta};
 use crate::ingest::{day_key, week_key, Result, Tz, PERMISSION_QUIET_MS};
@@ -233,7 +233,7 @@ pub fn activity(conn: &Connection, now_ms: i64) -> Result<(i64, i64, Option<i64>
 
 /// One status line: the total, today's and this week's value, and the
 /// economic leverage (this session's, else this week's).
-pub fn status(conn: &Connection, tz: Tz, now_ms: i64, session: Option<&str>) -> Result<String> {
+pub fn status(conn: &Connection, tz: Tz, now_ms: i64, session: Option<&str>, lang: dango_core::i18n::Lang) -> Result<String> {
     let o = output(conn, tz, now_ms);
     let lev = session
         .and_then(|s| {
@@ -241,11 +241,12 @@ pub fn status(conn: &Connection, tz: Tz, now_ms: i64, session: Option<&str>) -> 
             pricing::leverage(counter(conn, "usd", &k), counter(conn, "cost", &k))
         })
         .or(o.week_leverage);
-    Ok(shadowcorp_core::render::status_line(&StatusInfo {
+    Ok(dango_core::render::status_line(&StatusInfo {
         total_usd: o.total_usd,
         today_usd: o.today_usd,
         week_usd: o.week_usd,
         leverage: lev,
+        lang,
     }))
 }
 

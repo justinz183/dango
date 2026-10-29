@@ -1,14 +1,48 @@
-//! `shadowcorp stats` and `shadowcorp badges` (SPEC 10.6, terminal mode).
+//! `dango stats` and `dango badges` (SPEC 10.6, terminal mode).
 
 use daemon::ingest::{Result, Tz};
 use daemon::snapshot::{self, DbStore};
 use rusqlite::Connection;
-use shadowcorp_core::achievements::{self, display_name, roman, Catalog, Category, Store};
-use shadowcorp_core::progress::record_label;
+use dango_core::achievements::{self, display_name, roman, Catalog, Category, Store};
+use dango_core::progress::record_label;
 use daemon::config::Config;
-use shadowcorp_core::render::{fmt_hours, fmt_int, fmt_pd, fmt_short, fmt_usd, pad, ring_bar};
-use shadowcorp_core::pricing;
-use shadowcorp_core::scoring::fmt_leverage;
+use dango_core::render::{fmt_hours, fmt_hours_in, fmt_int, fmt_pd, fmt_short, fmt_usd, pad, ring_bar};
+use dango_core::pricing;
+use dango_core::scoring::fmt_leverage;
+
+/// The output page in English: totals, agents, who you hired, model cost.
+fn stats_en(conn: &Connection, tz: Tz, now: i64) -> Result<String> {
+    let lang = dango_core::i18n::Lang::En;
+    let o = snapshot::output(conn, tz, now);
+    let row = |k: &str, v: String| format!("  {}{v}", pad(k, 12));
+    let name = |j: &serde_json::Value| dango_core::occupation::Table::builtin().name_in(j["id"].as_str().unwrap_or(""), lang).to_string();
+    let mut out = vec!["Output".to_string(), "─".repeat(44)];
+    out.push(row("Total", format!("{} · {} of work", fmt_usd(o.total_usd), fmt_hours_in(o.total_hours, lang))));
+    let tools: Vec<String> = daemon::widget::tools(conn, 0, i64::MAX)?
+        .iter()
+        .map(|t| format!("{} {} · {}", t["name"].as_str().unwrap_or(""), fmt_usd(t["usd"].as_f64().unwrap_or(0.0)), fmt_hours_in(t["hours"].as_f64().unwrap_or(0.0), lang)))
+        .collect();
+    if !tools.is_empty() {
+        out.push(row("By agent", tools.join(" · ")));
+    }
+    let jobs = daemon::widget::jobs(conn, 0, i64::MAX, None)?;
+    if !jobs.is_empty() {
+        let top: Vec<String> = jobs.iter().take(4).map(|j| format!("{} {}", name(j), fmt_usd(j["usd"].as_f64().unwrap_or(0.0)))).collect();
+        out.push(row("Hired", top.join(" · ")));
+    }
+    out.push(row("Today", format!("{} · this week {}", fmt_usd(o.today_usd), fmt_usd(o.week_usd))));
+    out.push(row(
+        "Model cost",
+        format!(
+            "today {} · this week {} · total {} · leverage {}",
+            fmt_usd(o.today_cost),
+            fmt_usd(o.week_cost),
+            fmt_usd(o.total_cost),
+            pricing::fmt_leverage(pricing::leverage(o.total_usd, o.total_cost))
+        ),
+    ));
+    Ok(out.join("\n"))
+}
 
 fn fmt_record(key: &str, v: f64) -> String {
     match key {
@@ -20,6 +54,9 @@ fn fmt_record(key: &str, v: f64) -> String {
 }
 
 pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String> {
+    if cfg.lang().en() {
+        return stats_en(conn, tz, now);
+    }
     let c = snapshot::company(conn, tz, cfg.general.weekly_target, now)?;
     let o = snapshot::output(conn, tz, now);
     let cat = Catalog::builtin();

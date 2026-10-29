@@ -1,4 +1,5 @@
-//! Where everything lives: ~/.shadowcorp, or $SHADOWCORP_HOME.
+//! Where everything lives: ~/.dango, or $DANGO_HOME. Installs from before
+//! the rename keep ~/.shadowcorp (and $SHADOWCORP_HOME) until moved.
 
 use std::fs;
 use std::io;
@@ -29,7 +30,7 @@ impl Paths {
         let mut sock = home.join("daemon.sock");
         if sock.as_os_str().len() > MAX_SOCK_PATH {
             let h = hex(&Sha256::digest(home.as_os_str().as_encoded_bytes()))[..12].to_string();
-            sock = std::env::temp_dir().join(format!("shadowcorp-{h}.sock"));
+            sock = std::env::temp_dir().join(format!("dango-{h}.sock"));
         }
         Paths {
             spool: home.join("spool"),
@@ -45,13 +46,13 @@ impl Paths {
     }
 
     pub fn from_env() -> Paths {
-        match std::env::var_os("SHADOWCORP_HOME") {
-            Some(h) if !h.is_empty() => Paths::at(PathBuf::from(h)),
-            _ => {
-                let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-                Paths::at(home.join(".shadowcorp"))
-            }
+        let set = |k: &str| std::env::var_os(k).filter(|h| !h.is_empty());
+        if let Some(h) = set("DANGO_HOME").or_else(|| set("SHADOWCORP_HOME")) {
+            return Paths::at(PathBuf::from(h));
         }
+        let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+        let (new, old) = (home.join(".dango"), home.join(".shadowcorp"));
+        Paths::at(if !new.exists() && old.exists() { old } else { new })
     }
 
     /// Creates the data directories (0700).

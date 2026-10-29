@@ -11,8 +11,8 @@ use daemon::db;
 use daemon::ingest::{Mode, Processor, Tz};
 use daemon::paths::Paths;
 use serde_json::{json, Value};
-use shadowcorp_core::achievements::{Catalog, Store};
-use shadowcorp_core::event::{Event, GitAction, Kind, Source};
+use dango_core::achievements::{Catalog, Store};
+use dango_core::event::{Event, GitAction, Kind, Source};
 
 static N: AtomicUsize = AtomicUsize::new(0);
 

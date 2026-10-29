@@ -1,4 +1,4 @@
-//! shadowcorp — hook handler, daemon and CLI in one binary (SPEC 3).
+//! dango — hook handler, daemon and CLI in one binary (SPEC 3).
 
 mod hook;
 mod pages;
@@ -20,31 +20,52 @@ use daemon::snapshot;
 use daemon::spool;
 use rusqlite::Connection;
 use serde_json::{json, Value};
-use shadowcorp_core::event::{Event, Kind};
-use shadowcorp_core::render::{fmt_pd, fmt_usd, settlement_box};
+use dango_core::event::{Event, Kind};
+use dango_core::render::{fmt_pd, fmt_usd, settlement_box};
 
-const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
+const USAGE: &str = "dango（打工团子）— 你的 AI 替你干了多少活、请人来做要花多少钱
 
 用法:
-  shadowcorp hook                  Claude Code hook 入口（从 stdin 读 JSON）
-  shadowcorp status [--claude]     一行状态；--claude 供 statusLine 使用
-  shadowcorp stats                 公司页
-  shadowcorp badges                成就与职业图鉴
-  shadowcorp widget                启动桌面小部件（屏幕右下角）
-  shadowcorp report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
+  dango hook                  Claude Code hook 入口（从 stdin 读 JSON）
+  dango status [--claude]     一行状态；--claude 供 statusLine 使用
+  dango stats                 公司页
+  dango badges                成就与职业图鉴
+  dango widget                启动桌面小部件（屏幕右下角）
+  dango report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
                                    日报 / 周报 / 月报（DATE = YYYY-MM-DD | today | yesterday，
                                    周报取 DATE 所在的周，月报取所在的月）
-  shadowcorp card [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
-                                   渲染分享卡到 ~/Pictures/ShadowCorp/ 并复制到剪贴板
-  shadowcorp panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
-  shadowcorp backfill [--claude-dir DIR]
+  dango card [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
+                                   渲染分享卡到 ~/Pictures/Dango/ 并复制到剪贴板
+  dango panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
+  dango backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
-  shadowcorp daemon                前台运行守护进程
-  shadowcorp replay PATH...        回放 hook fixtures（.json / .jsonl / 目录）
-  shadowcorp rebuild               从事件表重建全部派生数据
-  shadowcorp privacy-scan          扫描本地数据，确认没有路径、代码或 prompt
+  dango daemon                前台运行守护进程
+  dango replay PATH...        回放 hook fixtures（.json / .jsonl / 目录）
+  dango rebuild               从事件表重建全部派生数据
+  dango privacy-scan          扫描本地数据，确认没有路径、代码或 prompt
 
-数据目录: ~/.shadowcorp（可用 SHADOWCORP_HOME 覆盖）";
+数据目录: ~/.dango（可用 DANGO_HOME 覆盖）";
+const USAGE_EN: &str = "dango — how much work your AI did, and what hiring people for it would cost
+
+Usage:
+  dango hook                  Claude Code hook entry (reads JSON on stdin)
+  dango status [--claude]     one-line status; --claude for statusLine
+  dango stats                 output page
+  dango widget                start the desktop pet (bottom-right corner)
+  dango lang [zh|en]          show or set the language
+  dango report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
+                                   day / week / month / year report (DATE = YYYY-MM-DD | today | yesterday;
+                                   the week, month or year that contains DATE)
+  dango card [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
+                                   render a share card to ~/Pictures/Dango/ and copy it
+  dango backfill [--claude-dir DIR]
+                                   import Claude Code and Codex history from before install
+  dango daemon                run the daemon in the foreground
+  dango rebuild               rebuild everything derived from the event log
+  dango privacy-scan          check local data holds no paths, code or prompts
+
+Data directory: ~/.dango (override with DANGO_HOME)";
+
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -54,12 +75,12 @@ fn main() {
         Some(cmd) => match dispatch(cmd, &args[1..], &paths) {
             Ok(code) => code,
             Err(e) => {
-                eprintln!("shadowcorp {cmd}: {e}");
+                eprintln!("dango {cmd}: {e}");
                 1
             }
         },
         None => {
-            println!("{USAGE}");
+            println!("{}", usage(&paths));
             0
         }
     };
@@ -74,6 +95,7 @@ fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
         "backfill" => run_backfill(paths, args),
         "panel" => panel(paths, args.iter().any(|a| a == "--no-open")),
         "widget" => widget(paths),
+        "lang" => lang(paths, args),
         "report" => report(paths, args),
         "card" => card(paths, args),
         "daemon" => server::run(paths).map(|_| 0),
@@ -81,15 +103,20 @@ fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
         "rebuild" => rebuild(paths),
         "privacy-scan" => privacy::scan(paths),
         "version" | "--version" | "-V" => {
-            println!("shadowcorp {}", env!("CARGO_PKG_VERSION"));
+            println!("dango {}", env!("CARGO_PKG_VERSION"));
             Ok(0)
         }
         "help" | "--help" | "-h" => {
-            println!("{USAGE}");
+            println!("{}", usage(paths));
             Ok(0)
         }
-        other => Err(format!("unknown command {other:?}\n\n{USAGE}").into()),
+        other => Err(format!("unknown command {other:?}\n\n{}", usage(paths)).into()),
     }
+}
+
+/// The help text in the configured language.
+fn usage(paths: &Paths) -> &'static str {
+    if Config::load(paths).lang().en() { USAGE_EN } else { USAGE }
 }
 
 /// Runs `f` on an up-to-date database: asks a running daemon to flush the
@@ -172,15 +199,15 @@ fn report(paths: &Paths, args: &[String]) -> Result<i32> {
     Ok(0)
 }
 
-/// The card renderer: ShadowCorp.app when installed, else the widget binary.
+/// The card renderer: Dango.app when installed, else the widget binary.
 fn renderer() -> Result<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_default();
     let candidates = [
-        PathBuf::from("/Applications/ShadowCorp.app/Contents/MacOS/ShadowCorp"),
-        PathBuf::from(format!("{home}/Applications/ShadowCorp.app/Contents/MacOS/ShadowCorp")),
-        std::env::current_exe()?.with_file_name("shadowcorp-widget"),
+        PathBuf::from("/Applications/Dango.app/Contents/MacOS/Dango"),
+        PathBuf::from(format!("{home}/Applications/Dango.app/Contents/MacOS/Dango")),
+        std::env::current_exe()?.with_file_name("dango-widget"),
     ];
-    candidates.into_iter().find(|p| p.exists()).ok_or_else(|| "没有找到 ShadowCorp.app，先运行 apps/widget/bundle.sh".into())
+    candidates.into_iter().find(|p| p.exists()).ok_or_else(|| "没有找到 Dango.app，先运行 apps/widget/bundle.sh".into())
 }
 
 fn card(paths: &Paths, args: &[String]) -> Result<i32> {
@@ -195,7 +222,7 @@ fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     let out = match flag(args, "--out") {
         Some(o) => PathBuf::from(o),
         None => {
-            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("ShadowCorp");
+            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("Dango");
             fs::create_dir_all(&dir)?;
             dir.join(format!("{date}.png"))
         }
@@ -204,42 +231,65 @@ fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     if !status.success() {
         return Err("渲染失败".into());
     }
-    let what = match kind.as_str() { "week" => "周报卡", "month" => "月报卡", "year" => "年报卡", _ => "日报卡" };
-    println!("{what}：{}（已复制到剪贴板）", out.display());
+    if r["lang"] == "en" {
+        let what = match kind.as_str() { "week" => "Week card", "month" => "Month card", "year" => "Year card", _ => "Day card" };
+        println!("{what}: {} (copied to the clipboard)", out.display());
+    } else {
+        let what = match kind.as_str() { "week" => "周报卡", "month" => "月报卡", "year" => "年报卡", _ => "日报卡" };
+        println!("{what}：{}（已复制到剪贴板）", out.display());
+    }
     if !args.iter().any(|a| a == "--no-open") {
         std::process::Command::new("open").arg(&out).status()?;
     }
     Ok(0)
 }
 
-/// Starts the desktop widget with fresh data to show: ShadowCorp.app when
+/// `dango lang [zh|en]`: shows or sets the language of everything shown,
+/// and rewrites widget.json so the widget switches at once.
+fn lang(paths: &Paths, args: &[String]) -> Result<i32> {
+    let Some(want) = args.first() else {
+        println!("{}", Config::load(paths).lang().code());
+        return Ok(0);
+    };
+    let locale = match want.to_lowercase().as_str() {
+        "zh" | "zh-cn" | "cn" | "中文" => "zh-CN",
+        "en" | "en-us" | "english" => "en",
+        other => return Err(format!("dango lang zh|en (got {other:?})").into()),
+    };
+    Config::set_locale(paths, locale)?;
+    fresh_db(paths, |c, cfg| daemon::widget::write(paths, c, Tz::from_env(), cfg, now_ms()))?;
+    println!("{}", Config::load(paths).lang().t("界面语言：中文", "Language: English"));
+    Ok(0)
+}
+
+/// Starts the desktop widget with fresh data to show: Dango.app when
 /// it is installed (apps/widget/bundle.sh), else the bare binary next to
 /// this one. The widget itself refuses to run twice.
 fn widget(paths: &Paths) -> Result<i32> {
     fresh_db(paths, |c, cfg| daemon::widget::write(paths, c, Tz::from_env(), cfg, now_ms()))?;
     let home = std::env::var("HOME").unwrap_or_default();
-    let apps = [PathBuf::from("/Applications/ShadowCorp.app"), PathBuf::from(format!("{home}/Applications/ShadowCorp.app"))];
+    let apps = [PathBuf::from("/Applications/Dango.app"), PathBuf::from(format!("{home}/Applications/Dango.app"))];
     if let Some(app) = apps.iter().find(|a| a.exists()) {
         std::process::Command::new("open").arg("-a").arg(app).status()?;
-        println!("ShadowCorp 已打开，小部件在屏幕右下角。右键可退出或设置登录时自动启动。");
+        println!("{}", Config::load(paths).lang().t("打工团子已打开，在屏幕右下角。右键可退出或设置登录时自动启动。", "Dango is open in the bottom-right corner. Right-click it to quit or start it at login."));
         return Ok(0);
     }
-    let exe = std::env::current_exe()?.with_file_name("shadowcorp-widget");
+    let exe = std::env::current_exe()?.with_file_name("dango-widget");
     if !exe.exists() {
-        return Err(format!("没有找到 ShadowCorp.app 或 {}，先运行 apps/widget/bundle.sh", exe.display()).into());
+        return Err(format!("没有找到 Dango.app 或 {}，先运行 apps/widget/bundle.sh", exe.display()).into());
     }
     std::process::Command::new(exe)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()?;
-    println!("小部件已启动，在屏幕右下角。右键可退出或设置登录时自动启动。");
+    println!("{}", Config::load(paths).lang().t("打工团子已启动，在屏幕右下角。右键可退出或设置登录时自动启动。", "Dango started in the bottom-right corner. Right-click it to quit or start it at login."));
     Ok(0)
 }
 
 fn status(paths: &Paths, claude: bool) -> Result<i32> {
     if !claude {
-        return with_fresh_db(paths, |c, _| snapshot::status(c, Tz::from_env(), now_ms(), None));
+        return with_fresh_db(paths, |c, cfg| snapshot::status(c, Tz::from_env(), now_ms(), None, cfg.lang()));
     }
     // statusLine mode: session_id from stdin, answer from the daemon or the
     // last cached line (SPEC 4.2). Never slower than the hook budget.
@@ -252,7 +302,7 @@ fn status(paths: &Paths, claude: bool) -> Result<i32> {
             println!("{line}");
             let _ = daemon::paths::write_private(&paths.status_cache, line.as_bytes());
         }
-        None => println!("{}", fs::read_to_string(&paths.status_cache).unwrap_or_else(|_| "▮ 影子公司".into())),
+        None => println!("{}", fs::read_to_string(&paths.status_cache).unwrap_or_else(|_| format!("▮ {}", Config::load(paths).lang().t("打工团子", "Dango")))),
     }
     Ok(0)
 }
@@ -442,6 +492,10 @@ fn rebuild(paths: &Paths) -> Result<i32> {
         let _ = fs::remove_file(format!("{}{ext}", paths.db.display()));
         let _ = fs::remove_file(format!("{}{ext}", tmp.display()));
     }
-    println!("重建完成：{n} 个事件，{} → {}。", fmt_usd(old_usd), fmt_usd(new_usd));
+    if Config::load(paths).lang().en() {
+        println!("Rebuilt: {n} events, {} → {}.", fmt_usd(old_usd), fmt_usd(new_usd));
+    } else {
+        println!("重建完成：{n} 个事件，{} → {}。", fmt_usd(old_usd), fmt_usd(new_usd));
+    }
     Ok(0)
 }

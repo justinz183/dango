@@ -1,4 +1,4 @@
-//! `shadowcorp hook` (Claude Code) and `shadowcorp hook --codex` (Codex):
+//! `dango hook` (Claude Code) and `dango hook --codex` (Codex):
 //! the command every hook runs. Reads stdin, appends its events to the
 //! spool and exits 0 — always, so it can never block the agent. On Stop it asks the daemon for this turn's box and
 //! returns it as `systemMessage`, which Claude Code shows to the user and
@@ -13,7 +13,7 @@ use daemon::config::Config;
 use daemon::paths::Paths;
 use daemon::{server, spool};
 use serde_json::{json, Value};
-use shadowcorp_core::event::Kind;
+use dango_core::event::Kind;
 
 /// SPEC 4.1: the Stop hook waits at most this long for the box.
 pub const SETTLE_TIMEOUT: Duration = Duration::from_millis(300);

@@ -88,8 +88,8 @@ fn row(content: &str) -> String {
     format!("│{}│", pad(&format!("  {content}"), INNER))
 }
 
-fn cols(left: &str, right: &str) -> String {
-    format!("{}{right}", pad(left, 13))
+fn cols_w(left: &str, right: &str, w: usize) -> String {
+    format!("{}{right}", pad(left, w))
 }
 
 /// Room for line 4's text after "✦ ".
@@ -114,6 +114,7 @@ pub struct TurnSummary {
     pub record_usd: f64,
     pub leverage: Option<f64>,
     pub highlight: Option<String>,
+    pub lang: crate::i18n::Lang,
 }
 
 /// "$4.3" under ten dollars, "$1,240" above.
@@ -127,8 +128,13 @@ pub fn fmt_usd(x: f64) -> String {
 
 /// "25 分钟" under an hour, "3.4h" under a hundred, "123h" above.
 pub fn fmt_hours(h: f64) -> String {
+    fmt_hours_in(h, crate::i18n::Lang::Zh)
+}
+
+/// `fmt_hours` in either language ("25 分钟" / "25 min").
+pub fn fmt_hours_in(h: f64, lang: crate::i18n::Lang) -> String {
     if h < 1.0 {
-        format!("{} 分钟", (h * 60.0).round() as i64)
+        format!("{} {}", (h * 60.0).round() as i64, lang.t("分钟", "min"))
     } else if h < 100.0 {
         format!("{h:.1}h")
     } else {
@@ -137,26 +143,29 @@ pub fn fmt_hours(h: f64) -> String {
 }
 
 pub fn settlement_box(s: &TurnSummary) -> String {
-    let title = "─ 产出 ";
+    let l = s.lang;
+    let title = l.t("─ 产出 ", "─ Output ");
     let top = format!("┌{title}{}┐", "─".repeat(INNER.saturating_sub(width(title))));
     // Tags shown in this order; when they do not all fit, the lowest
     // priority ones are dropped whole rather than cut.
-    let mut tags: Vec<(u8, String)> = vec![(0, fmt_hours(s.hours))];
+    let mut tags: Vec<(u8, String)> = vec![(0, fmt_hours_in(s.hours, l))];
     for (i, j) in s.jobs.iter().take(2).enumerate() {
         tags.push((if i == 0 { 1 } else { 2 }, j.clone()));
     }
     if s.files > 0 {
-        tags.push((5, format!("{} 个文件", s.files)));
+        tags.push((5, if l.en() { format!("{} files", s.files) } else { format!("{} 个文件", s.files) }));
     }
     match s.test_passed {
-        Some(true) => tags.push((3, "测试通过".into())),
-        Some(false) => tags.push((3, "测试未过".into())),
+        Some(true) => tags.push((3, l.t("测试通过", "tests passed").into())),
+        Some(false) => tags.push((3, l.t("测试未过", "tests failed").into())),
         None => {}
     }
     if s.committed {
-        tags.push((4, "已提交".into()));
+        tags.push((4, l.t("已提交", "committed").into()));
     }
-    let room = INNER - 2 - 13;
+    // English labels are a cell wider.
+    let lw = if l.en() { 14 } else { 13 };
+    let room = INNER - 2 - lw;
     let join = |t: &[(u8, String)]| t.iter().map(|(_, x)| x.as_str()).collect::<Vec<_>>().join(" · ");
     while tags.len() > 1 && width(&join(&tags)) > room {
         let lowest = tags.iter().enumerate().max_by_key(|(_, (p, _))| *p).map(|(i, _)| i).unwrap();
@@ -165,18 +174,19 @@ pub fn settlement_box(s: &TurnSummary) -> String {
     let what = join(&tags);
     // Today against the best day: a full bar and "单日新高" once it is beaten.
     let record = if s.record_usd > 0.0 && s.today_usd + 1e-9 >= s.record_usd && s.today_usd > 0.0 {
-        format!("{} 单日新高", ring_bar(1.0, 1.0, 5))
+        format!("{} {}", ring_bar(1.0, 1.0, 5), l.t("单日新高", "new best day"))
     } else {
-        format!("{} 单日纪录 {}", ring_bar(s.today_usd, s.record_usd, 5), fmt_usd(s.record_usd))
+        format!("{} {} {}", ring_bar(s.today_usd, s.record_usd, 5), l.t("单日纪录", "best day"), fmt_usd(s.record_usd))
     };
     let mut lines = vec![
         top,
-        row(&cols(&format!("+{}", fmt_usd(s.usd)), &what)),
-        row(&cols(
-            &format!("今日 {}", fmt_usd(s.today_usd)),
-            &format!("本周 {} · 杠杆 {}", fmt_usd(s.week_usd), fmt_leverage(s.leverage)),
+        row(&cols_w(&format!("+{}", fmt_usd(s.usd)), &what, lw)),
+        row(&cols_w(
+            &format!("{} {}", l.t("今日", "Today"), fmt_usd(s.today_usd)),
+            &format!("{} {} · {} {}", l.t("本周", "week"), fmt_usd(s.week_usd), l.t("杠杆", "leverage"), fmt_leverage(s.leverage)),
+            lw,
         )),
-        row(&cols(&format!("累计 {}", fmt_usd(s.total_usd)), &record)),
+        row(&cols_w(&format!("{} {}", l.t("累计", "Total"), fmt_usd(s.total_usd)), &record, lw)),
     ];
     if let Some(h) = &s.highlight {
         lines.push(row(&format!("✦ {h}")));
@@ -208,16 +218,18 @@ pub struct StatusInfo {
     pub today_usd: f64,
     pub week_usd: f64,
     pub leverage: Option<f64>,
+    pub lang: crate::i18n::Lang,
 }
 
 pub fn status_line(s: &StatusInfo) -> String {
+    let l = s.lang;
     let mut parts = vec![
         format!("▮ {}", fmt_usd(s.total_usd)),
-        format!("今日 {}", fmt_usd(s.today_usd)),
-        format!("本周 {}", fmt_usd(s.week_usd)),
+        format!("{} {}", l.t("今日", "today"), fmt_usd(s.today_usd)),
+        format!("{} {}", l.t("本周", "week"), fmt_usd(s.week_usd)),
     ];
     if s.leverage.is_some() {
-        parts.push(format!("杠杆 {}", fmt_leverage(s.leverage)));
+        parts.push(format!("{} {}", l.t("杠杆", "leverage"), fmt_leverage(s.leverage)));
     }
     parts.join(" · ")
 }
@@ -225,6 +237,29 @@ pub fn status_line(s: &StatusInfo) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn english_box_is_44_columns_wide() {
+        let s = TurnSummary {
+            usd: 212.4,
+            hours: 0.4,
+            jobs: vec!["Software engineer".into(), "QA engineer".into()],
+            files: 6,
+            test_passed: Some(true),
+            today_usd: 327.0,
+            week_usd: 1_240.0,
+            total_usd: 11_724.0,
+            record_usd: 1_742.0,
+            leverage: Some(7.1),
+            lang: crate::i18n::Lang::En,
+            ..Default::default()
+        };
+        let b = settlement_box(&s);
+        assert!(b.lines().all(|l| width(l) == BOX_WIDTH), "{b}");
+        assert!(b.contains("─ Output ") && b.contains("Today $327") && b.contains("Total $11,724") && b.contains("24 min"), "{b}");
+        let st = status_line(&StatusInfo { total_usd: 10.0, today_usd: 1.0, week_usd: 2.0, leverage: None, lang: crate::i18n::Lang::En });
+        assert!(st.contains("today $1.0") && st.contains("week $2.0"), "{st}");
+    }
 
     #[test]
     fn box_is_44_columns_wide() {
@@ -241,6 +276,7 @@ mod tests {
             record_usd: 1_742.0,
             leverage: Some(7.1),
             highlight: Some("晋级 黄金 II".into()),
+            lang: Default::default(),
         };
         let b = settlement_box(&s);
         for line in b.lines() {
@@ -277,6 +313,7 @@ mod tests {
     #[test]
     fn status() {
         let s = StatusInfo {
+            lang: Default::default(),
             total_usd: 11_724.0,
             today_usd: 327.0,
             week_usd: 1_240.0,

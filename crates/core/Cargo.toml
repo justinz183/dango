@@ -1,5 +1,5 @@
 [package]
-name = "shadowcorp-core"
+name = "dango-core"
 version.workspace = true
 edition.workspace = true
 description = "Event schema, scoring, progress and achievement engine. Pure logic, no IO."
