@@ -755,7 +755,14 @@ impl Processor {
             .last_topic
             .clone()
             .filter(|_| st.last_topic_at.is_some_and(|at| (ts - at) as f64 / MIN <= occupation::TOPIC_MEMORY_MINUTES));
-        let agg = TurnAgg { topic: p.topic().or(remembered), ..Default::default() };
+        // A prompt that reads as several things equally stays on what the
+        // session was already doing.
+        let ties: Vec<String> = p.topic_ties.iter().flatten().map(|t| self.occ.canon(t).to_string()).collect();
+        let topic = match (p.topic(), &remembered) {
+            (Some(_), Some(r)) if ties.contains(r) => Some(r.clone()),
+            (t, r) => t.or(r.clone()),
+        };
+        let agg = TurnAgg { topic, ..Default::default() };
         self.create_turn(&tid, sid, ts, p.task_class.unwrap_or(TaskClass::Other), correction, agg)?;
         st.open_turn = Some(tid);
         self.save_sess(sid, &st)?;

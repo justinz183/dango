@@ -150,6 +150,12 @@ impl Table {
 /// words, else the family's default. ASCII keywords match whole words or
 /// phrases, others anywhere. The text is read and dropped; only the id leaves.
 pub fn topic(prompt: &str) -> Option<&'static str> {
+    topic_candidates(prompt).first().copied()
+}
+
+/// The pick of every family tied for the top score, the usual winner
+/// first: a session already on one of them stays there (ingest).
+pub fn topic_candidates(prompt: &str) -> Vec<&'static str> {
     let p = prompt.to_lowercase();
     let padded: String = std::iter::once(' ')
         .chain(p.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '+' | '#' | '.' | '/' | '-') { c } else { ' ' }))
@@ -168,17 +174,19 @@ pub fn topic(prompt: &str) -> Option<&'static str> {
         e.1 |= strong > 0;
     }
     let points = |f: &Family| by_family.get(f.id.as_str()).copied().unwrap_or((0, false));
-    let top = t.family.iter().filter(|f| matches!(points(f), (s, strong) if s >= 3 || (s >= 2 && strong))).map(|f| points(f).0).max()?;
-    // The earliest family with the top score wins a tie.
-    let family = t.family.iter().find(|f| points(f).0 == top && matches!(points(f), (s, strong) if s >= 3 || (s >= 2 && strong)))?;
-    let mut best: Option<(&'static str, usize)> = None;
-    for o in t.occupation.iter().filter(|o| o.family == family.id) {
-        let tells = o.tell.iter().filter(|k| hit(k)).count();
-        if tells > 0 && best.map_or(true, |(_, n)| tells > n) {
-            best = Some((o.id.as_str(), tells));
+    let qualifies = |f: &Family| matches!(points(f), (s, strong) if s >= 3 || (s >= 2 && strong));
+    let Some(top) = t.family.iter().filter(|f| qualifies(f)).map(|f| points(f).0).max() else { return Vec::new() };
+    let pick = |family: &'static Family| {
+        let mut best: Option<(&'static str, usize)> = None;
+        for o in t.occupation.iter().filter(|o| o.family == family.id) {
+            let tells = o.tell.iter().filter(|k| hit(k)).count();
+            if tells > 0 && best.map_or(true, |(_, n)| tells > n) {
+                best = Some((o.id.as_str(), tells));
+            }
         }
-    }
-    Some(best.map(|b| b.0).unwrap_or(family.default.as_str()))
+        best.map(|b| b.0).unwrap_or(family.default.as_str())
+    };
+    t.family.iter().filter(|f| points(f).0 == top && qualifies(f)).map(pick).collect()
 }
 
 /// Every id the attribution rules can return.
@@ -462,8 +470,21 @@ mod tests {
     /// Talk about the product, the repo or the UI is nobody's specialty:
     /// a naming question once came out as a vet ("叫什么名字" hit "叫").
     #[test]
+    fn tied_families_are_all_offered() {
+        // 创伤 (health) and 视频 (video): one strong word each; 版权 is only weak.
+        let c = topic_candidates("我想要用真实的照片，不需要管版权问题，这个视频的题目就叫：爱，拥抱与创伤");
+        assert_eq!(c, vec!["doctor", "video"]);
+        assert_eq!(topic("我想要用真实的照片，不需要管版权问题，这个视频的题目就叫：爱，拥抱与创伤"), Some("doctor"));
+        assert_eq!(topic_candidates("帮我把这段视频剪辑一下，加字幕"), vec!["video"]);
+        assert!(topic_candidates("继续").is_empty());
+    }
+
+    #[test]
     fn everyday_prompts_have_no_topic() {
         for p in [
+            "然后日报月报年报的导出你也给我优化下", "你可以帮我写一个 total war 二战题材的版本吗，需要我提供给你什么",
+            "中文英文各做一个版本，请你先做个 mvp 看看", "是不是可以直接把一个手机改成录音设备，一直连着充电器",
+            "请你把 vpn 协议的隐秘性做好一些", "我想让你设计得更有意思一些，比如拟人化，提供更多的情绪价值",
             "你觉得我这个叫什么名字好，我这个产品",
             "我觉得可以再想想用什么名字",
             "请问这个上传到github了吗",
@@ -527,6 +548,11 @@ mod tests {
             ("人像摄影光圈开多大，镜头怎么选", "designer"), ("客厅装修选什么地板，吊顶要不要做", "designer"),
             ("这个注册流程的交互太绕了，用户体验怎么改", "designer"),
             ("帮我把这段视频剪辑一下，加字幕", "video"), ("视频转场怎么做更自然", "video"),
+            ("视频帧率用 30 还是 60，导出 mp4 会不会太大", "video"),
+            // An app's frame rate and its skins are not a video job.
+            ("桌宠的帧率降一点，干活时卡顿，cpu 占用太高", "swe"), ("团子的自定义皮肤怎么设计比较好，颜色和贴图都能换", "designer"),
+            // Generic words (提供给, 查查, 协议, 情绪, 宠物, mvp) decide nothing alone.
+            ("帮我查查海力士的财报", "fin"), ("最近情绪低落，什么都不想做", "counselor"), ("签协议前要注意哪些条款", "lawyer"),
             ("这首歌的和弦进行怎么编", "musician"), ("吉他怎么扫弦，节奏型怎么练", "musician"),
             ("面试穿什么合适，衬衫配什么裤子", "research"), ("圆脸适合什么发型，妆容怎么画", "research"),
             // education and science

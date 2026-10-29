@@ -1469,6 +1469,7 @@ final class PetView: NSView {
     private var dragged = false
     var hovering = false
     private var captionRect = NSRect(x: 40, y: 6, width: 96, height: 22)
+    private var captionCache: (key: String, image: NSImage, rect: NSRect)?
 
     override var isFlipped: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -1476,11 +1477,6 @@ final class PetView: NSView {
     var characterRect: NSRect { NSRect(x: (Self.size.width - 80) / 2, y: 50, width: 80, height: 80) }
     /// What takes the pointer: the character and the caption.
     var hitRect: NSRect { characterRect.insetBy(dx: -8, dy: -8).union(captionRect) }
-
-    var animating: Bool {
-        guard let m = model else { return false }
-        return m.working > 0 || !receipts.isEmpty || t < sparkleUntil || t < flashUntil
-    }
 
     /// New data: a newer last turn means a receipt.
     func take(_ m: Model) {
@@ -1559,21 +1555,33 @@ final class PetView: NSView {
         } else {
             caption = text(L("今日 ", "Today ") + fmtUSD(m.todayUSD), size: 11, weight: .medium, color: secondary, mono: true)
         }
-        // One line when it fits, else two (centred), cut only past that.
-        let para = NSMutableParagraphStyle()
-        para.alignment = .center
-        para.lineBreakMode = .byWordWrapping
-        let body = NSMutableAttributedString(attributedString: caption)
-        body.addAttribute(.paragraphStyle, value: para, range: NSRange(location: 0, length: body.length))
-        let maxText = bounds.width - 12 - 20
-        let fit = body.boundingRect(with: NSSize(width: maxText, height: 200), options: [.usesLineFragmentOrigin])
-        let twoLines = fit.height > 20
-        let w = min(bounds.width - 12, ceil(fit.width) + 20)
-        captionRect = NSRect(x: (bounds.width - w) / 2, y: 6, width: w, height: twoLines ? 36 : 22)
-        NSColor(calibratedWhite: 0.1, alpha: 0.85).setFill()
-        NSBezierPath(roundedRect: captionRect, xRadius: 11, yRadius: 11).fill()
-        body.draw(with: NSRect(x: captionRect.minX + 10, y: captionRect.minY + 4, width: w - 20, height: captionRect.height - 7),
-                  options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        // Text layout is the dearest part of a frame, so the pill is laid
+        // out and drawn once per text and then reused.
+        let key = "\(caption.string)|\(caption.attribute(.foregroundColor, at: 0, effectiveRange: nil).map { "\($0)" } ?? "")|\(bounds.width)"
+        if captionCache?.key != key {
+            // One line when it fits, else two (centred), cut only past that.
+            let para = NSMutableParagraphStyle()
+            para.alignment = .center
+            para.lineBreakMode = .byWordWrapping
+            let body = NSMutableAttributedString(attributedString: caption)
+            body.addAttribute(.paragraphStyle, value: para, range: NSRange(location: 0, length: body.length))
+            let maxText = bounds.width - 12 - 20
+            let fit = body.boundingRect(with: NSSize(width: maxText, height: 200), options: [.usesLineFragmentOrigin])
+            let twoLines = fit.height > 20
+            let w = min(bounds.width - 12, ceil(fit.width) + 20)
+            let rect = NSRect(x: (bounds.width - w) / 2, y: 6, width: w, height: twoLines ? 36 : 22)
+            let image = NSImage(size: rect.size, flipped: false) { r in
+                NSColor(calibratedWhite: 0.1, alpha: 0.85).setFill()
+                NSBezierPath(roundedRect: r, xRadius: 11, yRadius: 11).fill()
+                body.draw(with: NSRect(x: 10, y: 4, width: r.width - 20, height: r.height - 7), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+                return true
+            }
+            captionCache = (key, image, rect)
+        }
+        if let cache = captionCache {
+            captionRect = cache.rect
+            cache.image.draw(in: cache.rect)
+        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -1622,7 +1630,6 @@ final class OfficeView: NSView {
     var occupants: [Occupant] = []
     var t = 0.0
     override var isFlipped: Bool { false }
-    var animating: Bool { !occupants.isEmpty || !walkers.isEmpty }
 
     enum Pastime { case working, coffee, phone, chat, sleep, window, plant }
     private enum Spot: Equatable { case coffee, seat(Int), corner }
@@ -2138,7 +2145,6 @@ final class App: NSObject, NSApplicationDelegate {
     var outsideClick: Any?
     var petPanel: NSPanel!
     var pet: PetView?
-    private var frame = 0
 
     private func glass(_ size: NSSize, radius: CGFloat) -> NSVisualEffectView {
         let e = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
@@ -2191,7 +2197,12 @@ final class App: NSObject, NSApplicationDelegate {
         petPanel.becomesKeyOnlyIfNeeded = true
         petPanel.ignoresMouseEvents = true
         petPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // 8 bits a channel is plenty for flat colours, and far cheaper to
+        // composite than the 16-bit float the screen would otherwise get.
+        petPanel.depthLimit = .twentyfourBitRGB
         let v = PetView(frame: NSRect(origin: .zero, size: PetView.size))
+        v.wantsLayer = true
+        v.layer?.contentsFormat = .RGBA8Uint
         v.onClick = { [weak self] in self?.toggle() }
         v.onDrag = { [weak self] dx, dy in
             guard let self else { return }
@@ -2208,16 +2219,15 @@ final class App: NSObject, NSApplicationDelegate {
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reload() }
         Timer.scheduledTimer(withTimeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.frame += 1
-            // Full frame rate only while something moves; otherwise just blinks.
+            // 24 frames a second; nothing while the pet is covered or hidden.
             if let pet = self.pet, self.petPanel.isVisible {
                 pet.tick(1.0 / 24.0)
-                if pet.animating || self.frame % 6 == 0 { pet.needsDisplay = true }
+                if self.petPanel.occlusionState.contains(.visible) { pet.needsDisplay = true }
             }
             if self.isExpanded {
                 let office = self.dashboard.office
                 office.tick(1.0 / 24.0)
-                if office.animating || self.frame % 6 == 0 { office.needsDisplay = true }
+                office.needsDisplay = true
             }
         }
     }

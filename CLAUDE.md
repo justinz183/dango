@@ -27,7 +27,7 @@
 - 事件表只追加；任何让用户历史总数变少的改动都不允许（SPEC 5.5）。
 - 不落盘、不上传 prompt / 代码 / 路径 / 仓库名（SPEC 14）。v5 起本地会存每个回合的 token 数（按模型）和按官方 API 价算出的模型花费——只有数字，永不上传（用户 2026-10-29 决定）。
 - 改职业表、时薪、每步分钟数（core/occupation.rs）、计分封顶或成就阈值前先问我，并同步更新 golden.toml。
-- 话题先分大类（occupations.toml `[[family]]`，每类一个代表职业）再按 `tell` 认专科；strong / weak 只给大类记分。中文是子串匹配，不收单字（白名单见 occupation.rs `no_single_character_keywords`），泛用词（怎么做、解释一下、经济、需求……）只能当弱词，tell 只收专科独有的词；加了词先跑 `echo '一句话' | cargo run -q -p dango-core --example topic`、`families_then_specialties` 和 `everyday_prompts_have_no_topic`。
+- 话题先分大类（occupations.toml `[[family]]`，每类一个代表职业）再按 `tell` 认专科；strong / weak 只给大类记分。中文是子串匹配，不收单字（白名单见 occupation.rs `no_single_character_keywords`），泛用词（怎么做、解释一下、经济、需求……）只能当弱词，tell 只收专科独有的词；加了词先跑 `echo '一句话' | cargo run -q -p dango-core --example topic`、`families_then_specialties` 和 `everyday_prompts_have_no_topic`。泛用词藏在别的词里也会命中（"提供给"含"供给"、"帮我查查"），所以强词必须是只在那个行当出现的词，改完先跑 `python3 tools/topic_calibrate.py`（本机真实提示过一遍，只打印前 64 字、不落盘）和 `--why`（看每条命中了哪些词）。几个大类打平时（各命中一个强词），钩子把并列的都写进 `topic_ties`，守护进程沿用会话当前话题（replay.rs `a_tied_prompt_stays_on_the_sessions_topic`）。
 - 时薪只能来自可查的来源（目前是 BLS OEWS API），写明序列和日期；模型单价只能抄官方价格页（assets/model_prices.toml 写明 URL 和日期）。不凭记忆填数。
 - $ = 各职业分钟 × 该职业时薪；累计只增不减。
 - 新增成就 = 改 achievements.json + achievements.rs 里一对用例（刚好解锁 / 差一点）+ 一句解锁语（≤ 18 字），不改引擎代码。

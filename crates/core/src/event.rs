@@ -203,6 +203,10 @@ pub struct Payload {
     /// How many times in a row this exact prompt was sent (1 = first time).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_repeat: Option<u32>,
+    /// Other topics the prompt scored just as high for: the session keeps
+    /// the one it is already on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topic_ties: Option<Vec<String>>,
     /// SessionStart `source`: startup | resume | clear | compact | fork.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_source: Option<String>,

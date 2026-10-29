@@ -277,7 +277,11 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
             let prompt = s(input, "prompt").unwrap_or("");
             p.task_class = Some(classify::classify_prompt(prompt));
             p.is_correction = Some(classify::is_correction(prompt));
-            p.topic = occupation::topic(prompt).map(str::to_string);
+            let candidates = occupation::topic_candidates(prompt);
+            p.topic = candidates.first().map(|t| t.to_string());
+            if candidates.len() > 1 {
+                p.topic_ties = Some(candidates[1..].iter().map(|t| t.to_string()).collect());
+            }
             if let Some(sid) = s(input, "session_id") {
                 p.prompt_repeat = Some(prompt_repeat(env.paths, sid, prompt));
             }

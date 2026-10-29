@@ -514,6 +514,39 @@ fn a_prompt_without_a_topic_stays_on_the_sessions_last() {
     assert!(work[2].contains("research"), "three hours later it is a new subject: {}", work[2]);
 }
 
+/// A prompt that reads as several things equally (a strong word each)
+/// stays on what the session was doing; without that, the usual pick.
+#[test]
+fn a_tied_prompt_stays_on_the_sessions_topic() {
+    use dango_core::event::{Event, Kind, Source};
+    let paths = home("topictie");
+    let mut p = processor(&paths);
+    let t0 = 1_793_200_000_000;
+    let ev = |id: &str, ts: i64, kind: Kind, topic: Option<&str>, ties: &[&str]| {
+        let mut e = Event::new(id.into(), ts, Source::ClaudeCode, kind);
+        e.session_id = Some("s-tie".into());
+        e.payload.topic = topic.map(str::to_string);
+        e.payload.topic_ties = (!ties.is_empty()).then(|| ties.iter().map(|t| t.to_string()).collect());
+        e
+    };
+    p.begin().unwrap();
+    for e in [
+        ev("p1", t0, Kind::Prompt, Some("video"), &[]),
+        ev("e1", t0 + 60_000, Kind::TurnEnd, None, &[]),
+        ev("p2", t0 + 120_000, Kind::Prompt, Some("doctor"), &["video", "lawyer"]),
+        ev("e2", t0 + 180_000, Kind::TurnEnd, None, &[]),
+        ev("p3", t0 + 240_000, Kind::Prompt, Some("doctor"), &["lawyer"]),
+        ev("e3", t0 + 300_000, Kind::TurnEnd, None, &[]),
+    ] {
+        p.handle(&e).unwrap();
+    }
+    p.commit().unwrap();
+    let work: Vec<String> =
+        p.conn.prepare("SELECT work FROM turns ORDER BY started_at").unwrap().query_map([], |r| r.get(0)).unwrap().flatten().collect();
+    assert!(work[1].contains("video") && !work[1].contains("doctor"), "the tie goes to the video session: {}", work[1]);
+    assert!(work[2].contains("doctor"), "a tie that does not include it is the usual pick: {}", work[2]);
+}
+
 /// An old event whose topic is a merged occupation counts as the
 /// representative: the vet's talk-only turn is the doctor's.
 #[test]
