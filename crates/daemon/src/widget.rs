@@ -83,7 +83,7 @@ pub fn tools(conn: &Connection, from: i64, to: i64) -> Result<Vec<Value>> {
         .into_iter()
         .map(|(src, usd, pd, n, cost)| {
             let (name, color) = tool_label(&src);
-            json!({ "id": src, "name": name, "color": color, "usd": usd, "hours": pd * k.caps.minutes_per_day / 60.0, "turns": n,
+            json!({ "id": src, "name": name, "color": color, "usd": usd, "hours": pd * k.units.minutes_per_day / 60.0, "turns": n,
                     "cost": cost, "leverage": pricing::leverage(usd, cost), "share": if total > 0.0 { usd / total } else { 0.0 } })
         })
         .collect())
@@ -289,7 +289,7 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
             ("happy", s("这把测试全绿。", "All tests green this time."))
         } else {
             let job = occupation::main(&work_of(&work)).map(|o| t.name_in(&o, lang).to_string()).unwrap_or_default();
-            let h = fmt_hours_in(pd * k.caps.minutes_per_day / 60.0, lang);
+            let h = fmt_hours_in(pd * k.units.minutes_per_day / 60.0, lang);
             ("happy", if en { format!("Just did {h} of {} work, worth {}.", dango_core::i18n::lower_first(&job), fmt_usd(usd)) } else { format!("刚干了 {h} 的{job}活，值 {}。", fmt_usd(usd)) })
         }
     } else if let Some(l) = o.week_leverage.filter(|l| *l >= 10.0 && o.week_cost >= 1.0) {
@@ -333,7 +333,7 @@ fn recent_turns(conn: &Connection, tool: Option<&str>) -> Result<Vec<Value>> {
             let job = occupation::main(&work_of(&work)).unwrap_or_default();
             json!({
                 "at": at, "tool": tool_label(&src).0, "job": job, "name": t.name(&job), "color": t.get(&job).map(|j| j.color.as_str()),
-                "hours": pd * k.caps.minutes_per_day / 60.0, "usd": usd, "person_days": pd, "files": files,
+                "hours": pd * k.units.minutes_per_day / 60.0, "usd": usd, "person_days": pd, "files": files,
                 "test_passed": (test_run == 1).then(|| passed == Some(1)),
             })
         })
@@ -350,7 +350,7 @@ pub fn view(conn: &Connection, tz: Tz, now: i64, tool: Option<&str>) -> Result<V
         None => ("usd".to_string(), "person_days".to_string(), "cost".to_string()),
     };
     // Credited minutes: per-agent counters hold minutes, the overall one person-days.
-    let to_hours = |v: f64| if tool.is_some() { v / 60.0 } else { v * k.caps.minutes_per_day / 60.0 };
+    let to_hours = |v: f64| if tool.is_some() { v / 60.0 } else { v * k.units.minutes_per_day / 60.0 };
     let c = |m: &str, scope: String| snapshot::counter(conn, m, &scope);
     let pair = |scope: String| {
         let (usd, cost) = (c(&usd_m, scope.clone()), c(&cost_m, scope.clone()));

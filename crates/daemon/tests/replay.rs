@@ -361,12 +361,13 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert_eq!(q("SELECT COUNT(*) || '' FROM turns WHERE session_id = 'th-main' AND ended_at IS NOT NULL"), "2");
     let work: std::collections::BTreeMap<String, f64> = serde_json::from_str(&q("SELECT work FROM turns WHERE id = 't1'")).unwrap();
     assert_eq!(dango_core::occupation::main(&work).as_deref(), Some("video"), "{work:?}");
-    for job in ["swe", "writer", "data"] {
+    for job in ["swe", "data"] {
         assert!(work.contains_key(job), "{job} missing from {work:?}");
     }
     // ffmpeg 15 + whisper 20 + turn base 5 + one sub-agent 12, plus the web
-    // search (5): in a turn about a video, research is the editor's work.
-    assert!(!work.contains_key("research") && (work["video"] - 57.0).abs() < 1e-9, "{work:?}");
+    // search (5) and the NOTES.md edit (3 min of prose, a researcher's): in a
+    // turn about a video, research is the editor's work.
+    assert!(!work.contains_key("research") && (work["video"] - 60.0).abs() < 1e-9, "{work:?}");
     let failed: String = q("SELECT test_passed || '' FROM turns WHERE id = 't2'");
     assert_eq!(failed, "0", "cargo test exited 101");
 
@@ -482,18 +483,21 @@ fn codex_rollouts_are_followed_without_hooks() {
     assert!((p.ctr("usd:codex", "all") - usd).abs() < 1e-9, "counted once");
 }
 
+/// Codex's hook events (sent before it was followed through its logs) are
+/// kept but not counted, and set no cutoff: backfill reads all of Codex.
 #[test]
-fn each_tool_has_its_own_live_cutoff() {
+fn old_codex_hook_events_are_not_counted() {
     let paths = home("cutoff");
     let mut p = processor(&paths);
-    // A live Codex event (an old spool's; Codex is now followed through its
-    // rollout files, as backfill events).
     let mut ev = Event::new("cx-1".into(), 1_793_000_000_000, dango_core::event::Source::Codex, dango_core::event::Kind::Prompt);
     ev.session_id = Some("cx".into());
     p.begin().unwrap();
-    p.handle(&ev).unwrap();
+    assert!(!p.handle(&ev).unwrap());
     p.commit().unwrap();
-    assert_eq!(db::get_meta(&p.conn, "live_since:codex").unwrap().as_deref(), Some("1793000000000"));
+    let kept: i64 = p.conn.query_row("SELECT COUNT(*) FROM events WHERE id = 'cx-1'", [], |r| r.get(0)).unwrap();
+    let sessions: i64 = p.conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0)).unwrap();
+    assert_eq!((kept, sessions), (1, 0));
+    assert_eq!(db::get_meta(&p.conn, "live_since:codex").unwrap(), None);
     assert_eq!(db::get_meta(&p.conn, "live_since").unwrap(), None, "Claude Code history is still open for backfill");
 }
 

@@ -16,7 +16,7 @@ use dango_core::expr::Val;
 use dango_core::occupation::{self, Table};
 use dango_core::progress::{self, coins_for_pd, stage_for, Streak, ACTIVE_DAY_PD, DEFAULT_WEEKLY_TARGET};
 use dango_core::render::{fmt_pd, fmt_short, width, TurnSummary, HIGHLIGHT_WIDTH};
-use dango_core::scoring::{self, credit, leverage, ScoringConstants, TurnSignals};
+use dango_core::scoring::{self, leverage, ScoringConstants, TurnSignals};
 
 use crate::config::Config;
 use crate::db::{get_meta, set_meta};
@@ -140,10 +140,10 @@ impl TurnAgg {
     }
 
     /// Minutes per occupation the whole turn is worth (docs/DESIGN.md §3).
-    fn work(&self, cap: f64) -> BTreeMap<String, f64> {
+    fn work(&self) -> BTreeMap<String, f64> {
         let mut w = self.work.clone();
         occupation::remap(&mut w, self.topic.as_deref());
-        occupation::finish(w, self.agent_calls.max(self.subagent_stops), cap, self.topic.as_deref())
+        occupation::finish(w, self.agent_calls.max(self.subagent_stops), self.topic.as_deref())
     }
 }
 
@@ -384,6 +384,12 @@ impl Processor {
             )?
             .execute(params![ev.id, ts, ev.source.as_str(), ev.kind.as_str(), ev.session_id, ev.turn_id, ev.cwd_hash, payload])?;
         if n == 0 {
+            return Ok(false);
+        }
+        // Codex is counted from its own logs (codex_tail), as backfill
+        // events. What its hooks sent before that (2026-10-29) is kept but
+        // not counted, so a turn seen both ways counts once.
+        if ev.source == Source::Codex {
             return Ok(false);
         }
         self.now = ts;
@@ -813,7 +819,14 @@ impl Processor {
         }
         agg.agent_calls += p.subagents.unwrap_or(0);
         if let (Some(o), Some(m)) = (&p.occupation, p.minutes) {
-            *agg.work.entry(o.clone()).or_default() += m;
+            // Prose is a researcher's work, counted from its words at today's
+            // pace (older events say "writer", at an older pace).
+            let (o, m) = if o == "writer" || (o == "research" && p.words.is_some()) {
+                ("research".to_string(), p.words.map(occupation::prose_minutes).unwrap_or(m))
+            } else {
+                (o.clone(), m)
+            };
+            *agg.work.entry(o).or_default() += m;
         }
         if agg.topic.is_none() {
             agg.topic = p.topic();
@@ -910,15 +923,16 @@ impl Processor {
         let end_ts = end.unwrap_or(agg.last_activity).max(row.started_at);
         let class = final_class(row.prompt_class, agg.test_run, agg.migration);
         let sig = agg.signals();
-        let work = agg.work(self.k.caps.turn_max);
+        let work = agg.work();
         let h: f64 = work.values().sum();
         let sc = self.scopes(end_ts, Some(sid));
         let (dkey, wkey, skey) = (sc.key("day").unwrap(), sc.key("week").unwrap(), sc.key("session").unwrap());
         let day_pd = self.ctr("person_days", &dkey);
         let week_pd = self.ctr("person_days", &wkey);
-        let credited = credit(self.k, h, day_pd, week_pd);
-        let mpd = self.k.caps.minutes_per_day;
-        let paid = scaled(&work, credited * mpd / h);
+        // Every minute counts: no turn, day or week cap (2026-10-29).
+        let mpd = self.k.units.minutes_per_day;
+        let credited = h / mpd;
+        let paid = work.clone();
         let usd = self.occ.usd(&paid);
         let role = turn_role(class, &agg.roles, agg.dir_ids.len());
         let duration = (end_ts - row.started_at) as f64 / MIN;
@@ -1066,18 +1080,16 @@ impl Processor {
     fn rescore(&mut self, tid: &str) -> Result<()> {
         let Some(row) = self.turn(tid)? else { return Ok(()) };
         let Some(end_ts) = row.ended_at else { return Ok(()) };
-        let work = row.agg.work(self.k.caps.turn_max);
+        let work = row.agg.work();
         let h: f64 = work.values().sum();
         if h <= row.human_minutes + 1e-9 {
             return Ok(());
         }
         let dh = h - row.human_minutes;
         let sc = self.scopes(end_ts, Some(&row.session_id));
-        let day_pd = self.ctr("person_days", &sc.key("day").unwrap());
-        let week_pd = self.ctr("person_days", &sc.key("week").unwrap());
-        let dpd = credit(self.k, dh, day_pd, week_pd);
-        // The extra credit, split the way the turn now splits.
-        let add = scaled(&work, dpd * self.k.caps.minutes_per_day / h);
+        let dpd = dh / self.k.units.minutes_per_day;
+        // The extra minutes, split the way the turn now splits.
+        let add = scaled(&work, dh / h);
         let dusd = self.occ.usd(&add);
         let mut paid = row.paid;
         for (o, m) in &add {

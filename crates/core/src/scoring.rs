@@ -17,15 +17,12 @@ pub const ACTIVE_GAP_MINUTES: f64 = 10.0;
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScoringConstants {
     pub version: String,
-    pub caps: Caps,
+    pub units: Units,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Caps {
-    pub turn_max: f64,
+pub struct Units {
     pub minutes_per_day: f64,
-    pub daily_person_days: f64,
-    pub weekly_person_days: f64,
 }
 
 impl ScoringConstants {
@@ -49,15 +46,6 @@ pub struct TurnSignals {
     pub subagents: u32,
     /// A commit or merge happened in the turn.
     pub merged: bool,
-}
-
-/// Person-days a turn adds after the daily and weekly caps. The part above a
-/// cap is simply not counted (SPEC 5.3).
-pub fn credit(k: &ScoringConstants, h_minutes: f64, day_so_far: f64, week_so_far: f64) -> f64 {
-    let pd = h_minutes / k.caps.minutes_per_day;
-    let day_room = (k.caps.daily_person_days - day_so_far).max(0.0);
-    let week_room = (k.caps.weekly_person_days - week_so_far).max(0.0);
-    pd.min(day_room).min(week_room)
 }
 
 pub fn leverage(human_minutes: f64, active_minutes: f64) -> Option<f64> {
@@ -90,16 +78,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn caps() {
-        let k = ScoringConstants::builtin();
-        assert_eq!(credit(k, 360.0, 0.0, 0.0), 0.75);
-        assert!((credit(k, 360.0, 5.5, 0.0) - 0.5).abs() < 1e-9);
-        assert_eq!(credit(k, 360.0, 6.0, 0.0), 0.0);
-        assert!((credit(k, 360.0, 0.0, 29.9) - 0.1).abs() < 1e-9);
-        assert_eq!(credit(k, 360.0, 0.0, 30.0), 0.0);
-    }
-
-    #[test]
     fn leverage_needs_five_active_minutes() {
         assert_eq!(leverage(100.0, 4.9), None);
         assert_eq!(leverage(100.0, 10.0), Some(10.0));
@@ -112,6 +90,7 @@ mod tests {
 
     #[test]
     fn rejects_incomplete_constants() {
-        assert!(ScoringConstants::parse("version='x'\n[caps]\nturn_max=2\nminutes_per_day=3\ndaily_person_days=4").is_err());
+        assert!(ScoringConstants::parse("version='x'\n[units]").is_err());
+        assert_eq!(ScoringConstants::builtin().units.minutes_per_day, 480.0);
     }
 }

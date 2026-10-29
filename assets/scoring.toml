@@ -1,10 +1,9 @@
-# Scoring caps (SPEC 5.3). How many minutes each step is worth, and to whom,
-# lives in crates/core/src/occupation.rs and assets/occupations.toml.
+# Units only: there are no caps (user, 2026-10-29: "就记数值就行了，不要
+# 封顶"). A turn, a day and a week count every minute of work. How many
+# minutes each step is worth, and to whom, lives in
+# crates/core/src/occupation.rs and assets/occupations.toml.
 # Changing these may only keep or raise a user's historical total (SPEC 5.5).
-version = "2.0"
+version = "3.0"
 
-[caps]
-turn_max = 360            # one turn is worth at most six hours
+[units]
 minutes_per_day = 480     # one person-day
-daily_person_days = 6
-weekly_person_days = 30

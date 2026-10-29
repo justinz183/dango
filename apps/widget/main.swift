@@ -2562,7 +2562,7 @@ var petFlavor: Flavor { flavorNamed(petFlavorOverride ?? UserDefaults.standard.s
 
 /// Every job's 团子 in the office has its own flavour, so a room of
 /// colleagues is not a row of black blobs; the usual crowd all differ.
-let jobFlavors = ["swe": "sesame", "data": "taro", "writer": "plain", "research": "pumpkin", "video": "azuki", "qa": "matcha", "web": "sakura",
+let jobFlavors = ["swe": "sesame", "data": "taro", "research": "pumpkin", "video": "azuki", "qa": "matcha", "web": "sakura",
                   "ops": "kinako", "fin": "kinako", "doctor": "plain", "trainer": "pumpkin", "counselor": "sakura", "designer": "sakura",
                   "musician": "taro", "chef": "azuki", "mathematician": "matcha", "physicist": "taro", "chemist": "matcha", "biologist": "matcha",
                   "architect": "kinako", "lawyer": "sesame", "entry": "plain"]

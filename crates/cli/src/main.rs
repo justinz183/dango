@@ -41,7 +41,7 @@ const USAGE: &str = "dango（打工团子）— 你的 AI 替你干了多少活�
                                    导入安装前的 Claude Code 历史
   dango daemon                前台运行守护进程
   dango replay PATH...        回放 hook fixtures（.json / .jsonl / 目录）
-  dango rebuild               从事件表重建全部派生数据
+  dango rebuild [--allow-lower]  从事件表重建全部派生数据（--allow-lower：你同意总数变少）
   dango privacy-scan          扫描本地数据，确认没有路径、代码或 prompt
 
 数据目录: ~/.dango（可用 DANGO_HOME 覆盖）";
@@ -61,7 +61,7 @@ Usage:
   dango backfill [--claude-dir DIR]
                                    import Claude Code and Codex history from before install
   dango daemon                run the daemon in the foreground
-  dango rebuild               rebuild everything derived from the event log
+  dango rebuild [--allow-lower]  rebuild everything derived from the event log (--allow-lower: you accept a lower total)
   dango privacy-scan          check local data holds no paths, code or prompts
 
 Data directory: ~/.dango (override with DANGO_HOME)";
@@ -100,7 +100,7 @@ fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
         "card" => card(paths, args),
         "daemon" => server::run(paths).map(|_| 0),
         "replay" => replay(paths, args),
-        "rebuild" => rebuild(paths),
+        "rebuild" => rebuild(paths, args.iter().any(|a| a == "--allow-lower")),
         "privacy-scan" => privacy::scan(paths),
         "version" | "--version" | "-V" => {
             println!("dango {}", env!("CARGO_PKG_VERSION"));
@@ -340,7 +340,8 @@ fn run_backfill(paths: &Paths, args: &[String]) -> Result<i32> {
     }
     let (_lock, mut p) = locked_processor(paths, Mode::Backfill)?;
     let since = |key: &str| -> Result<i64> { Ok(db::get_meta(&p.conn, key)?.and_then(|v| v.parse().ok()).unwrap_or_else(now_ms)) };
-    let (cutoff, codex_cutoff) = (since("live_since")?, since("live_since:codex")?);
+    // Codex comes from its logs with the same ids either way: all of it.
+    let (cutoff, codex_cutoff) = (since("live_since")?, now_ms());
     println!("正在整理 Claude Code{} 的历史…", if codex { " 和 Codex" } else { "" });
     let r = backfill::run(&mut p, paths, &claude_dir, cutoff, codex.then_some((codex_dir.as_path(), codex_cutoff)))?;
     daemon::usage::fill(&mut p, &claude_dir, &codex_dir, now_ms(), usize::MAX)?;
@@ -424,7 +425,9 @@ fn replay(paths: &Paths, args: &[String]) -> Result<i32> {
 
 /// Re-derives every table from `events` into a fresh database and swaps it
 /// in, unless the new total would be lower than the old one (SPEC 5.5).
-fn rebuild(paths: &Paths) -> Result<i32> {
+/// `allow_lower`: the user has agreed that new rules may lower the total
+/// (2026-10-29, prose at 2,000 words an hour); otherwise it only goes up.
+fn rebuild(paths: &Paths, allow_lower: bool) -> Result<i32> {
     let (_lock, _) = locked_processor(paths, Mode::Rebuild)?;
     let old = db::open(&paths.db)?;
     let old_total = snapshot::counter(&old, "person_days", "all");
@@ -476,12 +479,12 @@ fn rebuild(paths: &Paths) -> Result<i32> {
     let new_usd = snapshot::counter(&p.conn, "usd", "all");
     drop(st);
     drop(p);
-    if new_total + 1e-9 < old_total {
+    if new_total + 1e-9 < old_total && !allow_lower {
         let _ = fs::remove_file(&tmp);
         println!("未重建：新常数算出 {} 人日，少于现有的 {} 人日（只增不减）。", fmt_pd(new_total), fmt_pd(old_total));
         return Ok(1);
     }
-    if new_usd + 0.005 < old_usd {
+    if new_usd + 0.005 < old_usd && !allow_lower {
         let _ = fs::remove_file(&tmp);
         println!("未重建：新规则算出 {}，少于现有的 {}（只增不减）。", fmt_usd(new_usd), fmt_usd(old_usd));
         return Ok(1);

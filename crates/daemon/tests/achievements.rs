@@ -130,10 +130,11 @@ impl Sim {
         self.prompt(text).adv(minutes).stop()
     }
 
-    /// A capped turn: 360 human minutes = 0.75 person-days.
+    /// A big turn: about 355 human minutes ≈ 0.74 person-days (17 edits of
+    /// 75 lines, a test run, three agents and a commit).
     fn big_turn(&mut self) -> &mut Self {
         self.prompt("implement the whole thing");
-        for i in 0..40 {
+        for i in 0..17 {
             self.edit(&format!("src/m{i}.rs"), 75, 0);
         }
         self.bash("cargo test", true).agent().agent().agent();
@@ -173,7 +174,10 @@ impl Sim {
 
     fn other_source(&mut self, source: Source, kind: Kind) -> &mut Self {
         self.n += 1;
-        let mut ev = Event::new(format!("x{}", self.n), self.t, source, kind);
+        // Codex arrives from its logs: a backfill event with Codex as origin.
+        let from = if source == Source::Codex { Source::Backfill } else { source };
+        let mut ev = Event::new(format!("x{}", self.n), self.t, from, kind);
+        ev.payload.origin = (source == Source::Codex).then_some(Source::Codex);
         ev.session_id = Some(format!("{}-{}", source.as_str(), self.n));
         ev.payload.git_action = Some(GitAction::Commit);
         self.event(ev);
@@ -483,7 +487,7 @@ fn c03_deep_breath() {
         let mut s = Sim::new();
         s.at("2026-10-26 09:00").start();
         for _ in 0..8 {
-            s.big_turn(); // capped at 6 person-days
+            s.big_turn(); // 8 × 0.74 ≈ 5.9 person-days
         }
         s.at("2026-10-27 09:00").start();
         for _ in 0..day2_turns {

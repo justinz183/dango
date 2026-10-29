@@ -1,7 +1,8 @@
 # Golden turns for the occupation model (docs/DESIGN.md §3). Each step
 # goes through occupation::for_edit / for_command / for_tool; the turn
 # then gets remap + finish (5 min base and 12 min per subagent on the main
-# occupation, 360 min cap). Values computed by an independent model
+# occupation; prose at 2,000 words an hour is research; no cap since
+# 2026-10-29). Values computed by an independent model
 # (scratchpad golden_occ.py) and priced with assets/occupations.toml.
 
 [[case]]
@@ -51,18 +52,18 @@ name = "blog post"
 steps = [
   { edit = "posts/launch.md", lines = 40, words = 1200 },
 ]
-main = "writer"
-minutes = 149.00
-usd = 91.83
+main = "research"
+minutes = 41.00
+usd = 25.88
 
 [[case]]
 name = "translation"
 steps = [
   { edit = "docs/zh/guide.md", lines = 60, words = 1500 },
 ]
-main = "writer"
-minutes = 185.00
-usd = 114.02
+main = "research"
+minutes = 50.00
+usd = 31.56
 
 [[case]]
 name = "stock research"
@@ -126,7 +127,7 @@ minutes = 41.00
 usd = 25.88
 
 [[case]]
-name = "huge refactor is capped"
+name = "huge refactor counts in full"
 steps = [
   { edit = "src/big.rs", lines = 2000 },
   { edit = "src/big.rs", lines = 2000 },
@@ -142,5 +143,5 @@ steps = [
   { edit = "src/big.rs", lines = 2000 },
 ]
 main = "swe"
-minutes = 360.00
-usd = 392.28
+minutes = 2396.66
+usd = 2611.56
