@@ -1,4 +1,6 @@
-# Who you would have hired (docs/DESIGN.md v6). Each occupation is priced at
+# Who you would have hired (docs/DESIGN.md v6): one representative per
+# field — the vet is the doctor, the accountant the financial analyst, the
+# plumber the researcher (user, 2026-10-29). Each occupation is priced at
 # the US national median hourly wage from the BLS Occupational Employment and
 # Wage Statistics, May 2025, fetched 2026-10-29 from
 # https://api.bls.gov/publicAPI/v2/timeseries/data/ (series
@@ -19,9 +21,43 @@ source = "BLS OEWS May 2025, national hourly median"
 label = "按美国劳工统计局 2025 年 5 月各职业时薪中位数折算"
 as_of = "2026-10-29"
 
-# Topic families (docs/DESIGN.md v6): a prompt is first placed in a
-# family by every member's keywords together, then with the member whose
-# `tell` words appear, else the family's `default`.
+# Occupations merged into their field's representative (2026-10-29). Old
+# events and turns still name them; they count as the representative.
+[alias]
+secops = "swe"
+vet = "doctor"
+dietitian = "doctor"
+pharmacist = "doctor"
+accountant = "fin"
+economist = "fin"
+translator = "writer"
+ux = "designer"
+interior = "designer"
+photographer = "designer"
+mech = "physicist"
+ee = "physicist"
+tutor = "research"
+electrician = "research"
+plumber = "research"
+carpenter = "research"
+gardener = "research"
+childcare = "research"
+travel = "research"
+realtor = "research"
+mechanic = "research"
+fashion = "research"
+stylist = "research"
+manager = "research"
+pm = "research"
+hr = "research"
+sales = "research"
+
+# Topic families (docs/DESIGN.md v6): a prompt is placed in the family
+# whose members' keywords score most, then with the member whose `tell`
+# words appear, else the family's `default`. Since the table was cut to
+# one representative per field (2026-10-29), only tech and health have
+# more than one member; in tech, web / qa / ops are recognised by their
+# steps (files, commands), not by prompts, and have no keywords.
 [[family]]
 id = "tech"
 name = "技术"
@@ -58,29 +94,34 @@ name = "音乐"
 default = "musician"
 
 [[family]]
-id = "style"
-name = "穿搭"
-default = "fashion"
+id = "cooking"
+name = "餐饮"
+default = "chef"
 
 [[family]]
-id = "education"
-name = "教育"
-default = "tutor"
+id = "math"
+name = "数学"
+default = "mathematician"
 
 [[family]]
-id = "science"
-name = "科学"
+id = "physics"
+name = "物理"
 default = "physicist"
 
 [[family]]
-id = "home"
-name = "房屋与工程"
-default = "electrician"
+id = "chemistry"
+name = "化学"
+default = "chemist"
 
 [[family]]
-id = "life"
-name = "生活"
-default = "chef"
+id = "biology"
+name = "生物"
+default = "biologist"
+
+[[family]]
+id = "architecture"
+name = "建筑"
+default = "architect"
 
 [[family]]
 id = "law"
@@ -88,16 +129,9 @@ name = "法律"
 default = "lawyer"
 
 [[family]]
-id = "business"
-name = "商务"
-default = "manager"
-
-[[family]]
 id = "research"
 name = "研究"
 default = "research"
-
-
 
 [[occupation]]
 id = "swe"
@@ -111,8 +145,8 @@ family = "tech"
 consult = 10
 absorbs_data = false
 look = ["hood"]
-strong = ["代码", "编程", "函数", "报错", "bug", "compile", "编译", "重构", "refactor", "api", "python", "rust", "javascript", "typescript", "golang", "java", "c++", "sql", "git", "正则", "regex", "递归", "算法题", "leetcode", "debug", "调试"]
-weak = ["写个", "实现", "脚本", "程序", "class", "function", "variable", "library", "依赖", "异常", "exception", "stack trace", "性能", "并发", "线程", "async", "数据结构", "算法", "指针", "内存", "docker", "kubernetes", "npm 包", "依赖包", "打包"]
+strong = ["代码", "编程", "函数", "报错", "bug", "compile", "编译", "重构", "refactor", "api", "python", "rust", "javascript", "typescript", "golang", "java", "c++", "sql", "git", "正则", "regex", "递归", "算法题", "leetcode", "debug", "调试", "网页", "前端", "css", "html", "react", "vue", "svelte", "tailwind", "响应式", "dom", "浏览器兼容", "flexbox", "grid 布局", "next.js", "nuxt", "页面样式", "单元测试", "集成测试", "测试用例", "unit test", "pytest", "jest", "vitest", "覆盖率", "coverage", "回归测试", "e2e", "端到端", "断言", "assert", "mock", "部署", "deploy", "服务器", "nginx", "launchctl", "systemd", "docker compose", "kubernetes", "k8s", "ssh", "证书", "ssl", "dns", "域名解析", "cron", "备份", "crontab", "homebrew", "brew install", "环境变量", "terraform", "ci/cd", "github actions", "docker", "上线", "漏洞", "渗透测试", "xss", "sql 注入", "sql injection", "csrf", "勒索", "加密算法", "密钥", "2fa", "双因素", "钓鱼", "phishing", "malware", "木马", "防火墙规则", "oauth", "jwt", "零信任", "ctf", "漏洞扫描", "cve", "渗透", "注入", "攻击", "安全审计", "越权"]
+weak = ["写个", "实现", "脚本", "程序", "class", "function", "variable", "library", "依赖", "异常", "exception", "stack trace", "性能", "并发", "线程", "async", "数据结构", "算法", "指针", "内存", "npm 包", "依赖包", "打包", "页面", "布局", "按钮", "组件", "样式", "字体", "动画", "图标", "导航栏", "表单", "frontend", "layout", "hover", "滚动", "移动端", "测试", "test", "复现", "验证", "用例", "边界", "flaky", "ci 挂了", "质量", "安装", "配置", "环境", "权限", "端口", "日志", "监控", "重启", "升级", "vps", "linux", "ubuntu", "macos", "路由器", "wifi", "网络", "防火墙", "磁盘", "安全", "加密", "密码", "黑客", "hack", "泄露", "隐私", "token", "审计", "入侵", "vpn", "验证码"]
 
 [[occupation]]
 id = "web"
@@ -126,9 +160,8 @@ family = "tech"
 consult = 10
 absorbs_data = false
 look = ["pin"]
-tell = ["html", "css", "前端", "网页", "页面样式", "react", "vue"]
-strong = ["网页", "前端", "css", "html", "react", "vue", "svelte", "tailwind", "响应式", "dom", "浏览器兼容", "flexbox", "grid 布局", "next.js", "nuxt"]
-weak = ["页面", "布局", "按钮", "组件", "样式", "字体", "动画", "图标", "导航栏", "表单", "frontend", "layout", "hover", "滚动", "移动端"]
+strong = []
+weak = []
 
 [[occupation]]
 id = "qa"
@@ -142,9 +175,8 @@ family = "tech"
 consult = 10
 absorbs_data = false
 look = ["magnifier"]
-tell = ["测试用例", "单元测试", "unit test", "e2e", "集成测试", "回归测试"]
-strong = ["单元测试", "集成测试", "测试用例", "unit test", "pytest", "jest", "vitest", "覆盖率", "coverage", "回归测试", "e2e", "端到端", "断言", "assert", "mock"]
-weak = ["测试", "test", "bug", "复现", "验证", "用例", "边界", "flaky", "ci 挂了", "质量"]
+strong = []
+weak = []
 
 [[occupation]]
 id = "ops"
@@ -158,9 +190,8 @@ family = "tech"
 consult = 10
 absorbs_data = false
 look = ["hardhat", "vest"]
-tell = ["部署", "deploy", "k8s", "kubernetes", "docker", "服务器", "nginx", "ci/cd", "上线"]
-strong = ["部署", "deploy", "服务器", "nginx", "launchctl", "systemd", "docker compose", "kubernetes", "k8s", "ssh", "证书", "ssl", "dns", "域名解析", "cron", "备份", "crontab", "homebrew", "brew install", "环境变量", "terraform", "ci/cd", "github actions"]
-weak = ["安装", "配置", "环境", "权限", "端口", "日志", "监控", "重启", "升级", "vps", "linux", "ubuntu", "macos", "路由器", "wifi", "网络", "防火墙", "磁盘"]
+strong = []
+weak = []
 
 [[occupation]]
 id = "data"
@@ -174,336 +205,9 @@ family = "tech"
 consult = 10
 absorbs_data = true
 look = ["chart"]
-tell = ["sql", "pandas", "数据分析", "excel", "表格", "dataframe", "统计一下", "数据清洗", "可视化"]
+tell = ["pandas", "数据分析", "excel", "表格", "dataframe", "统计一下", "数据清洗", "可视化", "写sql", "写 sql", "sql语句", "sql 语句", "sql查询", "sql 查询", "慢查询", "加索引", "建索引", "数据库查询", "查数据库", "建表"]
 strong = ["数据分析", "pandas", "numpy", "dataframe", "sql 查询", "回归分析", "聚类", "机器学习", "machine learning", "模型训练", "特征", "feature engineering", "a/b test", "ab 测试", "统计显著", "p 值", "置信区间", "可视化", "matplotlib", "excel 公式", "透视表", "pivot"]
 weak = ["数据", "分析", "统计", "图表", "excel", "csv", "表格", "平均", "中位数", "趋势", "预测", "相关性", "样本", "清洗", "爬虫", "抓取", "数据库"]
-
-[[occupation]]
-id = "secops"
-name = "信息安全"
-name_en = "Information security analyst"
-soc = "15-1212"
-rate = 62.11
-color = "#5a5fa8"
-scene = "desk"
-family = "tech"
-consult = 10
-absorbs_data = false
-look = ["shield"]
-tell = ["漏洞", "渗透", "xss", "注入", "攻击", "cve", "安全审计", "越权", "钓鱼"]
-strong = ["漏洞", "渗透测试", "xss", "sql 注入", "sql injection", "csrf", "勒索", "加密算法", "密钥", "2fa", "双因素", "钓鱼", "phishing", "malware", "木马", "防火墙规则", "oauth", "jwt", "零信任", "ctf", "漏洞扫描", "cve"]
-weak = ["安全", "加密", "密码", "攻击", "黑客", "hack", "权限", "泄露", "隐私", "token", "审计", "入侵", "vpn", "验证码"]
-
-[[occupation]]
-id = "fin"
-name = "金融分析师"
-name_en = "Financial analyst"
-soc = "13-2051"
-rate = 49.4
-color = "#c99a2e"
-scene = "desk"
-family = "money"
-consult = 10
-absorbs_data = true
-look = ["tie", "chart"]
-strong = ["股票", "财报", "估值", "美股", "港股", "a 股", "个股", "持仓", "基金", "etf", "期权", "期货", "市盈率", "pe 倍数", "dcf", "现金流折现", "自由现金流", "10-k", "earnings", "valuation", "ticker", "nvda", "tsla", "aapl", "标普", "纳斯达克", "加密货币", "比特币", "btc", "eth", "defi", "链上", "做空", "仓位", "止损", "k 线", "技术分析", "macd", "炒股", "股市", "业绩指引", "营收指引", "指引上调", "指引下调", "季报", "年报"]
-weak = ["投资", "交易", "行情", "收益", "市场", "公司", "营收", "利润", "毛利", "资产", "负债", "分红", "回购", "宏观", "美联储", "利率", "通胀", "债券", "黄金", "原油", "汇率", "portfolio", "stock", "equity", "crypto", "token 价格", "涨了", "上涨", "涨幅", "跌了", "下跌", "跌幅", "暴跌", "大涨", "杠杆率", "加杠杆", "去杠杆", "指引", "季度", "下个季度", "业绩"]
-
-[[occupation]]
-id = "accountant"
-name = "会计"
-name_en = "Accountant"
-soc = "13-2011"
-rate = 40.23
-color = "#a8893a"
-scene = "desk"
-family = "money"
-consult = 15
-absorbs_data = true
-look = ["tie", "calculator"]
-tell = ["报税", "做账", "发票", "记账", "税务", "退税", "会计", "折旧", "应收", "应付", "审计", "社保", "公积金", "个税"]
-strong = ["记账", "做账", "报税", "退税", "个税", "所得税", "增值税", "发票", "对账", "审计", "资产负债表", "损益表", "折旧", "摊销", "会计分录", "借方", "贷方", "1099", "w-2", "irs", "税务", "抵扣", "deduction", "bookkeeping", "quickbooks"]
-weak = ["财务", "报销", "工资单", "预算", "成本", "收入", "支出", "费用", "凭证", "年报", "季报", "现金流", "税率", "账目", "账本"]
-
-[[occupation]]
-id = "manager"
-name = "经理"
-name_en = "General and operations manager"
-soc = "11-1021"
-rate = 50.85
-color = "#8d6e63"
-scene = "desk"
-family = "business"
-consult = 15
-absorbs_data = false
-look = ["tie", "briefcase"]
-strong = ["okr", "kpi", "团队管理", "绩效考核", "组织架构", "年度规划", "战略", "商业计划", "business plan", "商业模式", "融资 bp", "创业", "startup", "路演", "董事会", "管理层", "裁员", "晋升", "汇报"]
-weak = ["管理", "团队", "公司", "老板", "员工", "目标", "计划", "决策", "会议", "流程", "业务", "运营", "增长", "预算", "leadership", "strategy"]
-
-[[occupation]]
-id = "pm"
-name = "项目经理"
-name_en = "Project management specialist"
-soc = "13-1082"
-rate = 49.19
-color = "#7a8a9a"
-scene = "desk"
-family = "business"
-consult = 15
-absorbs_data = false
-look = ["clipboard", "badge"]
-tell = ["需求文档", "prd", "产品经理", "用户故事", "路线图", "roadmap", "优先级", "mvp", "产品设计", "功能规划", "竞品"]
-strong = ["项目计划", "甘特图", "gantt", "里程碑", "排期", "进度", "需求文档", "prd", "产品需求", "用户故事", "user story", "sprint", "scrum", "敏捷", "agile", "站会", "jira", "看板", "迭代计划", "roadmap", "路线图", "产品经理", "需求评审"]
-weak = ["项目", "需求", "功能", "版本", "上线", "优先级", "用户", "产品", "方案", "评审", "交付", "deadline", "风险", "复盘"]
-
-[[occupation]]
-id = "hr"
-name = "人事"
-name_en = "Human resources specialist"
-soc = "13-1071"
-rate = 36.51
-color = "#b07aa0"
-scene = "desk"
-family = "business"
-consult = 15
-absorbs_data = false
-look = ["badge", "papers"]
-tell = ["招聘", "面试", "简历", "offer", "入职", "离职", "薪酬", "jd", "岗位", "候选人", "hr"]
-strong = ["简历", "resume", "cv", "求职", "面试", "interview", "offer", "谈薪", "薪资谈判", "跳槽", "离职", "辞职", "裁员", "入职", "试用期", "劳动合同", "社保", "公积金", "绩效", "招聘", "jd", "职位描述", "自我介绍", "职业规划", "背调", "linkedin"]
-weak = ["工作", "职业", "职位", "公司", "同事", "领导", "升职", "年终奖", "薪水", "工资", "加班", "hr", "团队", "岗位", "培训"]
-
-[[occupation]]
-id = "sales"
-name = "销售"
-name_en = "Sales representative"
-soc = "41-4012"
-rate = 34.65
-color = "#d08a4e"
-scene = "desk"
-family = "business"
-consult = 15
-absorbs_data = false
-look = ["tie", "phone"]
-tell = ["客户", "报价", "成交", "销售", "谈判", "跟进", "线索", "转化率", "客单价", "crm", "拜访"]
-strong = ["销售话术", "客户开发", "cold email", "冷邮件", "成交", "报价单", "销售漏斗", "线索", "lead", "crm", "客户跟进", "谈判", "议价", "续约", "客户流失", "churn", "定价策略", "pricing", "营销文案", "广告文案", "推广", "营销", "marketing", "seo", "投放", "转化率", "落地页", "campaign", "私域", "增长黑客", "品牌"]
-weak = ["客户", "销售", "宣传", "文案", "曝光", "流量", "转化", "用户增长", "活动", "海报文案", "slogan", "公众号", "小红书", "抖音", "tiktok", "instagram", "邮件", "卖出", "卖给", "售卖", "卖货"]
-
-[[occupation]]
-id = "realtor"
-name = "房产经纪"
-name_en = "Real estate sales agent"
-soc = "41-9022"
-rate = 25.4
-color = "#9c7c5c"
-scene = "desk"
-family = "life"
-consult = 15
-absorbs_data = false
-look = ["house"]
-tell = ["买房", "租房", "房价", "房东", "中介", "首付", "房贷", "学区房", "二手房", "看房", "押金", "房源", "房子"]
-strong = ["买房", "卖房", "租房", "房贷", "mortgage", "首付", "学区房", "二手房", "新房", "公寓", "房东", "租客", "租金", "房价", "物业", "过户", "房产税", "property tax", "zillow", "airbnb", "民宿", "装修预算", "户型"]
-weak = ["房子", "小区", "地段", "面积", "中介", "签约", "押金", "搬家", "邻居", "住房", "住在"]
-
-[[occupation]]
-id = "travel"
-name = "旅行顾问"
-name_en = "Travel agent"
-soc = "41-3041"
-rate = 24.11
-color = "#4ea3c9"
-scene = "desk"
-family = "life"
-consult = 15
-absorbs_data = false
-look = ["globe", "sunglasses"]
-tell = ["行程", "机票", "酒店", "签证", "旅游", "旅行", "攻略", "景点", "自由行", "去玩", "出去玩", "民宿", "航班", "想去", "周末去", "出发", "两天一夜", "三天两夜", "周边游", "自驾", "去哪玩"]
-strong = ["旅行", "旅游", "行程", "攻略", "机票", "酒店", "签证", "visa", "itinerary", "航班", "转机", "民宿", "景点", "打卡", "自由行", "跟团", "租车自驾", "护照", "入境", "海关", "booking", "airbnb", "青旅", "露营"]
-weak = ["住宿", "路线", "出发", "回来", "交通", "地图", "季节", "天气", "预算", "东京", "巴黎", "纽约", "泰国", "日本", "欧洲", "海边", "去玩", "出去玩", "飞机", "订酒店", "订票", "几天", "海岛", "小岛", "想去", "周末去", "两天", "三天", "怎么安排", "自驾", "周边游", "去哪玩"]
-
-[[occupation]]
-id = "research"
-name = "研究员"
-name_en = "Research analyst"
-soc = "13-1161"
-rate = 37.87
-color = "#8fb04a"
-scene = "desk"
-family = "research"
-consult = 5
-absorbs_data = false
-look = ["glasses"]
-strong = ["调研", "竞品分析", "市场规模", "行业报告", "行业研究", "综述", "文献", "论文", "research report", "market size", "tam", "survey", "问卷", "访谈", "资料整理", "背景调查", "对比一下", "帮我查", "查一下", "查查", "search for", "look up", "find out"]
-weak = ["研究", "分析", "对比", "区别", "哪个好", "推荐", "评测", "盘点", "总结一下", "介绍一下", "是什么", "为什么", "怎么看", "历史", "来源", "资料", "新闻", "最新"]
-
-[[occupation]]
-id = "entry"
-name = "资料录入"
-name_en = "Data entry"
-soc = "43-9021"
-rate = 19.88
-color = "#a39a8a"
-scene = "desk"
-family = "tech"
-consult = 5
-absorbs_data = false
-look = ["papers", "visor"]
-strong = ["ocr", "识别图片", "录入", "转成表格", "整理成表", "扫描件", "pdf 转", "手写", "转录", "transcribe", "抄录", "批量重命名", "归档", "整理文件", "去重", "合并表格"]
-weak = ["整理", "表格", "转换", "格式", "批量", "重复", "清单", "列表", "文件名", "文件夹", "复制", "粘贴"]
-
-[[occupation]]
-id = "writer"
-name = "文案写作"
-name_en = "Writer"
-soc = "27-3043"
-rate = 36.98
-color = "#d9734e"
-scene = "studio"
-family = "writing"
-consult = 10
-absorbs_data = false
-look = ["pencil"]
-strong = ["文章", "写作", "文案", "博客", "blog", "公众号文章", "小说", "故事", "剧本", "诗", "散文", "演讲稿", "致辞", "周报", "月报", "总结报告", "新闻稿", "标题", "开头", "结尾", "润色", "改写", "扩写", "缩写", "paraphrase", "essay", "作文", "读后感", "邮件回复", "道歉信", "感谢信", "自我介绍", "人物设定", "大纲", "辞职信", "辞职报告", "求职信", "邀请函", "发言稿"]
-weak = ["语气", "措辞", "段落", "文风", "表达", "字数", "中文", "英文", "语法", "通顺", "简洁", "正式", "口语", "写一篇", "写文章", "改一改"]
-
-[[occupation]]
-id = "translator"
-name = "翻译"
-name_en = "Translator"
-soc = "27-3091"
-rate = 28.93
-color = "#c85d8a"
-scene = "studio"
-family = "writing"
-consult = 5
-absorbs_data = false
-look = ["bubble"]
-tell = ["翻译", "译成", "translate", "中译英", "英译中", "翻成", "译文", "翻译成"]
-strong = ["翻译", "translate", "translation", "翻成", "译成", "中译英", "英译中", "日译", "字幕翻译", "本地化", "localization", "i18n", "同声传译", "口译", "笔译", "这句话什么意思", "怎么说", "用英语说", "用日语说"]
-weak = ["英文", "中文", "日语", "韩语", "法语", "德语", "西班牙语", "语言", "意思", "表达", "地道", "语气", "敬语", "俚语"]
-
-[[occupation]]
-id = "designer"
-name = "平面设计"
-name_en = "Graphic designer"
-soc = "27-1024"
-rate = 30.27
-color = "#b65fc4"
-scene = "studio"
-family = "design"
-consult = 10
-absorbs_data = false
-look = ["beret", "brush"]
-strong = ["海报", "logo", "配色", "色卡", "排版", "封面", "banner", "插画", "图标设计", "icon", "字体设计", "品牌视觉", "vi", "名片", "包装设计", "传单", "海报设计", "svg", "矢量", "figma", "photoshop", "illustrator", "ps 怎么", "ai 画图", "midjourney", "stable diffusion", "提示词画", "生成一张图", "做张图"]
-weak = ["设计", "颜色", "风格", "视觉", "好看", "美观", "比例", "构图", "素材", "渐变", "阴影", "圆角", "留白", "字体", "图片", "画一张", "配图"]
-
-[[occupation]]
-id = "ux"
-name = "UX 设计师"
-name_en = "Web and digital interface designer"
-soc = "15-1255"
-rate = 50.0
-color = "#7c6fcf"
-scene = "studio"
-family = "design"
-consult = 10
-absorbs_data = false
-look = ["frame"]
-tell = ["交互", "用户流程", "user flow", "原型", "figma", "可用性", "信息架构", "用户体验", "ux", "wireframe", "线框"]
-strong = ["交互设计", "ux", "ui 设计", "用户体验", "原型", "prototype", "线框图", "wireframe", "figma 原型", "用户流程", "user flow", "信息架构", "可用性", "usability", "设计系统", "design system", "组件库", "暗色模式", "dark mode", "空状态", "onboarding", "引导", "弹窗", "toast", "导航设计", "表单设计"]
-weak = ["界面", "体验", "交互", "布局", "按钮", "用户", "操作", "流程", "点击", "页面", "反馈", "状态", "视觉", "易用", "设计稿"]
-
-[[occupation]]
-id = "video"
-name = "视频剪辑"
-name_en = "Video editor"
-soc = "27-4032"
-rate = 36.26
-color = "#d94f4f"
-scene = "studio"
-family = "video"
-consult = 10
-absorbs_data = false
-look = ["headphones"]
-strong = ["视频", "剪辑", "ffmpeg", "配音", "字幕", "srt", "转场", "分镜", "脚本分镜", "vlog", "短视频", "premiere", "final cut", "davinci", "达芬奇", "剪映", "capcut", "tts", "edge-tts", "旁白", "bgm", "音轨", "帧率", "码率", "导出 mp4", "封面图", "youtube", "b 站", "抖音视频", "解说"]
-weak = ["镜头", "画面", "时长", "音乐", "节奏", "封面", "片头", "片尾", "播放", "上传", "素材", "录屏", "片子", "拍摄", "拍视频", "几秒"]
-
-[[occupation]]
-id = "photographer"
-name = "摄影师"
-name_en = "Photographer"
-soc = "27-4021"
-rate = 21.47
-color = "#5d7fa3"
-scene = "studio"
-family = "design"
-consult = 10
-absorbs_data = false
-look = ["camera"]
-tell = ["相机", "镜头", "构图", "快门", "光圈", "iso", "人像", "摄影", "拍照", "布光", "闪光灯", "raw"]
-strong = ["摄影", "拍照", "相机", "镜头", "光圈", "快门", "iso", "焦段", "构图", "人像", "风光", "街拍", "raw", "lightroom", "修图", "调色", "白平衡", "景深", "虚化", "三脚架", "闪光灯", "补光", "佳能", "索尼", "尼康", "富士", "gopro", "无人机航拍"]
-weak = ["照片", "图片", "角度", "取景", "后期", "滤镜", "清晰", "模糊", "曝光", "色调", "画质", "手机拍", "拍摄", "光线", "打光"]
-
-[[occupation]]
-id = "interior"
-name = "室内设计师"
-name_en = "Interior designer"
-soc = "27-1025"
-rate = 32.31
-color = "#b08968"
-scene = "studio"
-family = "design"
-consult = 15
-absorbs_data = false
-look = ["ruler", "beret"]
-tell = ["装修", "户型", "软装", "硬装", "客厅", "卧室", "全屋", "吊顶", "瓷砖", "地板", "家具摆放", "室内设计"]
-strong = ["装修", "室内设计", "软装", "硬装", "户型改造", "全屋定制", "吊顶", "瓷砖", "地板", "墙漆", "乳胶漆", "橱柜", "衣柜", "灯光设计", "家具搭配", "沙发", "窗帘", "北欧风", "侘寂", "极简风", "中古风", "宜家", "ikea", "收纳", "卧室布置", "客厅布置", "书房"]
-weak = ["房间", "空间", "布置", "摆放", "风格", "色调", "温馨", "采光", "家具", "植物", "家里", "家居", "灯具", "吊灯", "平米", "平方米"]
-
-[[occupation]]
-id = "musician"
-name = "音乐人"
-name_en = "Musician"
-soc = "27-2042"
-rate = 47.8
-color = "#c75a8a"
-scene = "studio"
-family = "music"
-consult = 15
-absorbs_data = false
-look = ["guitar", "headphones"]
-strong = ["作曲", "编曲", "和弦", "chord", "和声", "旋律", "歌词", "写歌", "吉他", "钢琴", "谱子", "乐谱", "简谱", "五线谱", "bpm", "节拍", "调式", "音阶", "转调", "混音", "mixing", "母带", "mastering", "daw", "logic pro", "ableton", "garageband", "唱歌", "发声", "音准", "尤克里里", "贝斯", "架子鼓"]
-weak = ["音乐", "节奏", "练习", "风格", "乐器", "录音", "耳机", "音色", "情绪", "歌曲", "弹琴", "弹吉他", "曲子"]
-
-[[occupation]]
-id = "fashion"
-name = "服装设计师"
-name_en = "Fashion designer"
-soc = "27-1022"
-rate = 38.92
-color = "#e0789a"
-scene = "studio"
-family = "style"
-consult = 10
-absorbs_data = false
-look = ["scarf", "tape"]
-strong = ["穿搭", "搭配", "衣服", "穿什么", "服装", "时尚", "outfit", "衣橱", "胶囊衣橱", "风格测试", "肤色 冷暖", "显瘦", "显高", "面试穿", "约会穿", "婚礼穿", "西装", "裙子", "大衣", "牛仔裤", "运动鞋", "配饰", "优衣库", "zara", "lululemon", "尺码", "版型", "面料", "羊毛", "亚麻", "包包", "手提包", "背包", "托特包"]
-weak = ["颜色", "风格", "场合", "身材", "季节", "冬天穿", "夏天穿", "好看", "气质", "穿着", "上衣", "衣柜", "鞋子", "品牌"]
-
-[[occupation]]
-id = "stylist"
-name = "造型师"
-name_en = "Hairdresser and cosmetologist"
-soc = "39-5012"
-rate = 17.21
-color = "#e39bb4"
-scene = "studio"
-family = "style"
-consult = 10
-absorbs_data = false
-look = ["scissors", "comb"]
-tell = ["发型", "妆容", "化妆", "染发", "烫发", "理发", "美甲", "眉毛", "口红", "护肤", "脸型", "造型"]
-strong = ["发型", "剪发", "理发", "烫发", "染发", "护发", "脱发", "头发", "发际线", "刘海", "美妆", "化妆", "妆容", "口红", "粉底", "眼影", "眉毛", "护肤", "skincare", "面霜", "精华", "防晒", "痘痘", "黑头", "毛孔", "美甲", "指甲", "香水", "剃须", "胡子"]
-weak = ["皮肤", "日常", "适合我", "脸型", "肤质", "干皮", "油皮", "敏感", "头型", "发色", "颜值"]
 
 [[occupation]]
 id = "doctor"
@@ -517,72 +221,8 @@ family = "health"
 consult = 15
 absorbs_data = false
 look = ["labcoat", "stethoscope"]
-strong = ["头疼", "头痛", "发烧", "发热", "咳嗽", "感冒", "流感", "喉咙痛", "胃疼", "胃痛", "腹泻", "拉肚子", "便秘", "恶心", "呕吐", "血压", "高血压", "血糖", "糖尿病", "胆固醇", "心率", "心悸", "胸闷", "胸痛", "过敏", "哮喘", "湿疹", "皮疹", "腰疼", "腰痛", "颈椎", "膝盖疼", "扭伤", "骨折", "体检报告", "化验单", "血常规", "ct", "核磁", "b 超", "症状", "诊断", "挂号", "看医生", "去医院", "急诊", "手术", "癌", "肿瘤", "甲状腺", "幽门螺", "hpv", "疫苗", "月经", "怀孕", "备孕", "孕期", "失眠", "偏头痛", "痛风", "尿酸", "肝功能", "肾", "阑尾", "脱水", "中暑", "烫伤", "发炎", "抗生素", "布洛芬", "退烧药", "symptom", "diagnosis", "fever", "headache", "blood pressure", "diabetes", "allergy", "infection", "doctor", "hospital", "er ", "mri", "x-ray", "medication", "dose", "生病", "看病", "病了", "病情"]
-weak = ["不舒服", "难受", "吃药", "医院", "医生", "检查", "指标", "正常吗", "严重吗", "要不要去", "休息", "恢复", "健康", "身体", "治疗", "复查", "副作用", "pain", "sick", "health", "clinic", "很疼", "疼得", "疼了", "很痛", "痛得", "药物", "用药", "药店", "中药", "西药"]
-
-[[occupation]]
-id = "dietitian"
-name = "营养师"
-name_en = "Dietitian"
-soc = "29-1031"
-rate = 36.73
-color = "#7cb342"
-scene = "clinic"
-family = "health"
-consult = 15
-absorbs_data = false
-look = ["apple", "labcoat"]
-tell = ["热量", "卡路里", "减脂", "减肥", "食谱", "营养", "蛋白质摄入", "碳水", "饮食计划", "轻断食", "生酮", "控糖"]
-strong = ["减肥", "减脂", "增肌饮食", "热量", "卡路里", "calorie", "kcal", "蛋白质", "碳水", "脂肪", "膳食纤维", "营养", "食谱", "饮食计划", "meal plan", "meal prep", "生酮", "keto", "间歇性断食", "16+8", "轻断食", "低碳", "地中海饮食", "素食", "vegan", "维生素", "补剂", "蛋白粉", "肌酸", "钙", "bmi", "基础代谢", "tdee", "早餐吃什么", "晚餐吃什么", "代餐", "糖分", "升糖", "gi 值", "控糖", "少油", "补钙", "补铁", "钙片", "缺铁"]
-weak = ["饮食", "食物", "健康", "体重", "公斤", "kg", "每天", "一顿", "配餐", "水果", "蔬菜", "零食", "瘦了", "胖了", "变胖", "几斤", "吃肉", "牛奶", "豆类", "饿了", "吃饱", "饱腹"]
-
-[[occupation]]
-id = "pharmacist"
-name = "药剂师"
-name_en = "Pharmacist"
-soc = "29-1051"
-rate = 67.75
-color = "#4db6ac"
-scene = "clinic"
-family = "health"
-consult = 10
-absorbs_data = false
-look = ["labcoat", "pill"]
-tell = ["剂量", "能不能一起吃", "相互作用", "用法用量", "布洛芬", "对乙酰", "阿莫西林", "处方", "药片", "服用", "停药", "漏服", "说明书"]
-strong = ["这个药", "药物相互作用", "drug interaction", "用法用量", "说明书", "处方", "otc", "非处方", "布洛芬", "对乙酰氨基酚", "泰诺", "阿司匹林", "阿莫西林", "头孢", "抗生素", "降压药", "二甲双胍", "他汀", "褪黑素", "维生素 d", "鱼油", "益生菌", "中药", "冲剂", "剂量", "副作用", "过量", "停药", "漏服", "服药时间", "饭前", "饭后", "能一起吃", "禁忌", "孕妇能吃", "儿童用量", "过期药"]
-weak = ["毫克", "mg", "一天几次", "同时", "能不能", "有效", "成分", "医保", "药片", "服用", "一粒", "几粒", "一片", "几片", "配伍", "药物", "用药"]
-
-[[occupation]]
-id = "counselor"
-name = "心理咨询师"
-name_en = "Mental health counselor"
-soc = "21-1018"
-rate = 28.53
-color = "#9575cd"
-scene = "clinic"
-family = "health"
-consult = 30
-absorbs_data = false
-look = ["notebook"]
-tell = ["焦虑", "抑郁", "失眠", "情绪", "心理", "压力大", "崩溃", "emo", "分手", "自卑", "恐慌", "心理咨询", "想哭"]
-strong = ["焦虑", "抑郁", "抑郁症", "焦虑症", "emo", "心理", "情绪", "压力大", "崩溃", "失眠", "恐慌", "panic", "ptsd", "创伤", "自卑", "内耗", "拖延", "社恐", "强迫", "adhd", "注意力", "躺平", "倦怠", "burnout", "分手", "失恋", "离婚", "出轨", "家暴", "原生家庭", "父母关系", "亲子", "伴侣", "婚姻", "cbt", "正念", "冥想", "心理咨询", "therapy", "therapist", "anxiety", "depression", "stress", "lonely", "孤独", "自杀", "自残", "想不开", "难过", "委屈", "愤怒", "嫉妒", "自我怀疑", "不想上班", "迷茫"]
-weak = ["感觉", "心情", "开心", "难受", "怎么办", "关系", "朋友", "家人", "沟通", "安慰", "支持", "倾诉", "压力", "想法", "状态", "好累", "很累", "害怕", "好怕", "陪我", "想哭", "哭了", "好烦", "很烦", "烦躁"]
-
-[[occupation]]
-id = "vet"
-name = "兽医"
-name_en = "Veterinarian"
-soc = "29-1131"
-rate = 62.55
-color = "#8d6e63"
-scene = "clinic"
-family = "health"
-consult = 15
-absorbs_data = false
-look = ["stethoscope", "bone"]
-tell = ["猫", "狗", "宠物", "兽医", "猫咪", "狗狗", "仓鼠", "兔子", "鹦鹉", "乌龟", "驱虫", "猫粮", "狗粮"]
-strong = ["猫", "狗", "宠物", "狗狗", "猫咪", "猫粮", "狗粮", "驱虫", "疫苗", "绝育", "发情", "拉稀", "呕吐", "掉毛", "猫砂", "遛狗", "牵引", "咬人", "仓鼠", "兔子", "乌龟", "鹦鹉", "金鱼", "水族", "寄生虫", "跳蚤", "皮肤病", "磨牙", "指甲", "宠物医院", "兽医", "vet", "puppy", "kitten", "dog", "cat", "pet", "一直叫", "乱叫", "叫个不停", "叫声", "养猫", "养狗", "小猫", "小狗", "我家猫", "我家狗", "猫毛", "狗毛", "狗窝", "猫窝", "笼子"]
-weak = ["零食", "玩具", "品种", "领养", "训练", "饲养", "喂养", "喂食", "养了", "毛发", "毛色", "宠物店", "体重", "洗澡"]
+strong = ["头疼", "头痛", "发烧", "发热", "咳嗽", "感冒", "流感", "喉咙痛", "胃疼", "胃痛", "腹泻", "拉肚子", "便秘", "恶心", "呕吐", "血压", "高血压", "血糖", "糖尿病", "胆固醇", "心率", "心悸", "胸闷", "胸痛", "过敏", "哮喘", "湿疹", "皮疹", "腰疼", "腰痛", "颈椎", "膝盖疼", "扭伤", "骨折", "体检报告", "化验单", "血常规", "ct", "核磁", "b 超", "症状", "诊断", "挂号", "看医生", "去医院", "急诊", "手术", "癌", "肿瘤", "甲状腺", "幽门螺", "hpv", "疫苗", "月经", "怀孕", "备孕", "孕期", "失眠", "偏头痛", "痛风", "尿酸", "肝功能", "肾", "阑尾", "脱水", "中暑", "烫伤", "发炎", "抗生素", "布洛芬", "退烧药", "symptom", "diagnosis", "fever", "headache", "blood pressure", "diabetes", "allergy", "infection", "doctor", "hospital", "er ", "mri", "x-ray", "medication", "dose", "生病", "看病", "病了", "病情", "猫", "狗", "宠物", "狗狗", "猫咪", "猫粮", "狗粮", "驱虫", "绝育", "发情", "拉稀", "掉毛", "猫砂", "遛狗", "牵引", "咬人", "仓鼠", "兔子", "乌龟", "鹦鹉", "金鱼", "水族", "寄生虫", "跳蚤", "皮肤病", "磨牙", "指甲", "宠物医院", "兽医", "vet", "puppy", "kitten", "dog", "cat", "pet", "一直叫", "乱叫", "叫个不停", "叫声", "养猫", "养狗", "小猫", "小狗", "我家猫", "我家狗", "猫毛", "狗毛", "狗窝", "猫窝", "笼子", "减肥", "减脂", "增肌饮食", "热量", "卡路里", "calorie", "kcal", "蛋白质", "碳水", "脂肪", "膳食纤维", "营养", "食谱", "饮食计划", "meal plan", "meal prep", "生酮", "keto", "间歇性断食", "16+8", "轻断食", "低碳", "地中海饮食", "素食", "vegan", "维生素", "补剂", "蛋白粉", "肌酸", "钙", "bmi", "基础代谢", "tdee", "早餐吃什么", "晚餐吃什么", "代餐", "糖分", "升糖", "gi 值", "控糖", "少油", "补钙", "补铁", "钙片", "缺铁", "蛋白质摄入", "这个药", "药物相互作用", "drug interaction", "用法用量", "说明书", "处方", "otc", "非处方", "对乙酰氨基酚", "泰诺", "阿司匹林", "阿莫西林", "头孢", "降压药", "二甲双胍", "他汀", "褪黑素", "维生素 d", "鱼油", "益生菌", "中药", "冲剂", "剂量", "副作用", "过量", "停药", "漏服", "服药时间", "饭前", "饭后", "能一起吃", "禁忌", "孕妇能吃", "儿童用量", "过期药", "能不能一起吃", "相互作用", "对乙酰", "药片", "服用"]
+weak = ["不舒服", "难受", "吃药", "医院", "医生", "检查", "指标", "正常吗", "严重吗", "要不要去", "休息", "恢复", "健康", "身体", "治疗", "复查", "pain", "sick", "health", "clinic", "很疼", "疼得", "疼了", "很痛", "痛得", "药物", "用药", "药店", "西药", "零食", "玩具", "品种", "领养", "训练", "饲养", "喂养", "喂食", "养了", "毛发", "毛色", "宠物店", "体重", "洗澡", "饮食", "食物", "公斤", "kg", "每天", "一顿", "配餐", "水果", "蔬菜", "瘦了", "胖了", "变胖", "几斤", "吃肉", "牛奶", "豆类", "饿了", "吃饱", "饱腹", "毫克", "mg", "一天几次", "同时", "能不能", "有效", "成分", "医保", "一粒", "几粒", "一片", "几片", "配伍"]
 
 [[occupation]]
 id = "trainer"
@@ -601,6 +241,97 @@ strong = ["健身", "增肌", "力量训练", "深蹲", "硬拉", "卧推", "引
 weak = ["运动", "锻炼", "减脂", "体能", "动作", "姿势", "分钟", "公里", "心率", "恢复", "酸痛", "受伤", "强度", "频率", "坚持", "臀部", "翘臀", "练腿", "几组", "每组"]
 
 [[occupation]]
+id = "counselor"
+name = "心理咨询师"
+name_en = "Mental health counselor"
+soc = "21-1018"
+rate = 28.53
+color = "#9575cd"
+scene = "clinic"
+family = "health"
+consult = 30
+absorbs_data = false
+look = ["notebook"]
+tell = ["焦虑", "抑郁", "失眠", "情绪", "心理", "压力大", "崩溃", "emo", "分手", "自卑", "恐慌", "心理咨询", "想哭"]
+strong = ["焦虑", "抑郁", "抑郁症", "焦虑症", "emo", "心理", "情绪", "压力大", "崩溃", "失眠", "恐慌", "panic", "ptsd", "创伤", "自卑", "内耗", "拖延", "社恐", "强迫", "adhd", "注意力", "躺平", "倦怠", "burnout", "分手", "失恋", "离婚", "出轨", "家暴", "原生家庭", "父母关系", "亲子", "伴侣", "婚姻", "cbt", "正念", "冥想", "心理咨询", "therapy", "therapist", "anxiety", "depression", "stress", "lonely", "孤独", "自杀", "自残", "想不开", "难过", "委屈", "愤怒", "嫉妒", "自我怀疑", "不想上班", "迷茫"]
+weak = ["感觉", "心情", "开心", "难受", "怎么办", "关系", "朋友", "家人", "沟通", "安慰", "支持", "倾诉", "压力", "想法", "状态", "好累", "很累", "害怕", "好怕", "陪我", "想哭", "哭了", "好烦", "很烦", "烦躁"]
+
+[[occupation]]
+id = "fin"
+name = "金融分析师"
+name_en = "Financial analyst"
+soc = "13-2051"
+rate = 49.4
+color = "#c99a2e"
+scene = "desk"
+family = "money"
+consult = 10
+absorbs_data = true
+look = ["tie", "chart"]
+strong = ["股票", "财报", "估值", "美股", "港股", "a 股", "个股", "持仓", "基金", "etf", "期权", "期货", "市盈率", "pe 倍数", "dcf", "现金流折现", "自由现金流", "10-k", "earnings", "valuation", "ticker", "nvda", "tsla", "aapl", "标普", "纳斯达克", "加密货币", "比特币", "btc", "eth", "defi", "链上", "做空", "仓位", "止损", "k 线", "技术分析", "macd", "炒股", "股市", "业绩指引", "营收指引", "指引上调", "指引下调", "季报", "年报", "记账", "做账", "报税", "退税", "个税", "所得税", "增值税", "发票", "对账", "审计", "资产负债表", "损益表", "折旧", "摊销", "会计分录", "借方", "贷方", "1099", "w-2", "irs", "税务", "抵扣", "deduction", "bookkeeping", "quickbooks", "会计", "应收", "应付", "社保", "公积金", "宏观经济", "微观经济", "gdp", "cpi", "ppi", "pmi", "通货膨胀", "通胀", "通缩", "失业率", "就业数据", "非农", "美联储", "fed", "加息", "降息", "利率", "国债", "收益率曲线", "货币政策", "财政政策", "量化宽松", "qe", "汇率", "人民币", "美元指数", "关税", "贸易战", "供应链", "供需", "供给", "边际", "机会成本", "博弈", "外部性", "垄断", "经济周期", "衰退", "recession", "泡沫", "房地产周期", "人口", "老龄化", "生育率", "城市化", "产业政策", "补贴", "凯恩斯", "哈耶克", "经济学", "economics", "inflation", "interest rate", "tariff", "宏观"]
+weak = ["投资", "交易", "行情", "收益", "市场", "公司", "营收", "利润", "毛利", "资产", "负债", "分红", "回购", "债券", "黄金", "原油", "portfolio", "stock", "equity", "crypto", "token 价格", "涨了", "上涨", "涨幅", "跌了", "下跌", "跌幅", "暴跌", "大涨", "杠杆率", "加杠杆", "去杠杆", "指引", "季度", "下个季度", "业绩", "财务", "报销", "工资单", "预算", "成本", "收入", "支出", "费用", "凭证", "现金流", "税率", "账目", "账本", "价格", "增长", "下滑", "政策", "影响", "趋势", "数据", "指标", "周期", "预期", "风险", "国家", "中国经济", "美国经济", "欧洲", "日本", "新兴市场", "经济", "需求", "弹性"]
+
+[[occupation]]
+id = "writer"
+name = "文案写作"
+name_en = "Writer"
+soc = "27-3043"
+rate = 36.98
+color = "#d9734e"
+scene = "studio"
+family = "writing"
+consult = 10
+absorbs_data = false
+look = ["pencil"]
+strong = ["文章", "写作", "文案", "博客", "blog", "公众号文章", "小说", "故事", "剧本", "诗", "散文", "演讲稿", "致辞", "周报", "月报", "总结报告", "新闻稿", "标题", "开头", "结尾", "润色", "改写", "扩写", "缩写", "paraphrase", "essay", "作文", "读后感", "邮件回复", "道歉信", "感谢信", "自我介绍", "人物设定", "大纲", "辞职信", "辞职报告", "求职信", "邀请函", "发言稿", "翻译", "translate", "translation", "翻成", "译成", "中译英", "英译中", "日译", "字幕翻译", "本地化", "localization", "i18n", "同声传译", "口译", "笔译", "这句话什么意思", "怎么说", "用英语说", "用日语说", "译文", "翻译成"]
+weak = ["语气", "措辞", "段落", "文风", "表达", "字数", "中文", "英文", "语法", "通顺", "简洁", "正式", "口语", "写一篇", "写文章", "改一改", "日语", "韩语", "法语", "德语", "西班牙语", "语言", "意思", "地道", "敬语", "俚语"]
+
+[[occupation]]
+id = "video"
+name = "视频剪辑"
+name_en = "Video editor"
+soc = "27-4032"
+rate = 36.26
+color = "#d94f4f"
+scene = "studio"
+family = "video"
+consult = 10
+absorbs_data = false
+look = ["headphones"]
+strong = ["视频", "剪辑", "ffmpeg", "配音", "字幕", "srt", "转场", "分镜", "脚本分镜", "vlog", "短视频", "premiere", "final cut", "davinci", "达芬奇", "剪映", "capcut", "tts", "edge-tts", "旁白", "bgm", "音轨", "帧率", "码率", "导出 mp4", "封面图", "youtube", "b 站", "抖音视频", "解说"]
+weak = ["镜头", "画面", "时长", "音乐", "节奏", "封面", "片头", "片尾", "播放", "上传", "素材", "录屏", "片子", "拍摄", "拍视频", "几秒"]
+
+[[occupation]]
+id = "designer"
+name = "平面设计"
+name_en = "Graphic designer"
+soc = "27-1024"
+rate = 30.27
+color = "#b65fc4"
+scene = "studio"
+family = "design"
+consult = 10
+absorbs_data = false
+look = ["beret", "brush"]
+strong = ["海报", "logo", "配色", "色卡", "排版", "封面", "banner", "插画", "图标设计", "icon", "字体设计", "品牌视觉", "vi", "名片", "包装设计", "传单", "海报设计", "svg", "矢量", "figma", "photoshop", "illustrator", "ps 怎么", "ai 画图", "midjourney", "stable diffusion", "提示词画", "生成一张图", "做张图", "交互设计", "ux", "ui 设计", "用户体验", "原型", "prototype", "线框图", "wireframe", "figma 原型", "用户流程", "user flow", "信息架构", "可用性", "usability", "设计系统", "design system", "组件库", "暗色模式", "dark mode", "空状态", "onboarding", "引导", "弹窗", "toast", "导航设计", "表单设计", "交互", "线框", "装修", "室内设计", "软装", "硬装", "户型改造", "全屋定制", "吊顶", "瓷砖", "地板", "墙漆", "乳胶漆", "橱柜", "衣柜", "灯光设计", "家具搭配", "沙发", "窗帘", "北欧风", "侘寂", "极简风", "中古风", "宜家", "ikea", "收纳", "卧室布置", "客厅布置", "书房", "户型", "客厅", "卧室", "全屋", "家具摆放", "摄影", "拍照", "相机", "镜头", "光圈", "快门", "iso", "焦段", "构图", "人像", "风光", "街拍", "raw", "lightroom", "修图", "调色", "白平衡", "景深", "虚化", "三脚架", "闪光灯", "补光", "佳能", "索尼", "尼康", "富士", "gopro", "无人机航拍", "布光"]
+weak = ["设计", "颜色", "风格", "视觉", "好看", "美观", "比例", "素材", "渐变", "阴影", "圆角", "留白", "字体", "图片", "画一张", "配图", "界面", "体验", "布局", "按钮", "用户", "操作", "流程", "点击", "页面", "反馈", "状态", "易用", "设计稿", "房间", "空间", "布置", "摆放", "色调", "温馨", "采光", "家具", "植物", "家里", "家居", "灯具", "吊灯", "平米", "平方米", "照片", "角度", "取景", "后期", "滤镜", "清晰", "模糊", "曝光", "画质", "手机拍", "拍摄", "光线", "打光"]
+
+[[occupation]]
+id = "musician"
+name = "音乐人"
+name_en = "Musician"
+soc = "27-2042"
+rate = 47.8
+color = "#c75a8a"
+scene = "studio"
+family = "music"
+consult = 15
+absorbs_data = false
+look = ["guitar", "headphones"]
+strong = ["作曲", "编曲", "和弦", "chord", "和声", "旋律", "歌词", "写歌", "吉他", "钢琴", "谱子", "乐谱", "简谱", "五线谱", "bpm", "节拍", "调式", "音阶", "转调", "混音", "mixing", "母带", "mastering", "daw", "logic pro", "ableton", "garageband", "唱歌", "发声", "音准", "尤克里里", "贝斯", "架子鼓"]
+weak = ["音乐", "节奏", "练习", "风格", "乐器", "录音", "耳机", "音色", "情绪", "歌曲", "弹琴", "弹吉他", "曲子"]
+
+[[occupation]]
 id = "chef"
 name = "厨师"
 name_en = "Chef"
@@ -608,27 +339,12 @@ soc = "35-1011"
 rate = 30.03
 color = "#f4a259"
 scene = "kitchen"
-family = "life"
+family = "cooking"
 consult = 10
 absorbs_data = false
 look = ["toque", "apron", "pan"]
 strong = ["菜谱", "食谱", "烹饪", "炖", "腌", "凉拌", "红烧", "糖醋", "麻辣", "火锅", "烘焙", "蛋糕", "面包", "饼干", "披萨", "意面", "寿司", "拉面", "饺子", "包子", "面条", "米饭", "咖喱", "牛排", "鸡翅", "排骨", "豆腐", "番茄炒蛋", "宫保鸡丁", "空气炸锅", "烤箱", "高压锅", "电饭煲", "火候", "调味", "酱油", "蚝油", "料酒", "生抽", "老抽", "淀粉", "发酵", "发面", "酵母", "黄油", "奶油", "recipe", "cook", "bake", "sauce", "marinade", "oven", "grill", "炒菜", "炒饭", "炒面", "油炸", "炸鸡", "清蒸", "蒸鱼", "煎蛋", "煎鱼", "煎牛排", "鱼肉", "做鱼", "虾仁", "大虾"]
 weak = ["分钟", "食材", "早餐", "午餐", "晚餐", "宵夜", "下饭", "好吃", "吃饭", "做饭", "做菜", "味道", "香味", "太咸", "太甜", "太辣", "太酸", "口感", "软嫩", "大火", "小火", "锅里", "下锅", "食用油", "放盐", "放糖", "多少克", "一勺", "勺子", "做法"]
-
-[[occupation]]
-id = "tutor"
-name = "家教"
-name_en = "Tutor"
-soc = "25-3041"
-rate = 20.84
-color = "#26a69a"
-scene = "classroom"
-family = "education"
-consult = 15
-absorbs_data = false
-look = ["mortarboard", "book"]
-strong = ["教我", "零基础", "自学", "学习计划", "教程", "知识点", "考试", "复习", "刷题", "高考", "中考", "考研", "雅思", "托福", "gre", "sat", "四六级", "单词", "背单词", "口语练习", "听力", "阅读理解", "作业", "解题", "学科", "期末", "gpa", "选课", "留学", "推荐信", "teach me", "eli5", "homework", "exam", "英语语法", "语法题"]
-weak = ["理解", "区别", "例子", "练习", "笔记", "老师", "学生", "孩子学", "学不会", "不懂", "看不懂", "听不懂", "上课", "功课", "入门", "学习", "课程", "题目", "证明", "公式", "申请", "文书", "语法", "explain", "what is", "how does", "learn", "study"]
 
 [[occupation]]
 id = "mathematician"
@@ -638,13 +354,72 @@ soc = "15-2021"
 rate = 60.92
 color = "#5c6bc0"
 scene = "classroom"
-family = "education"
+family = "math"
 consult = 15
 absorbs_data = true
 look = ["ruler", "glasses"]
-tell = ["方程", "证明", "求导", "积分", "微积分", "线性代数", "矩阵", "概率", "统计学", "几何", "极限", "数论", "定理"]
 strong = ["数学", "微积分", "导数", "积分", "极限", "线性代数", "矩阵", "特征值", "概率", "概率论", "期望", "方差", "贝叶斯", "组合", "排列", "质数", "素数", "同余", "证明", "定理", "引理", "几何", "三角", "三角函数", "函数图像", "方程", "解方程", "不等式", "数列", "级数", "收敛", "拓扑", "群论", "微分方程", "傅里叶", "拉普拉斯", "数论", "图论", "最优化", "凸优化", "博弈论", "math", "calculus", "algebra", "theorem", "proof", "equation", "integral", "derivative", "probability", "matrix"]
 weak = ["公式", "推导", "等于", "最大", "最小", "取值", "范围", "整数", "实数", "函数", "变量", "系数", "计算", "求解", "求导", "求和", "题目", "这道题", "做题"]
+
+[[occupation]]
+id = "physicist"
+name = "物理学家"
+name_en = "Physicist"
+soc = "19-2012"
+rate = 82.81
+color = "#1e88e5"
+scene = "lab"
+family = "physics"
+consult = 15
+absorbs_data = true
+look = ["labcoat", "atom"]
+strong = ["物理", "力学", "牛顿", "动量", "能量守恒", "功率", "电路", "电压", "电流", "电阻", "欧姆", "电磁", "磁场", "电场", "光学", "折射", "衍射", "量子", "量子力学", "相对论", "黑洞", "引力", "万有引力", "宇宙", "天文", "星系", "恒星", "行星", "光年", "热力学", "熵", "温度", "压强", "流体", "声波", "频率", "波长", "半导体", "激光", "核能", "核聚变", "核裂变", "粒子", "中微子", "弦理论", "薛定谔", "测不准", "双缝", "physics", "quantum", "relativity", "gravity", "momentum", "thermodynamics", "circuit", "voltage", "机械", "机械设计", "齿轮", "轴承", "电机", "马达", "液压", "气动", "传动", "扭矩", "转速", "减速机", "3d 打印", "3d 建模", "solidworks", "fusion 360", "公差", "配合", "螺纹", "螺栓", "焊接", "钣金", "数控", "cnc", "车床", "铣床", "注塑", "模具", "材料强度", "应力", "疲劳", "振动分析", "有限元", "热传导", "散热", "风扇", "泵", "阀门", "机器人", "机械臂", "无人机", "发动机", "变速箱", "刹车", "悬挂", "底盘", "机械键盘", "打印机卡纸", "电机选型", "机加工", "电路设计", "pcb", "原理图", "arduino", "树莓派", "raspberry pi", "esp32", "stm32", "单片机", "mcu", "嵌入式", "firmware", "固件", "传感器", "adc", "pwm", "i2c", "spi", "uart", "电源", "稳压", "电容", "电感", "二极管", "三极管", "mosfet", "运放", "信号", "滤波", "示波器", "万用表", "焊接电路", "电池管理", "bms", "充电", "太阳能", "逆变器", "电机驱动", "led 驱动", "功耗", "低功耗", "蓝牙", "wifi 模块", "lora", "天线", "射频", "rf", "开关电源", "变压器", "三相", "plc", "工控", "伺服", "电路图", "芯片"]
+weak = ["速度", "加速度", "质量", "重力", "摩擦", "转动", "振动", "能量", "公式", "单位", "受力", "波动", "光线", "热量", "电荷", "磁性", "焦耳", "瓦特", "零件", "结构", "装配", "强度", "重量", "尺寸", "材料", "设备", "机器", "工艺", "图纸", "拆开", "拆卸", "修理", "动力", "接线", "引脚", "模块", "板子", "mv", "ma", "v", "w", "hz", "传感", "焊锡"]
+
+[[occupation]]
+id = "chemist"
+name = "化学家"
+name_en = "Chemist"
+soc = "19-2031"
+rate = 43.87
+color = "#00897b"
+scene = "lab"
+family = "chemistry"
+consult = 15
+absorbs_data = true
+look = ["labcoat", "goggles", "flask"]
+strong = ["化学", "分子", "原子", "元素", "周期表", "化学反应", "反应方程式", "配平", "摩尔", "mol", "ph 值", "酸碱", "氧化", "还原", "催化剂", "有机化学", "无机", "聚合物", "溶液", "浓度", "溶解度", "沸点", "熔点", "蒸馏", "结晶", "电解", "电池原理", "锂电池", "材料", "合金", "塑料", "涂层", "腐蚀", "生锈", "洗涤剂", "84 消毒液", "酒精", "次氯酸", "甲醛", "苯", "爆炸", "易燃", "危险品", "化妆品成分", "添加剂", "防腐剂"]
+weak = ["成分", "反应", "混合", "分解", "稳定", "安全", "危险", "实验", "试剂", "比例", "温度", "气体", "液体", "固体", "清洗", "去除", "溶解", "有毒", "中毒"]
+
+[[occupation]]
+id = "biologist"
+name = "生物学家"
+name_en = "Biological scientist"
+soc = "19-1029"
+rate = 47.56
+color = "#43a047"
+scene = "lab"
+family = "biology"
+consult = 15
+absorbs_data = true
+look = ["labcoat", "leaf"]
+strong = ["生物", "细胞", "dna", "rna", "基因", "基因编辑", "crispr", "蛋白质结构", "酶", "代谢", "光合作用", "进化", "进化论", "物种", "生态", "微生物", "细菌", "病毒", "真菌", "免疫", "抗体", "疫苗原理", "神经元", "大脑", "激素", "睡眠科学", "衰老", "端粒", "干细胞", "克隆", "转基因", "测序", "pcr", "生物信息", "序列比对", "动物行为", "植物", "种子", "发芽", "昆虫", "海洋生物", "恐龙", "化石"]
+weak = ["为什么会", "原理", "机制", "生长", "繁殖", "遗传", "适应", "环境", "自然", "动物", "人体", "器官", "组织", "科普"]
+
+[[occupation]]
+id = "architect"
+name = "建筑师"
+name_en = "Architect"
+soc = "17-1011"
+rate = 47.73
+color = "#78909c"
+scene = "workshop"
+family = "architecture"
+consult = 15
+absorbs_data = false
+look = ["blueprint", "glasses"]
+strong = ["建筑", "建筑设计", "平面图", "立面图", "剖面", "户型图", "承重墙", "地基", "层高", "容积率", "建筑面积", "使用面积", "cad", "autocad", "sketchup", "revit", "bim", "效果图", "建筑风格", "包豪斯", "现代主义", "民宿设计", "别墅设计", "自建房", "宅基地", "加建", "改建", "报建", "规划许可", "建筑师", "architecture", "floor plan", "blueprint"]
+weak = ["图纸", "空间", "面积", "材料", "采光", "通风", "朝向", "户型", "预算", "横梁", "立柱", "平米", "平方米", "几层", "楼层", "楼房", "结构"]
 
 [[occupation]]
 id = "lawyer"
@@ -662,207 +437,32 @@ strong = ["合同", "协议", "条款", "违约", "起诉", "被告", "原告", 
 weak = ["责任", "规定", "可以吗", "能不能", "违规", "投诉", "举报", "证据", "协商", "期限", "公司注册", "股东", "合伙", "权利", "签字", "签合同", "罚款"]
 
 [[occupation]]
-id = "chemist"
-name = "化学家"
-name_en = "Chemist"
-soc = "19-2031"
-rate = 43.87
-color = "#00897b"
-scene = "lab"
-family = "science"
-consult = 15
-absorbs_data = true
-look = ["labcoat", "goggles", "flask"]
-tell = ["化学", "化学式", "分子", "有机", "无机", "摩尔", "酸碱", "溶液", "元素周期", "催化", "反应式"]
-strong = ["化学", "分子", "原子", "元素", "周期表", "化学反应", "反应方程式", "配平", "摩尔", "mol", "ph 值", "酸碱", "氧化", "还原", "催化剂", "有机化学", "无机", "聚合物", "溶液", "浓度", "溶解度", "沸点", "熔点", "蒸馏", "结晶", "电解", "电池原理", "锂电池", "材料", "合金", "塑料", "涂层", "腐蚀", "生锈", "洗涤剂", "84 消毒液", "酒精", "次氯酸", "甲醛", "苯", "爆炸", "易燃", "危险品", "化妆品成分", "添加剂", "防腐剂"]
-weak = ["成分", "反应", "混合", "分解", "稳定", "安全", "危险", "实验", "试剂", "比例", "温度", "气体", "液体", "固体", "清洗", "去除", "溶解", "有毒", "中毒"]
-
-[[occupation]]
-id = "biologist"
-name = "生物学家"
-name_en = "Biological scientist"
-soc = "19-1029"
-rate = 47.56
-color = "#43a047"
-scene = "lab"
-family = "science"
-consult = 15
-absorbs_data = true
-look = ["labcoat", "leaf"]
-tell = ["细胞", "基因", "dna", "生物", "进化", "细菌", "遗传", "生态", "植物学", "解剖", "蛋白质结构"]
-strong = ["生物", "细胞", "dna", "rna", "基因", "基因编辑", "crispr", "蛋白质结构", "酶", "代谢", "光合作用", "进化", "进化论", "物种", "生态", "微生物", "细菌", "病毒", "真菌", "免疫", "抗体", "疫苗原理", "神经元", "大脑", "激素", "睡眠科学", "衰老", "端粒", "干细胞", "克隆", "转基因", "测序", "pcr", "生物信息", "序列比对", "动物行为", "植物", "种子", "发芽", "昆虫", "海洋生物", "恐龙", "化石"]
-weak = ["为什么会", "原理", "机制", "生长", "繁殖", "遗传", "适应", "环境", "自然", "动物", "人体", "器官", "组织", "科普"]
-
-[[occupation]]
-id = "physicist"
-name = "物理学家"
-name_en = "Physicist"
-soc = "19-2012"
-rate = 82.81
-color = "#1e88e5"
-scene = "lab"
-family = "science"
-consult = 15
-absorbs_data = true
-look = ["labcoat", "atom"]
-strong = ["物理", "力学", "牛顿", "动量", "能量守恒", "功率", "电路", "电压", "电流", "电阻", "欧姆", "电磁", "磁场", "电场", "光学", "折射", "衍射", "量子", "量子力学", "相对论", "黑洞", "引力", "万有引力", "宇宙", "天文", "星系", "恒星", "行星", "光年", "热力学", "熵", "温度", "压强", "流体", "声波", "频率", "波长", "半导体", "激光", "核能", "核聚变", "核裂变", "粒子", "中微子", "弦理论", "薛定谔", "测不准", "双缝", "physics", "quantum", "relativity", "gravity", "momentum", "thermodynamics", "circuit", "voltage"]
-weak = ["速度", "加速度", "质量", "重力", "摩擦", "转动", "振动", "能量", "公式", "单位", "受力", "波动", "光线", "热量", "电荷", "磁性", "焦耳", "瓦特"]
-
-[[occupation]]
-id = "economist"
-name = "经济学家"
-name_en = "Economist"
-soc = "19-3011"
-rate = 59.96
-color = "#8e8e3a"
-scene = "lab"
-family = "money"
-consult = 15
-absorbs_data = true
-look = ["glasses", "chart"]
-tell = ["gdp", "通胀", "通货膨胀", "利率", "美联储", "宏观", "失业率", "货币政策", "财政政策", "汇率", "经济学", "关税", "cpi", "非农", "降息", "加息"]
-strong = ["宏观经济", "微观经济", "gdp", "cpi", "ppi", "pmi", "通货膨胀", "通胀", "通缩", "失业率", "就业数据", "非农", "美联储", "fed", "加息", "降息", "利率", "国债", "收益率曲线", "货币政策", "财政政策", "量化宽松", "qe", "汇率", "人民币", "美元指数", "关税", "贸易战", "供应链", "供需", "供给", "边际", "机会成本", "博弈", "外部性", "垄断", "经济周期", "衰退", "recession", "泡沫", "房地产周期", "人口", "老龄化", "生育率", "城市化", "产业政策", "补贴", "凯恩斯", "哈耶克", "经济学", "economics", "inflation", "interest rate", "tariff"]
-weak = ["市场", "价格", "增长", "下滑", "政策", "影响", "趋势", "数据", "指标", "周期", "预期", "风险", "国家", "中国经济", "美国经济", "欧洲", "日本", "新兴市场", "经济", "需求", "弹性"]
-
-[[occupation]]
-id = "architect"
-name = "建筑师"
-name_en = "Architect"
-soc = "17-1011"
-rate = 47.73
-color = "#78909c"
-scene = "workshop"
-family = "home"
-consult = 15
+id = "research"
+name = "研究员"
+name_en = "Research analyst"
+soc = "13-1161"
+rate = 37.87
+color = "#8fb04a"
+scene = "desk"
+family = "research"
+consult = 5
 absorbs_data = false
-look = ["blueprint", "glasses"]
-tell = ["建筑", "户型图", "平面图", "承重墙", "建筑设计", "自建房", "容积率", "cad", "建筑师", "地基"]
-strong = ["建筑", "建筑设计", "平面图", "立面图", "剖面", "户型图", "承重墙", "地基", "层高", "容积率", "建筑面积", "使用面积", "cad", "autocad", "sketchup", "revit", "bim", "效果图", "建筑风格", "包豪斯", "现代主义", "民宿设计", "别墅设计", "自建房", "宅基地", "加建", "改建", "报建", "规划许可", "建筑师", "architecture", "floor plan", "blueprint"]
-weak = ["图纸", "空间", "面积", "材料", "采光", "通风", "朝向", "户型", "预算", "横梁", "立柱", "平米", "平方米", "几层", "楼层", "楼房", "结构"]
+look = ["glasses"]
+strong = ["调研", "竞品分析", "市场规模", "行业报告", "行业研究", "综述", "文献", "论文", "research report", "market size", "tam", "survey", "问卷", "访谈", "资料整理", "背景调查", "对比一下", "帮我查", "查一下", "查查", "search for", "look up", "find out", "教我", "零基础", "自学", "学习计划", "教程", "知识点", "考试", "复习", "刷题", "高考", "中考", "考研", "雅思", "托福", "gre", "sat", "四六级", "单词", "背单词", "口语练习", "听力", "阅读理解", "作业", "解题", "学科", "期末", "gpa", "选课", "留学", "推荐信", "teach me", "eli5", "homework", "exam", "英语语法", "语法题", "跳闸", "空开", "断路器", "漏电", "漏电保护", "插座", "开关", "接地", "零线", "火线", "地线", "配电箱", "电表", "电费", "电线", "线径", "平方线", "短路", "电压不稳", "灯不亮", "换灯泡", "吊灯安装", "开关接线", "双控", "三控", "智能开关", "充电桩", "家用电", "用电安全", "漏保", "电工", "electrician", "outlet", "breaker", "wiring", "水管", "漏水", "堵了", "马桶堵", "下水道", "地漏", "水龙头", "花洒", "淋浴", "热水器", "燃气热水器", "电热水器", "水压", "水压小", "没热水", "水箱", "阀门", "三角阀", "角阀", "管道", "ppr", "pvc", "软管", "密封", "生料带", "防水", "渗水", "反味", "返水", "洗碗机安装", "洗衣机排水", "净水器", "滤芯", "水垢", "马桶", "冲水", "水费", "燃气", "煤气", "gas leak", "plumbing", "leak", "faucet", "toilet", "drain", "clogged", "下水", "疏通", "木工", "木头", "木材", "实木", "板材", "胶合板", "多层板", "刨花板", "榫卯", "打孔", "钻孔", "螺丝", "钉子", "膨胀螺丝", "自攻螺丝", "电钻", "冲击钻", "锯", "圆锯", "曲线锯", "砂纸", "打磨", "上漆", "木蜡油", "清漆", "diy 家具", "做个柜子", "书架", "置物架", "桌子", "椅子", "床架", "门框", "地板安装", "踢脚线", "吊顶龙骨", "石膏板", "装修木工", "衣柜定制", "修门", "门吸", "合页", "滑轨", "抽屉", "拼装", "宜家组装", "carpentry", "woodworking", "drill", "screw", "sand", "木板", "柜子", "组装家具", "种花", "养花", "绿植", "多肉", "盆栽", "浇水", "施肥", "肥料", "土壤", "营养土", "换盆", "扦插", "播种", "发芽", "黄叶", "烂根", "掉叶", "虫害", "蚜虫", "红蜘蛛", "白粉病", "杀虫", "光照", "阴凉", "月季", "绿萝", "发财树", "吊兰", "仙人掌", "兰花", "茉莉", "栀子", "绣球", "薄荷", "香草", "番茄种", "种菜", "阳台种菜", "菜园", "草坪", "剪枝", "修剪", "嫁接", "果树", "花园", "庭院", "景观", "园艺", "gardening", "plant care", "succulent", "fertilizer", "soil", "prune", "宝宝", "婴儿", "新生儿", "奶粉", "母乳", "辅食", "断奶", "夜奶", "哄睡", "睡眠训练", "黄疸", "湿疹", "红屁股", "尿布", "纸尿裤", "长牙", "出牙", "发育", "身高体重", "早教", "绘本", "幼儿园", "入园", "分离焦虑", "叛逆", "青春期", "打人", "咬人", "不听话", "发脾气", "情绪管理", "二胎", "月子", "产后", "坐月子", "孕妇", "胎动", "产检", "儿童", "小孩", "孩子", "娃", "幼儿", "儿歌", "亲子游", "toddler", "baby", "newborn", "parenting", "daycare", "tantrum", "育儿", "带娃", "旅行", "旅游", "行程", "攻略", "机票", "酒店", "签证", "visa", "itinerary", "航班", "转机", "民宿", "景点", "打卡", "自由行", "跟团", "租车自驾", "护照", "入境", "海关", "booking", "airbnb", "青旅", "露营", "去玩", "出去玩", "想去", "周末去", "出发", "两天一夜", "三天两夜", "周边游", "自驾", "去哪玩", "买房", "卖房", "租房", "房贷", "mortgage", "首付", "学区房", "二手房", "新房", "公寓", "房东", "租客", "租金", "房价", "物业", "过户", "房产税", "property tax", "zillow", "装修预算", "户型", "中介", "看房", "押金", "房源", "房子", "汽车", "车子", "修车", "保养", "换机油", "机油", "刹车片", "刹车异响", "轮胎", "胎压", "换胎", "补胎", "电瓶", "蓄电池", "打不着火", "启动不了", "发动机故障灯", "故障码", "obd", "变速箱", "离合", "油耗", "油门", "抖动", "异响", "漏油", "冷却液", "防冻液", "水温", "空调不制冷", "雨刮", "大灯", "车灯", "年检", "验车", "二手车", "买车", "选车", "新能源", "电动车", "充电", "续航", "特斯拉", "比亚迪", "混动", "火花塞", "正时", "皮带", "四轮定位", "剐蹭", "补漆", "车险", "违章", "摩托车", "电动自行车", "刹车", "发动机", "4s店", "故障灯", "穿搭", "搭配", "衣服", "穿什么", "服装", "时尚", "outfit", "衣橱", "胶囊衣橱", "风格测试", "肤色 冷暖", "显瘦", "显高", "面试穿", "约会穿", "婚礼穿", "西装", "裙子", "大衣", "牛仔裤", "运动鞋", "配饰", "优衣库", "zara", "lululemon", "尺码", "版型", "面料", "羊毛", "亚麻", "包包", "手提包", "背包", "托特包", "发型", "剪发", "理发", "烫发", "染发", "护发", "脱发", "头发", "发际线", "刘海", "美妆", "化妆", "妆容", "口红", "粉底", "眼影", "眉毛", "护肤", "skincare", "面霜", "精华", "防晒", "痘痘", "黑头", "毛孔", "美甲", "指甲", "香水", "剃须", "胡子", "脸型", "造型", "okr", "kpi", "团队管理", "绩效考核", "组织架构", "年度规划", "战略", "商业计划", "business plan", "商业模式", "融资 bp", "创业", "startup", "路演", "董事会", "管理层", "裁员", "晋升", "汇报", "项目计划", "甘特图", "gantt", "里程碑", "排期", "进度", "需求文档", "prd", "产品需求", "用户故事", "user story", "sprint", "scrum", "敏捷", "agile", "站会", "jira", "看板", "迭代计划", "roadmap", "路线图", "产品经理", "需求评审", "优先级", "mvp", "产品设计", "功能规划", "竞品", "简历", "resume", "cv", "求职", "面试", "interview", "offer", "谈薪", "薪资谈判", "跳槽", "离职", "辞职", "入职", "试用期", "劳动合同", "社保", "公积金", "绩效", "招聘", "jd", "职位描述", "自我介绍", "职业规划", "背调", "linkedin", "薪酬", "岗位", "候选人", "hr", "销售话术", "客户开发", "cold email", "冷邮件", "成交", "报价单", "销售漏斗", "线索", "lead", "crm", "客户跟进", "谈判", "议价", "续约", "客户流失", "churn", "定价策略", "pricing", "营销文案", "广告文案", "推广", "营销", "marketing", "seo", "投放", "转化率", "落地页", "campaign", "私域", "增长黑客", "品牌", "客户", "报价", "销售", "跟进", "客单价", "拜访"]
+weak = ["研究", "分析", "对比", "区别", "哪个好", "推荐", "评测", "盘点", "总结一下", "介绍一下", "是什么", "为什么", "怎么看", "历史", "来源", "资料", "新闻", "最新", "理解", "例子", "练习", "笔记", "老师", "学生", "孩子学", "学不会", "不懂", "看不懂", "听不懂", "上课", "功课", "入门", "学习", "课程", "题目", "证明", "公式", "申请", "文书", "语法", "explain", "what is", "how does", "learn", "study", "坏了", "不亮", "安全", "家里", "灯泡", "插头", "接线", "闪烁", "烧了", "烧坏", "厨房", "卫生间", "浴室", "厕所", "漏了", "堵住", "不通", "更换", "排水", "水流", "冷水", "热水", "尺寸", "mm", "工具", "手工", "家具", "木料", "架子", "厚度", "阳光", "开花", "死了", "季节", "春天", "院子", "阳台", "花朵", "叶子", "根部", "花盆", "盆里", "泥土", "长得", "长高", "枯了", "枯萎", "养的", "种的", "种了", "种子", "个月", "宝贝", "妈妈", "爸爸", "几岁", "岁了", "带孩子", "哭闹", "爱哭", "不吃饭", "睡觉", "不睡", "上学", "教他", "教她", "陪他", "陪她", "管教", "闹脾气", "住宿", "路线", "回来", "交通", "地图", "天气", "预算", "东京", "巴黎", "纽约", "泰国", "日本", "欧洲", "海边", "飞机", "订酒店", "订票", "几天", "海岛", "小岛", "两天", "三天", "怎么安排", "小区", "地段", "面积", "签约", "搬家", "邻居", "住房", "住在", "公里", "声音", "故障", "4s", "价格", "我的车", "开车", "换油", "修理店", "颜色", "风格", "场合", "身材", "冬天穿", "夏天穿", "好看", "气质", "穿着", "上衣", "衣柜", "鞋子", "皮肤", "日常", "适合我", "肤质", "干皮", "油皮", "敏感", "头型", "发色", "颜值", "管理", "团队", "公司", "老板", "员工", "目标", "计划", "决策", "会议", "流程", "业务", "运营", "增长", "leadership", "strategy", "项目", "需求", "功能", "版本", "上线", "用户", "产品", "方案", "评审", "交付", "deadline", "风险", "复盘", "工作", "职业", "职位", "同事", "领导", "升职", "年终奖", "薪水", "工资", "加班", "培训", "宣传", "文案", "曝光", "流量", "转化", "用户增长", "活动", "海报文案", "slogan", "公众号", "小红书", "抖音", "tiktok", "instagram", "邮件", "卖出", "卖给", "售卖", "卖货"]
 
 [[occupation]]
-id = "mech"
-name = "机械工程师"
-name_en = "Mechanical engineer"
-soc = "17-2141"
-rate = 50.05
-color = "#607d8b"
-scene = "workshop"
-family = "home"
-consult = 15
-absorbs_data = true
-look = ["gear", "hardhat"]
-tell = ["齿轮", "扭矩", "轴承", "液压", "机械", "电机选型", "3d 打印", "cnc", "机加工", "公差", "传动"]
-strong = ["机械", "机械设计", "齿轮", "轴承", "电机", "马达", "液压", "气动", "传动", "扭矩", "转速", "减速机", "3d 打印", "3d 建模", "solidworks", "fusion 360", "公差", "配合", "螺纹", "螺栓", "焊接", "钣金", "数控", "cnc", "车床", "铣床", "注塑", "模具", "材料强度", "应力", "疲劳", "振动分析", "有限元", "热传导", "散热", "风扇", "泵", "阀门", "机器人", "机械臂", "无人机", "发动机", "变速箱", "刹车", "悬挂", "底盘", "机械键盘", "打印机卡纸"]
-weak = ["零件", "结构", "装配", "强度", "重量", "尺寸", "材料", "设备", "机器", "工艺", "图纸", "拆开", "拆卸", "修理", "转动", "动力"]
-
-[[occupation]]
-id = "ee"
-name = "电气工程师"
-name_en = "Electrical engineer"
-soc = "17-2071"
-rate = 58.0
-color = "#fbc02d"
-scene = "workshop"
-family = "home"
-consult = 15
-absorbs_data = true
-look = ["circuit", "goggles"]
-tell = ["电路", "焊接", "pcb", "单片机", "arduino", "stm32", "esp32", "电阻", "电容", "示波器", "电路图", "芯片"]
-strong = ["电路设计", "pcb", "原理图", "arduino", "树莓派", "raspberry pi", "esp32", "stm32", "单片机", "mcu", "嵌入式", "firmware", "固件", "传感器", "adc", "pwm", "i2c", "spi", "uart", "电源", "稳压", "电容", "电感", "二极管", "三极管", "mosfet", "运放", "信号", "滤波", "示波器", "万用表", "焊接电路", "电池管理", "bms", "充电", "太阳能", "逆变器", "电机驱动", "led 驱动", "功耗", "低功耗", "蓝牙", "wifi 模块", "lora", "天线", "射频", "rf", "开关电源", "变压器", "三相", "plc", "工控", "伺服"]
-weak = ["电压", "电流", "功率", "接线", "引脚", "模块", "板子", "频率", "mv", "ma", "v", "w", "hz", "芯片", "传感", "焊接", "焊锡"]
-
-[[occupation]]
-id = "electrician"
-name = "电工"
-name_en = "Electrician"
-soc = "47-2111"
-rate = 30.38
-color = "#ffb300"
-scene = "workshop"
-family = "home"
-consult = 15
+id = "entry"
+name = "资料录入"
+name_en = "Data entry"
+soc = "43-9021"
+rate = 19.88
+color = "#a39a8a"
+scene = "desk"
+family = "tech"
+consult = 5
 absorbs_data = false
-look = ["hardhat", "vest", "bolt"]
-strong = ["跳闸", "空开", "断路器", "漏电", "漏电保护", "插座", "开关", "接地", "零线", "火线", "地线", "配电箱", "电表", "电费", "电线", "线径", "平方线", "短路", "电压不稳", "灯不亮", "换灯泡", "吊灯安装", "开关接线", "双控", "三控", "智能开关", "充电桩", "家用电", "用电安全", "漏保", "电工", "electrician", "outlet", "breaker", "wiring"]
-weak = ["坏了", "不亮", "安全", "家里", "灯泡", "插头", "接线", "闪烁", "烧了", "烧坏"]
+look = ["papers", "visor"]
+strong = ["ocr", "识别图片", "录入", "转成表格", "整理成表", "扫描件", "pdf 转", "手写", "转录", "transcribe", "抄录", "批量重命名", "归档", "整理文件", "去重", "合并表格"]
+weak = ["整理", "表格", "转换", "格式", "批量", "重复", "清单", "列表", "文件名", "文件夹", "复制", "粘贴"]
 
-[[occupation]]
-id = "carpenter"
-name = "木工"
-name_en = "Carpenter"
-soc = "47-2031"
-rate = 29.12
-color = "#a1887f"
-scene = "workshop"
-family = "home"
-consult = 15
-absorbs_data = false
-look = ["apron", "hammer"]
-tell = ["木工", "木板", "柜子", "打孔", "钉子", "书架", "组装家具", "木头", "锯", "榫卯", "实木"]
-strong = ["木工", "木头", "木材", "实木", "板材", "胶合板", "多层板", "刨花板", "榫卯", "打孔", "钻孔", "螺丝", "钉子", "膨胀螺丝", "自攻螺丝", "电钻", "冲击钻", "锯", "圆锯", "曲线锯", "砂纸", "打磨", "上漆", "木蜡油", "清漆", "diy 家具", "做个柜子", "书架", "置物架", "桌子", "椅子", "床架", "门框", "地板安装", "踢脚线", "吊顶龙骨", "石膏板", "装修木工", "衣柜定制", "修门", "门吸", "合页", "滑轨", "抽屉", "拼装", "宜家组装", "carpentry", "woodworking", "drill", "screw", "sand"]
-weak = ["尺寸", "mm", "工具", "手工", "家具", "木板", "木料", "柜子", "架子", "厚度"]
-
-[[occupation]]
-id = "mechanic"
-name = "汽修"
-name_en = "Automotive mechanic"
-soc = "49-3023"
-rate = 24.34
-color = "#546e7a"
-scene = "workshop"
-family = "life"
-consult = 15
-absorbs_data = false
-look = ["cap", "wrench"]
-tell = ["修车", "轮胎", "机油", "刹车", "发动机", "变速箱", "保养", "4s店", "车子", "异响", "故障灯", "年检"]
-strong = ["汽车", "车子", "修车", "保养", "换机油", "机油", "刹车片", "刹车异响", "轮胎", "胎压", "换胎", "补胎", "电瓶", "蓄电池", "打不着火", "启动不了", "发动机故障灯", "故障码", "obd", "变速箱", "离合", "油耗", "油门", "抖动", "异响", "漏油", "冷却液", "防冻液", "水温", "空调不制冷", "雨刮", "大灯", "车灯", "年检", "验车", "二手车", "买车", "选车", "新能源", "电动车", "充电", "续航", "特斯拉", "比亚迪", "混动", "火花塞", "正时", "皮带", "四轮定位", "剐蹭", "补漆", "车险", "违章", "摩托车", "电动自行车"]
-weak = ["公里", "声音", "故障", "4s", "价格", "我的车", "开车", "换油", "4s店", "修理店"]
-
-[[occupation]]
-id = "plumber"
-name = "水管工"
-name_en = "Plumber"
-soc = "47-2152"
-rate = 30.67
-color = "#29b6f6"
-scene = "workshop"
-family = "home"
-consult = 15
-absorbs_data = false
-look = ["cap", "pipe"]
-tell = ["水管", "漏水", "堵了", "马桶", "下水", "水龙头", "热水器", "花洒", "水压", "地漏", "管道", "疏通"]
-strong = ["水管", "漏水", "堵了", "马桶堵", "下水道", "地漏", "水龙头", "花洒", "淋浴", "热水器", "燃气热水器", "电热水器", "水压", "水压小", "没热水", "水箱", "阀门", "三角阀", "角阀", "管道", "ppr", "pvc", "软管", "密封", "生料带", "防水", "渗水", "反味", "返水", "洗碗机安装", "洗衣机排水", "净水器", "滤芯", "水垢", "马桶", "冲水", "水费", "燃气", "煤气", "gas leak", "plumbing", "leak", "faucet", "toilet", "drain", "clogged"]
-weak = ["厨房", "卫生间", "浴室", "厕所", "漏了", "堵住", "不通", "疏通", "更换", "排水", "水流", "冷水", "热水"]
-
-[[occupation]]
-id = "gardener"
-name = "园艺师"
-name_en = "Landscaping and groundskeeping worker"
-soc = "37-3011"
-rate = 18.82
-color = "#66bb6a"
-scene = "garden"
-family = "home"
-consult = 10
-absorbs_data = false
-look = ["strawhat", "can"]
-tell = ["种花", "养花", "浇水", "施肥", "绿植", "多肉", "盆栽", "黄叶", "烂根", "园艺", "草坪", "换盆", "扦插"]
-strong = ["种花", "养花", "绿植", "多肉", "盆栽", "浇水", "施肥", "肥料", "土壤", "营养土", "换盆", "扦插", "播种", "发芽", "黄叶", "烂根", "掉叶", "虫害", "蚜虫", "红蜘蛛", "白粉病", "杀虫", "光照", "阴凉", "月季", "绿萝", "发财树", "吊兰", "仙人掌", "兰花", "茉莉", "栀子", "绣球", "薄荷", "香草", "番茄种", "种菜", "阳台种菜", "菜园", "草坪", "剪枝", "修剪", "嫁接", "果树", "花园", "庭院", "景观", "园艺", "gardening", "plant care", "succulent", "fertilizer", "soil", "prune"]
-weak = ["阳光", "开花", "死了", "季节", "春天", "院子", "阳台", "花朵", "叶子", "根部", "花盆", "盆里", "泥土", "长得", "长高", "枯了", "枯萎", "养的", "种的", "种了", "种子"]
-
-[[occupation]]
-id = "childcare"
-name = "育儿顾问"
-name_en = "Childcare worker"
-soc = "39-9011"
-rate = 16.82
-color = "#f48fb1"
-scene = "lounge"
-family = "life"
-consult = 15
-absorbs_data = false
-look = ["teddy"]
-tell = ["宝宝", "婴儿", "孩子", "小孩", "辅食", "奶粉", "幼儿园", "育儿", "哄睡", "尿布", "带娃", "儿童", "娃"]
-strong = ["宝宝", "婴儿", "新生儿", "奶粉", "母乳", "辅食", "断奶", "夜奶", "哄睡", "睡眠训练", "黄疸", "湿疹", "红屁股", "尿布", "纸尿裤", "长牙", "出牙", "发育", "身高体重", "早教", "绘本", "幼儿园", "入园", "分离焦虑", "叛逆", "青春期", "打人", "咬人", "不听话", "发脾气", "情绪管理", "二胎", "月子", "产后", "坐月子", "孕妇", "胎动", "产检", "儿童", "小孩", "孩子", "娃", "幼儿", "儿歌", "亲子游", "toddler", "baby", "newborn", "parenting", "daycare", "tantrum"]
-weak = ["个月", "宝贝", "妈妈", "爸爸", "几岁", "岁了", "带娃", "带孩子", "哭闹", "爱哭", "不吃饭", "睡觉", "不睡", "上学", "教他", "教她", "陪他", "陪她", "管教", "闹脾气"]

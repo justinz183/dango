@@ -24,8 +24,16 @@ const DAY_MS: i64 = 86_400_000;
 pub const HISTORY_DAYS: i64 = 30;
 
 /// A turn's credited minutes per occupation (turns.work).
+/// A turn's minutes per occupation, merged occupations counted as their
+/// representative.
 pub fn work_of(json: &str) -> BTreeMap<String, f64> {
-    serde_json::from_str(json).unwrap_or_default()
+    let raw: BTreeMap<String, f64> = serde_json::from_str(json).unwrap_or_default();
+    let t = Table::builtin();
+    let mut out = BTreeMap::new();
+    for (o, m) in raw {
+        *out.entry(t.canon(&o).to_string()).or_default() += m;
+    }
+    out
 }
 
 /// Display name and colour of an agent (sessions.source).
@@ -73,9 +81,13 @@ pub fn jobs(conn: &Connection, from: i64, to: i64, tool: Option<&str>) -> Result
         "SELECT j.key, SUM(j.value) FROM turns JOIN sessions s ON s.id = turns.session_id, json_each(turns.work) j
          WHERE turns.ended_at >= ?1 AND turns.ended_at < ?2 AND (?3 IS NULL OR s.source = ?3) GROUP BY j.key",
     )?;
-    let mut rows: Vec<(String, f64, f64)> = st
-        .query_map(rusqlite::params![from, to, tool], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?
-        .flatten()
+    // Merged occupations count as their representative.
+    let mut minutes: BTreeMap<String, f64> = BTreeMap::new();
+    for (o, m) in st.query_map(rusqlite::params![from, to, tool], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))?.flatten() {
+        *minutes.entry(t.canon(&o).to_string()).or_default() += m;
+    }
+    let mut rows: Vec<(String, f64, f64)> = minutes
+        .into_iter()
         .filter(|(_, m)| *m > 0.0)
         .map(|(o, m)| {
             let usd = m / 60.0 * t.rate(&o);
@@ -139,7 +151,9 @@ pub fn office(conn: &Connection, tz: Tz, now: i64) -> Result<Vec<Value>> {
          WHERE turns.ended_at >= ?1 AND j.value > 0 GROUP BY j.key",
     )?;
     for (o, m, last) in st.query_map([from], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)?)))?.flatten() {
-        staff.insert(o, (m, last, false, 0));
+        let e = staff.entry(t.canon(&o).to_string()).or_insert((0.0, last, false, 0));
+        e.0 += m;
+        e.1 = e.1.max(last);
     }
     let mut st = conn.prepare(
         "SELECT json_extract(t.agg, '$.work'), json_extract(t.agg, '$.last_activity'),

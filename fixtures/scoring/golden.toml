@@ -60,10 +60,9 @@ name = "translation"
 steps = [
   { edit = "docs/zh/guide.md", lines = 60, words = 1500 },
 ]
-topic = "translator"
-main = "translator"
+main = "writer"
 minutes = 185.00
-usd = 89.20
+usd = 114.02
 
 [[case]]
 name = "stock research"

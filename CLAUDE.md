@@ -1,6 +1,6 @@
 # ShadowCorp — 衡量 AI 编码产出
 
-"你的 Claude"是一只桌面宠物，有活就在那个职业的场景里干（工位、诊室、健身房……）、按正在干的活换装；每一步按"该请谁来做"计时、按该职业的 BLS 时薪折成 $，和单日纪录、上周比，每天出一张日报卡。没有段位和 XP（v4 删了）。当前设计：docs/DESIGN.md v6（2026-10-29：49 种职业、话题关键词、场景、舞台 + 茶水间办公室）；日 / 周封顶沿用 docs/SPEC.md §5；"影子公司 / 办公室 / 徽章"设定已收起，成就目录 assets/achievements.json 仍在但不是主界面。
+"你的 Claude"是一只桌面宠物，有活就在那个职业的场景里干（工位、诊室、健身房……）、按正在干的活换装；每一步按"该请谁来做"计时、按该职业的 BLS 时薪折成 $，和单日纪录、上周比，每天出一张日报卡。没有段位和 XP（v4 删了）。当前设计：docs/DESIGN.md v6（2026-10-29：每个领域一个代表、共 22 种职业（程序员下按步骤分网页 / 测试 / 运维），话题关键词分大类，场景，舞台 + 茶水间办公室；并掉的旧 id 走 `[alias]`）；日 / 周封顶沿用 docs/SPEC.md §5；"影子公司 / 办公室 / 徽章"设定已收起，成就目录 assets/achievements.json 仍在但不是主界面。
 
 ## 命令
 - 构建：`cargo build --workspace`（发布：`cargo build --release`，二进制 `target/release/shadowcorp`）
@@ -9,7 +9,7 @@
 - 测试：`cargo test --workspace`（黄金回合 fixtures/scoring/golden.toml，由 occupation.rs 的 golden_turns 读；成就用例 crates/daemon/tests/achievements.rs）
 - 回放：`SHADOWCORP_HOME=/tmp/sc SHADOWCORP_TZ=+08:00 cargo run -p cli -- replay fixtures/hooks/claude_code`
 - 报告：`shadowcorp report [--week|--month|--year] --day yesterday --names [--tool claude|codex]`（`--day` 选哪天所在的周期）；卡片：`shadowcorp card …同上… --out /tmp/x.png --no-open`（渲染走 /Applications/ShadowCorp.app，改了 Swift 要先 bundle.sh + 重装；`card` 会覆盖剪贴板，只看渲染就 `report --json > x.json` 再 `shadowcorp-widget --card x.json out.png`）
-- 仪表盘截图：`ShadowCorp --snapshot-dashboard out.png [--board claude_code|codex] [--range 1|7|30] [--open-jobs] [--office N]`（`--office N` 编 N 个人进办公室看效果）（读 $SHADOWCORP_HOME/widget.json；按工具的数据在 widget.json 的 `views`）；宠物截图：`--snapshot-pet out.png --state working|waiting|happy|proud|sleepy|missing --job <职业id> [--helpers N] [--receipt] [--backdrop]`（透明 PNG，`--backdrop` 加深色底）；办公室截图：`--snapshot-office out.png --jobs id,id,… [--working K] [--walk 秒]`（前 K 个在干；`--walk` 把活交给下一个人，渲染走到一半的样子）。改角色 / 装扮 / 场景要把 49 种职业 × 在干 / 闲着都截一遍、11 个场景各截一张办公室看。
+- 仪表盘截图：`ShadowCorp --snapshot-dashboard out.png [--board claude_code|codex] [--range 1|7|30] [--open-jobs] [--office N]`（`--office N` 编 N 个人进办公室看效果）（读 $SHADOWCORP_HOME/widget.json；按工具的数据在 widget.json 的 `views`）；宠物截图：`--snapshot-pet out.png --state working|waiting|happy|proud|sleepy|missing --job <职业id> [--helpers N] [--receipt] [--backdrop]`（透明 PNG，`--backdrop` 加深色底）；办公室截图：`--snapshot-office out.png --jobs id,id,… [--working K] [--walk 秒]`（前 K 个在干；`--walk` 把活交给下一个人，渲染走到一半的样子）。改角色 / 装扮 / 场景要把 22 种职业 × 在干 / 闲着都截一遍、每个场景截一张办公室看。
 - 隐私扫描：`cargo run -p cli -- privacy-scan`（提交前必跑）
 - 本地试验一律设 `SHADOWCORP_HOME` 指向临时目录，不要碰 ~/.shadowcorp 或 ~/.claude/settings.json。
 

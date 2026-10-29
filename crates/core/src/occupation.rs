@@ -68,6 +68,9 @@ pub struct Table {
     /// The source, said on cards and the dashboard.
     pub label: String,
     pub as_of: String,
+    /// Merged occupations: old id → the representative it counts as.
+    #[serde(default)]
+    pub alias: BTreeMap<String, String>,
     pub family: Vec<Family>,
     pub occupation: Vec<Occupation>,
 }
@@ -111,6 +114,11 @@ impl Table {
 
     pub fn scene(&self, id: &str) -> &str {
         self.get(id).map(|o| o.scene.as_str()).unwrap_or("desk")
+    }
+
+    /// The occupation an id counts as now (merged ones map to their representative).
+    pub fn canon<'a>(&'a self, id: &'a str) -> &'a str {
+        self.alias.get(id).map(String::as_str).unwrap_or(id)
     }
 
     pub fn family_of(&self, id: &str) -> Option<&Family> {
@@ -158,7 +166,7 @@ pub fn topic(prompt: &str) -> Option<&'static str> {
 }
 
 /// Every id the attribution rules can return.
-const REQUIRED: [&str; 12] = ["swe", "web", "qa", "ops", "data", "fin", "research", "writer", "translator", "designer", "video", "entry"];
+const REQUIRED: [&str; 11] = ["swe", "web", "qa", "ops", "data", "fin", "research", "writer", "designer", "video", "entry"];
 
 fn ext(path: &str) -> String {
     let name = path.rsplit(['/', '\\']).next().unwrap_or("");
@@ -287,9 +295,6 @@ pub fn remap(work: &mut BTreeMap<String, f64>, topic: Option<&str>) {
     let Some(tp) = topic else { return };
     let absorbs_data = Table::builtin().get(tp).is_some_and(|o| o.absorbs_data);
     let mut moves = vec![("research", tp)];
-    if tp == "translator" {
-        moves.push(("writer", tp));
-    }
     if absorbs_data {
         moves.push(("data", tp));
     }
@@ -332,11 +337,14 @@ pub fn finish(mut work: BTreeMap<String, f64>, subagents: u32, cap: f64, topic: 
 mod tests {
     use super::*;
 
+    /// Recognised by their steps only, never as a prompt's topic.
+    const STEP_ONLY: [&str; 4] = ["web", "qa", "ops", "entry"];
+
     #[test]
     fn table_is_complete_and_sourced() {
         let t = Table::builtin();
-        assert!(t.occupation.len() >= 49, "{}", t.occupation.len());
-        assert!(t.occupation.iter().all(|o| !o.scene.is_empty() && o.consult > 0.0 && !o.strong.is_empty()));
+        assert_eq!(t.occupation.len(), 22, "one representative per field, and the programmer's three step roles");
+        assert!(t.occupation.iter().all(|o| !o.scene.is_empty() && o.consult > 0.0 && (!o.strong.is_empty() || STEP_ONLY.contains(&o.id.as_str()))));
         assert_eq!(t.scene("doctor"), "clinic");
         // Families: every occupation in one, every default a member of its
         // own family with no tells, every other member with some.
@@ -348,9 +356,13 @@ mod tests {
         }
         for o in &t.occupation {
             let f = t.family_of(&o.id).unwrap_or_else(|| panic!("{}: family {}", o.id, o.family));
-            assert!(f.default == o.id || !o.tell.is_empty() || o.id == "entry", "{}: a specialty needs tells", o.id);
+            assert!(f.default == o.id || !o.tell.is_empty() || STEP_ONLY.contains(&o.id.as_str()), "{}: a specialty needs tells", o.id);
         }
-        assert_eq!(t.family_of("vet").unwrap().default, "doctor");
+        assert_eq!(t.family_of("trainer").unwrap().default, "doctor");
+        for (from, to) in &t.alias {
+            assert!(t.get(from).is_none() && t.get(to).is_some(), "alias {from} → {to}");
+        }
+        assert_eq!((t.canon("vet"), t.canon("hr"), t.canon("doctor")), ("doctor", "research", "doctor"));
         assert!(t.source.contains("BLS"));
         assert_eq!(t.rate("swe"), 65.38);
         assert_eq!(t.name("video"), "视频剪辑");
@@ -413,22 +425,20 @@ mod tests {
         assert_eq!((w.get("fin"), w.get("writer")), (Some(&14.0), Some(&30.0)), "markets absorb research and data");
         assert!(!w.contains_key("research") && !w.contains_key("data"));
         let mut w: BTreeMap<String, f64> = [("writer".into(), 30.0), ("research".into(), 5.0)].into();
-        remap(&mut w, Some("translator"));
-        assert_eq!(w.get("translator"), Some(&35.0));
         let mut w: BTreeMap<String, f64> = [("research".into(), 5.0)].into();
         remap(&mut w, None);
         assert_eq!(w.get("research"), Some(&5.0), "no topic, nothing moves");
         assert_eq!(topic("帮我看看英伟达的财报"), Some("fin"));
         assert_eq!(topic("Compare NVDA earnings"), Some("fin"));
         assert_eq!(topic("restock the fridge list"), None, "whole words only");
-        assert_eq!(topic("把这段翻译成英文"), Some("translator"));
+        assert_eq!(topic("把这段翻译成英文"), Some("writer"));
         assert_eq!(topic("最近老是头疼，要不要去医院看看"), Some("doctor"));
         assert_eq!(topic("帮我排一个深蹲和硬拉的训练计划"), Some("trainer"));
         assert_eq!(topic("番茄炒蛋怎么做才嫩"), Some("chef"));
         assert_eq!(topic("我最近焦虑得睡不着，压力大"), Some("counselor"));
         assert_eq!(topic("合同条款写了违约金，能起诉吗"), Some("lawyer"));
-        assert_eq!(topic("房东不退押金，租房合同怎么签"), Some("realtor"));
-        assert_eq!(topic("明天去东京玩三天，帮我安排行程"), Some("travel"));
+        assert!(topic("房东不退押金，租房合同怎么签").map_or(true, |x| x == "research"));
+        assert!(topic("明天去东京玩三天，帮我安排行程").map_or(true, |x| x == "research"));
         assert_eq!(topic("写个 python 脚本处理 csv"), Some("swe"));
         assert_eq!(topic("ok"), None);
         assert_eq!(topic("继续"), None);
@@ -455,7 +465,7 @@ mod tests {
             assert!(topic(p).map_or(true, |t| t == "research"), "{p} → {:?}", topic(p));
         }
         // Developer talk may be a developer's topic, never a tradesman's.
-        let tech = ["swe", "web", "qa", "ops", "data", "secops", "research"];
+        let tech = ["swe", "data", "research"];
         for p in [
             "服务炸了，看一下日志", "npm 包升级后编译不过", "语法树解析有问题", "装一下依赖然后跑测试", "树形结构怎么存",
             "解释一下这段代码", "这个函数是什么意思", "帮我设计一下数据库结构", "设计方案出一下", "语法错误在哪", "把这个按钮改成绿色，然后加个动画",
@@ -477,59 +487,71 @@ mod tests {
         }
     }
 
-    /// Labelled prompts, a few per family: the family's default unless a
-    /// tell word names a specialty.
+    /// Labelled prompts, a few per field: the representative, or one of the
+    /// three specialties (data, trainer, counselor) when a tell word names it.
     #[test]
     fn families_then_specialties() {
         let cases = [
             // health
             ("最近老是头疼，要不要去医院看看", "doctor"), ("体检报告说转氨酶偏高，严重吗", "doctor"), ("发烧 38 度，要不要吃退烧药", "doctor"),
-            ("我家猫一直叫，是不是发情了", "vet"), ("狗狗拉稀两天了怎么办", "vet"),
+            ("我家猫一直叫，是不是发情了", "doctor"), ("狗狗拉稀两天了怎么办", "doctor"),
             ("帮我排一个深蹲和硬拉的训练计划", "trainer"), ("想增肌，一周练几次合适", "trainer"),
-            ("减脂期一天吃多少卡路里", "dietitian"), ("帮我做个一周的饮食计划，控制热量", "dietitian"),
-            ("布洛芬和感冒药能不能一起吃", "pharmacist"), ("这个药的剂量成人一天吃几次", "pharmacist"),
+            ("减脂期一天吃多少卡路里", "doctor"), ("帮我做个一周的饮食计划，控制热量", "doctor"),
+            ("布洛芬和感冒药能不能一起吃", "doctor"), ("这个药的剂量成人一天吃几次", "doctor"),
             ("我最近焦虑得睡不着，压力大", "counselor"), ("分手之后情绪很差，怎么调整", "counselor"),
             // money
             ("帮我看看英伟达的财报", "fin"), ("Compare NVDA earnings", "fin"), ("炒股软件怎么做", "fin"), ("这只股票的估值贵不贵", "fin"),
             ("英伟达下个季度的指引怎么看", "fin"),
-            ("个人所得税怎么报税，有哪些专项扣除", "accountant"), ("公司这笔费用怎么做账，发票怎么开", "accountant"),
-            ("美联储加息对房贷利率有什么影响", "economist"), ("最近 CPI 数据说明通胀怎么样", "economist"),
+            ("个人所得税怎么报税，有哪些专项扣除", "fin"), ("公司这笔费用怎么做账，发票怎么开", "fin"),
+            ("美联储加息对房贷利率有什么影响", "fin"), ("最近 CPI 数据说明通胀怎么样", "fin"),
             // writing
             ("帮我写一篇公众号文章，讲远程办公", "writer"), ("这段文案润色一下，更有感染力", "writer"), ("帮我写一封辞职信", "writer"),
-            ("把这段翻译成英文", "translator"), ("这封邮件帮我翻成日语", "translator"),
+            ("把这段翻译成英文", "writer"), ("这封邮件帮我翻成日语", "writer"),
             // design and images
             ("帮我设计一张海报，主题是周年庆", "designer"), ("logo 配色用什么好", "designer"),
-            ("人像摄影光圈开多大，镜头怎么选", "photographer"), ("客厅装修选什么地板，吊顶要不要做", "interior"),
-            ("这个注册流程的交互太绕了，用户体验怎么改", "ux"),
+            ("人像摄影光圈开多大，镜头怎么选", "designer"), ("客厅装修选什么地板，吊顶要不要做", "designer"),
+            ("这个注册流程的交互太绕了，用户体验怎么改", "designer"),
             ("帮我把这段视频剪辑一下，加字幕", "video"), ("视频转场怎么做更自然", "video"),
             ("这首歌的和弦进行怎么编", "musician"), ("吉他怎么扫弦，节奏型怎么练", "musician"),
-            ("面试穿什么合适，衬衫配什么裤子", "fashion"), ("圆脸适合什么发型，妆容怎么画", "stylist"),
+            ("面试穿什么合适，衬衫配什么裤子", "research"), ("圆脸适合什么发型，妆容怎么画", "research"),
             // education and science
-            ("帮我制定一个雅思备考计划", "tutor"), ("孩子的数学作业，这道应用题怎么讲", "tutor"),
+            ("帮我制定一个雅思备考计划", "research"), ("孩子的数学作业，这道应用题怎么讲", "research"),
             ("这个微分方程怎么解，求导过程写一下", "mathematician"), ("证明一下这个矩阵可逆", "mathematician"),
             ("量子纠缠到底是什么，通俗讲讲", "physicist"), ("为什么相对论说时间会变慢", "physicist"),
             ("这个化学反应的方程式怎么配平", "chemist"), ("细胞分裂时 DNA 是怎么复制的", "biologist"),
             // home and engineering
-            ("家里突然跳闸了，是不是插座短路", "electrician"), ("灯不亮了，电线怎么接", "electrician"),
-            ("水管漏了，水压也小", "plumber"), ("马桶堵了怎么疏通", "plumber"),
-            ("想自己做个书架，木板怎么选，用什么钉子", "carpenter"), ("多肉黄叶烂根了，浇水是不是太多", "gardener"),
-            ("自建房的户型图和承重墙怎么设计", "architect"), ("齿轮传动的扭矩怎么算", "mech"), ("stm32 的 pcb 电路图怎么画", "ee"),
+            ("家里突然跳闸了，是不是插座短路", "research"), ("灯不亮了，电线怎么接", "research"),
+            ("水管漏了，水压也小", "research"), ("马桶堵了怎么疏通", "research"),
+            ("想自己做个书架，木板怎么选，用什么钉子", "research"), ("多肉黄叶烂根了，浇水是不是太多", "research"),
+            ("自建房的户型图和承重墙怎么设计", "architect"), ("齿轮传动的扭矩怎么算", "physicist"), ("stm32 的 pcb 电路图怎么画", "physicist"),
             // life
             ("番茄炒蛋怎么做才嫩", "chef"), ("红烧肉的做法，火候怎么掌握", "chef"),
-            ("宝宝八个月了，辅食怎么加", "childcare"), ("孩子上幼儿园分离焦虑哭闹怎么办", "childcare"),
-            ("明天去东京玩三天，帮我安排行程", "travel"), ("去日本的签证和机票怎么订便宜", "travel"), ("周末想去杭州，两天怎么安排", "travel"),
-            ("房东不退押金，租房合同怎么签", "realtor"), ("首付三成，房贷选哪种划算", "realtor"),
-            ("车子启动有异响，刹车也软，去 4s店 要多少钱", "mechanic"),
+            ("宝宝八个月了，辅食怎么加", "research"), ("孩子上幼儿园分离焦虑哭闹怎么办", "research"),
+            ("明天去东京玩三天，帮我安排行程", "research"), ("去日本的签证和机票怎么订便宜", "research"), ("周末想去杭州，两天怎么安排", "research"),
+            ("房东不退押金，租房合同怎么签", "research"), ("首付三成，房贷选哪种划算", "research"),
+            ("车子启动有异响，刹车也软，去 4s店 要多少钱", "research"),
             // law and business
             ("合同条款写了违约金，能起诉吗", "lawyer"), ("劳动仲裁要准备什么材料", "lawyer"),
-            ("团队绩效怎么定目标，okr 怎么拆", "manager"), ("帮我写需求文档，这个功能的用户故事", "pm"),
-            ("招聘后端工程师的 jd 怎么写，面试问什么", "hr"), ("客户嫌报价高，怎么谈判成交", "sales"),
+            ("团队绩效怎么定目标，okr 怎么拆", "research"), ("帮我写需求文档，这个功能的用户故事", "research"),
+            ("招聘后端工程师的 jd 怎么写，面试问什么", "research"), ("客户嫌报价高，怎么谈判成交", "research"),
             // tech
-            ("写个 python 脚本处理 csv", "swe"), ("这个页面的 css 布局怎么居中", "web"), ("给这个函数写单元测试", "qa"),
-            ("docker 部署到服务器上，nginx 怎么配", "ops"), ("用 pandas 做个数据分析，输出表格", "data"), ("这个接口有 sql 注入漏洞吗", "secops"),
+            ("写个 python 脚本处理 csv", "swe"), ("这个页面的 css 布局怎么居中", "swe"), ("给这个函数写单元测试", "swe"),
+            ("docker 部署到服务器上，nginx 怎么配", "swe"), ("用 pandas 做个数据分析，输出表格", "data"), ("这个接口有 sql 注入漏洞吗", "swe"),
         ];
+        // Web, test and ops work is told by its steps; a prompt never names them.
+        for p in ["这个页面的 css 布局怎么居中", "给这个函数写单元测试", "docker 部署到服务器上，nginx 怎么配"] {
+            assert_eq!(topic(p), Some("swe"), "{p}");
+        }
+        for o in STEP_ONLY {
+            assert!(cases.iter().all(|(_, w)| *w != o));
+        }
         for (p, want) in cases {
-            assert_eq!(topic(p), Some(want), "{p}");
+            // The researcher is also what no topic at all comes to.
+            if want == "research" {
+                assert!(topic(p).map_or(true, |x| x == "research"), "{p} → {:?}", topic(p));
+            } else {
+                assert_eq!(topic(p), Some(want), "{p}");
+            }
         }
     }
 

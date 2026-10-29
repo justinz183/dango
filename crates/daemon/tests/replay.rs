@@ -488,3 +488,29 @@ fn a_prompt_without_a_topic_stays_on_the_sessions_last() {
     assert!(work[1].contains("doctor"), "继续 stays with the doctor: {}", work[1]);
     assert!(work[2].contains("research"), "three hours later it is a new subject: {}", work[2]);
 }
+
+/// An old event whose topic is a merged occupation counts as the
+/// representative: the vet's talk-only turn is the doctor's.
+#[test]
+fn merged_occupations_count_as_their_representative() {
+    use shadowcorp_core::event::{Event, Kind, Source};
+    let paths = home("alias");
+    let mut p = processor(&paths);
+    let t0 = 1_793_200_000_000;
+    let mut prompt = Event::new("p1".into(), t0, Source::ClaudeCode, Kind::Prompt);
+    prompt.session_id = Some("s-alias".into());
+    prompt.payload.topic = Some("vet".into());
+    let mut end = Event::new("e1".into(), t0 + 60_000, Source::ClaudeCode, Kind::TurnEnd);
+    end.session_id = Some("s-alias".into());
+    p.begin().unwrap();
+    p.handle(&prompt).unwrap();
+    p.handle(&end).unwrap();
+    p.commit().unwrap();
+    let work: String = p.conn.query_row("SELECT work FROM turns", [], |r| r.get(0)).unwrap();
+    assert!(work.contains("doctor") && !work.contains("vet"), "{work}");
+    // A turn stored before the merge reads as the representative too.
+    p.conn.execute("UPDATE turns SET work = '{\"vet\":15.0,\"hr\":5.0}'", []).unwrap();
+    let jobs = daemon::widget::jobs(&p.conn, 0, i64::MAX, None).unwrap();
+    let ids: Vec<&str> = jobs.iter().map(|j| j["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["doctor", "research"]);
+}

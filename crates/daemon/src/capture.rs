@@ -495,7 +495,7 @@ mod tests {
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "fx", "prompt": "帮我分析一下这只股票的财报" }));
         assert_eq!(p.topic.as_deref(), Some("fin"));
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "tr", "prompt": "Translate this into Chinese" }));
-        assert_eq!(p.topic.as_deref(), Some("translator"));
+        assert_eq!(p.topic.as_deref(), Some("writer"));
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "hp", "prompt": "SECRET 最近血压有点高，要不要吃药" }));
         assert_eq!(p.topic.as_deref(), Some("doctor"));
         assert!(!serde_json::to_string(&p).unwrap().contains("SECRET"), "only the topic id is kept");

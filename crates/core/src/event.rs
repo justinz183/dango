@@ -286,9 +286,11 @@ pub struct Event {
 }
 
 impl Payload {
-    /// The topic, from older events' flags too.
+    /// The topic, from older events' flags too, as the occupation it
+    /// counts as now (a merged one is its representative).
     pub fn topic(&self) -> Option<String> {
-        self.topic.clone().or_else(|| (self.finance == Some(true)).then(|| "fin".to_string()))
+        let t = self.topic.clone().or_else(|| (self.finance == Some(true)).then(|| "fin".to_string()))?;
+        Some(crate::occupation::Table::builtin().canon(&t).to_string())
     }
 }
 
@@ -346,6 +348,8 @@ mod tests {
         assert!(!serde_json::to_string(&p).unwrap().contains("finance"));
         let p: Payload = serde_json::from_str(r#"{"finance":true,"topic":"doctor"}"#).unwrap();
         assert_eq!(p.topic().as_deref(), Some("doctor"));
+        let p: Payload = serde_json::from_str(r#"{"topic":"vet"}"#).unwrap();
+        assert_eq!(p.topic().as_deref(), Some("doctor"), "merged into the doctor");
         let p: Payload = serde_json::from_str(r#"{"translate":true}"#).unwrap();
         assert_eq!(p.topic(), None);
     }
