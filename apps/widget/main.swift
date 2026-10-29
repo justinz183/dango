@@ -1448,7 +1448,9 @@ struct Receipt { var usd: Double; var name: String; var color: NSColor; var born
 /// quiet caption under it (today's dollars; its line when hovered). Lives
 /// in a transparent panel; only the character and the caption take clicks.
 final class PetView: NSView {
-    static let size = NSSize(width: 176, height: 168)
+    /// Wide enough for the caption's line; only the character and the
+    /// caption take clicks, the rest is see-through.
+    static let size = NSSize(width: 260, height: 168)
     var model: Model?
     var drawBackground = false
     /// Seconds since launch, advanced by the app's frame timer.
@@ -1465,13 +1467,13 @@ final class PetView: NSView {
     private var lastTurnAt = 0.0
     private var lastMouse: NSPoint?
     private var dragged = false
-    private var hovering = false
+    var hovering = false
     private var captionRect = NSRect(x: 40, y: 6, width: 96, height: 22)
 
     override var isFlipped: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    var characterRect: NSRect { NSRect(x: 48, y: 50, width: 80, height: 80) }
+    var characterRect: NSRect { NSRect(x: (Self.size.width - 80) / 2, y: 50, width: 80, height: 80) }
     /// What takes the pointer: the character and the caption.
     var hitRect: NSRect { characterRect.insetBy(dx: -8, dy: -8).union(captionRect) }
 
@@ -1553,15 +1555,25 @@ final class PetView: NSView {
         if t < flashUntil {
             caption = text(flashText, size: 11, weight: .semibold, color: tone, mono: true)
         } else if hovering, !m.line.isEmpty {
-            caption = text(truncate(m.name + L("：", ": ") + m.line, size: 11, weight: .medium, width: bounds.width - 28), size: 11, weight: .medium)
+            caption = text(m.name + L("：", ": ") + m.line, size: 11, weight: .medium)
         } else {
             caption = text(L("今日 ", "Today ") + fmtUSD(m.todayUSD), size: 11, weight: .medium, color: secondary, mono: true)
         }
-        let w = min(bounds.width - 8, caption.size().width + 20)
-        captionRect = NSRect(x: (bounds.width - w) / 2, y: 6, width: w, height: 22)
-        NSColor(calibratedWhite: 0.1, alpha: 0.8).setFill()
+        // One line when it fits, else two (centred), cut only past that.
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+        para.lineBreakMode = .byWordWrapping
+        let body = NSMutableAttributedString(attributedString: caption)
+        body.addAttribute(.paragraphStyle, value: para, range: NSRange(location: 0, length: body.length))
+        let maxText = bounds.width - 12 - 20
+        let fit = body.boundingRect(with: NSSize(width: maxText, height: 200), options: [.usesLineFragmentOrigin])
+        let twoLines = fit.height > 20
+        let w = min(bounds.width - 12, ceil(fit.width) + 20)
+        captionRect = NSRect(x: (bounds.width - w) / 2, y: 6, width: w, height: twoLines ? 36 : 22)
+        NSColor(calibratedWhite: 0.1, alpha: 0.85).setFill()
         NSBezierPath(roundedRect: captionRect, xRadius: 11, yRadius: 11).fill()
-        put(caption, captionRect.midX, captionRect.minY + 4, align: 1)
+        body.draw(with: NSRect(x: captionRect.minX + 10, y: captionRect.minY + 4, width: w - 20, height: captionRect.height - 7),
+                  options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -1639,13 +1651,13 @@ final class OfficeView: NSView {
     private struct Bay { var scene: String; var rect: NSRect; var color: NSColor; var members: [(Occupant, CGFloat)] }
 
     /// Workers on the stage, grouped by scene into bays as wide as their
-    /// people need (spare room shared out), four people at most; whoever
+    /// people need (spare room shared out), three people at most; whoever
     /// does not fit is named on the stage's edge. Characters shrink as the
     /// stage fills.
     private func stageLayout() -> (bays: [Bay], size: CGFloat, overflow: [Occupant]) {
         let st = stage
         let working = occupants.filter(\.working)
-        let first = Array(working.prefix(4))
+        let first = Array(working.prefix(3))
         let size: CGFloat = first.count <= 1 ? 54 : first.count == 2 ? 48 : 42
         func need(_ scene: String, _ n: Int) -> CGFloat { scene == "desk" ? CGFloat(n) * (size - 10) + 28 : CGFloat(n) * (size + 4) + 22 }
         var groups: [(String, [Occupant])] = []
@@ -1671,7 +1683,7 @@ final class OfficeView: NSView {
         return (bays, size, working.filter { !shown.contains($0.job.id) })
     }
 
-    /// Where everyone should be now. Workers take the stage (four at most,
+    /// Where everyone should be now. Workers take the stage (three at most,
     /// see `stageLayout`); the rest share the break room's four places, in
     /// turns every two minutes when there are more of them, each with a
     /// pastime that changes every three.
@@ -1950,30 +1962,33 @@ final class OfficeView: NSView {
                 let cycle = CGFloat(fmod(phase * 0.45, 1.0))
                 let pour = cycle < 0.25 ? cycle / 0.25 : cycle < 0.75 ? 1 : 1 - (cycle - 0.75) / 0.25
                 let tilt = -8 - 40 * pour
-                let hold = NSPoint(x: c.maxX + 2, y: c.minY + 24 + 3 * pour)
+                let hold = NSPoint(x: c.maxX + 4, y: c.minY + 24 + 2 * pour)
                 let can = NSColor(calibratedRed: 0.42, green: 0.62, blue: 0.78, alpha: 1)
-                strokeLine(NSPoint(x: c.maxX - 8, y: c.minY + 15), hold, 6, fl.body)
+                let dark = can.blended(withFraction: 0.25, of: .black) ?? can
+                strokeLine(NSPoint(x: c.maxX - 8, y: c.minY + 15), hold, 5, fl.body)
+                // A small can: body, handle, a thin spout with a rose.
                 rotated(hold, tilt) {
-                    fillRound(NSRect(x: hold.x - 2, y: hold.y - 7, width: 17, height: 13), 3, can)
-                    fillRound(NSRect(x: hold.x + 1, y: hold.y + 6, width: 11, height: 3), 1.5, can.blended(withFraction: 0.25, of: .black) ?? can)
-                    fillPoly([NSPoint(x: hold.x + 14, y: hold.y + 1), NSPoint(x: hold.x + 27, y: hold.y + 7), NSPoint(x: hold.x + 27, y: hold.y + 4), NSPoint(x: hold.x + 14, y: hold.y - 3)], can)
-                    fillRound(NSRect(x: hold.x + 26, y: hold.y + 3, width: 4, height: 6), 1.5, can.blended(withFraction: 0.25, of: .black) ?? can)
+                    fillRound(NSRect(x: hold.x - 2, y: hold.y - 5, width: 11, height: 9), 2, can)
+                    fillRound(NSRect(x: hold.x, y: hold.y + 4, width: 7, height: 2), 1, dark)
+                    fillPoly([NSPoint(x: hold.x + 8, y: hold.y), NSPoint(x: hold.x + 18, y: hold.y + 4.5), NSPoint(x: hold.x + 18, y: hold.y + 2.5), NSPoint(x: hold.x + 8, y: hold.y - 2.5)], can)
+                    fillRound(NSRect(x: hold.x + 17, y: hold.y + 1.5, width: 3, height: 4), 1, dark)
                 }
                 if pour > 0.7 {
                     let a = tilt * .pi / 180
-                    let tip = NSPoint(x: hold.x + 28 * cos(a) - 6 * sin(a), y: hold.y + 28 * sin(a) + 6 * cos(a))
-                    let soil = NSPoint(x: plantX, y: floorH + 8)
+                    let tip = NSPoint(x: hold.x + 20 * cos(a) - 3.5 * sin(a), y: hold.y + 20 * sin(a) + 3.5 * cos(a))
+                    let soil = floorH + 8
                     let water = NSColor(calibratedRed: 0.58, green: 0.8, blue: 1, alpha: 0.95)
-                    // A stream of drops from the spout to the pot.
+                    // A light shower from the rose straight down onto the soil.
                     for k in 0..<6 {
-                        let f = CGFloat(fmod(phase * 3 + Double(k) / 6, 1.0))
-                        let x = tip.x + (soil.x - tip.x) * f, y = tip.y + (soil.y - tip.y) * f
-                        fillOval(NSRect(x: x - 1.3, y: y - 1.8, width: 2.6, height: 3.6), water.withAlphaComponent(0.95 - 0.3 * f))
+                        let f = CGFloat(fmod(phase * 2.6 + Double(k) / 6, 1.0))
+                        let spread = CGFloat(k % 3 - 1) * (0.8 + 1.6 * f)
+                        fillOval(NSRect(x: tip.x + spread + 1.5 * f - 1, y: tip.y - f * max(0, tip.y - soil) - 1.4, width: 2, height: 2.8),
+                                 water.withAlphaComponent(0.95 - 0.35 * f))
                     }
                     // A splash where it lands.
-                    let s = CGFloat(fmod(phase * 3, 1.0))
+                    let s = CGFloat(fmod(phase * 2.6, 1.0))
                     for side: CGFloat in [-1, 1] {
-                        fillOval(NSRect(x: soil.x + side * (2 + 5 * s) - 1, y: soil.y + 2 + 3 * sin(s * .pi), width: 2, height: 2), water.withAlphaComponent(1 - s))
+                        fillOval(NSRect(x: tip.x + 1.5 + side * (2 + 4 * s) - 1, y: soil + 1 + 2.5 * sin(s * .pi), width: 2, height: 2), water.withAlphaComponent(1 - s))
                     }
                 }
             }
@@ -2153,9 +2168,9 @@ final class App: NSObject, NSApplicationDelegate {
         scroll = NSScrollView(frame: expanded.bounds)
         scroll.autoresizingMask = [.width, .height]
         scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.scrollerStyle = .overlay
+        // Scrolls with the trackpad or wheel; no scroll bar is drawn.
+        scroll.hasVerticalScroller = false
+        scroll.hasHorizontalScroller = false
         dashboard = DashboardView(frame: NSRect(x: 0, y: 0, width: dashboardWidth, height: 600))
         dashboard.onCollapse = { [weak self] in self?.collapse() }
         dashboard.onResize = { [weak self] in self?.refit() }
@@ -2236,7 +2251,9 @@ final class App: NSObject, NSApplicationDelegate {
 
     private func savedOrigin() -> NSPoint? {
         guard let a = UserDefaults.standard.array(forKey: originKey) as? [Double], a.count == 2 else { return nil }
-        let p = NSPoint(x: a[0], y: a[1])
+        // Saved by a window of another width: keep the character's centre.
+        let was = UserDefaults.standard.object(forKey: "petWidth") as? Double ?? 176
+        let p = NSPoint(x: a[0] - (PetView.size.width - was) / 2, y: a[1])
         let r = NSRect(origin: p, size: PetView.size)
         return NSScreen.screens.contains { $0.visibleFrame.intersects(r) } ? p : nil
     }
@@ -2244,6 +2261,7 @@ final class App: NSObject, NSApplicationDelegate {
     func saveOrigin() {
         let o = petPanel.frame.origin
         UserDefaults.standard.set([Double(o.x), Double(o.y)], forKey: originKey)
+        UserDefaults.standard.set(Double(PetView.size.width), forKey: "petWidth")
     }
 
     @objc func resetPosition() {
@@ -3679,6 +3697,7 @@ if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
     v.drawBackground = args.contains("--backdrop")
     v.model = m
     v.t = 0.9
+    v.hovering = args.contains("--hover")
     if args.contains("--receipt") { v.receipts = [Receipt(usd: 78.4, name: m.job?.name ?? "软件工程师", color: m.job?.color ?? barColor, born: 0)] }
     snapshot(v, PetView.size, args[i + 1])
     exit(0)
