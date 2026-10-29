@@ -246,7 +246,9 @@ impl Tally {
     }
 }
 
-/// What the previous period came to, for "比上周 +$600".
+/// What the previous period came to, for "比上周 +$600". Names are
+/// relative ("上周 → 本周") for the current period, absolute ("第 43 周 →
+/// 第 44 周") for an earlier one; `now_label` names the period itself.
 fn prev(conn: &Connection, tz: Tz, label: &str, start: i64, end: i64, tool: Option<&str>) -> Result<Value> {
     let t = tally(conn, tz, start, end, tool)?;
     Ok(json!({ "label": label, "usd": t.usd, "hours": hours(t.human), "cost": t.cost, "leverage": t.leverage() }))
@@ -291,7 +293,7 @@ fn character(name: &str, mood: &str, headline: &str, number: String, sub: String
 // ---- day ---------------------------------------------------------------
 
 /// The report for one local day.
-pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, _now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
+pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
     let start = midnight(tz, date);
     let end = midnight(tz, date.succ_opt().unwrap());
     let t = tally(conn, tz, start, end, tool)?;
@@ -310,10 +312,12 @@ pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Nai
 
     let h = t.human / 60.0;
     let n = t.turns.len();
+    let current = date == tz.date(now);
+    let when = if current { "今天" } else { "那天" };
     let (mood, signoff) = if n == 0 {
-        ("waiting", "今天没开工，我在等你。".to_string())
+        ("waiting", if current { "今天没开工，我在等你。".to_string() } else { "那天没开工。".to_string() })
     } else if h >= 16.0 {
-        ("proud", format!("今天顶一个人干两天，{n} 个回合。"))
+        ("proud", format!("{when}顶一个人干两天，{n} 个回合。"))
     } else if t.night > 0 {
         ("sleepy", format!("凌晨那 {} 个回合，我记着。", t.night))
     } else if t.tests_run >= 3 && t.tests_passed == t.tests_run {
@@ -321,16 +325,16 @@ pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Nai
     } else if t.corrections >= 5 {
         ("focused", format!("你把关了 {} 次，都改好了。", t.corrections))
     } else if let Some(b) = &best {
-        ("happy", format!("今天最长的一段在「{b}」。"))
+        ("happy", format!("{when}最长的一段在「{b}」。"))
     } else if let Some(job) = t.top_job() {
-        ("happy", format!("今天主要当{job}，{n} 个回合。"))
+        ("happy", format!("{when}主要当{job}，{n} 个回合。"))
     } else {
         ("happy", format!("{n} 个回合，{} 小时的活。", fmt_short(h)))
     };
     let (title, number, sub) = if n == 0 {
-        ("今天没开工".to_string(), String::new(), "休息也是节奏的一部分。".to_string())
+        (format!("{when}没开工"), String::new(), "休息也是节奏的一部分。".to_string())
     } else {
-        (headline("今天", tool), fmt_usd(t.usd), t.worth_line())
+        (headline(when, tool), fmt_usd(t.usd), t.worth_line())
     };
     let streak: Value = crate::db::get_meta(conn, "streak")?.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
 
@@ -340,9 +344,12 @@ pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Nai
     r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
     r.insert("sessions".into(), json!(sessions));
     r.insert("blocks".into(), json!(blocks));
-    r.insert("prev".into(), prev(conn, tz, "昨天", midnight(tz, date.pred_opt().unwrap()), start, tool)?);
+    let before = if current { "昨天".to_string() } else { md(date.pred_opt().unwrap()) };
+    r.insert("now_label".into(), json!(if current { "今天".to_string() } else { md(date) }));
+    r.insert("prev".into(), prev(conn, tz, &before, midnight(tz, date.pred_opt().unwrap()), start, tool)?);
     r.insert("record_day_usd".into(), json!(snapshot::best_day_usd(conn)));
-    r.insert("streak".into(), streak.get("current").cloned().unwrap_or(json!(0)));
+    // The streak is as of now, so only today's card shows it.
+    r.insert("streak".into(), if current { streak.get("current").cloned().unwrap_or(json!(0)) } else { json!(0) });
     Ok(Value::Object(r))
 }
 
@@ -400,31 +407,35 @@ pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Na
     let best = days_v.iter().enumerate().max_by(|a, b| a.1.usd.total_cmp(&b.1.usd)).filter(|(_, d)| d.minutes > 0.0).map(|(i, _)| i);
 
     let h = t.human / 60.0;
-    let last_week = prev(conn, tz, "上周", midnight(tz, monday - Duration::days(7)), start, tool)?;
+    let current = (monday..next).contains(&tz.date(now));
+    let when = if current { "这周" } else { "那周" };
+    let before = if current { "上周".to_string() } else { format!("第 {} 周", (monday - Duration::days(7)).iso_week().week()) };
+    let last_week = prev(conn, tz, &before, midnight(tz, monday - Duration::days(7)), start, tool)?;
     let prev_usd = last_week["usd"].as_f64().unwrap_or(0.0);
     let (mood, signoff) = if t.turns.is_empty() {
-        ("waiting", "这周没开工，我等你。".to_string())
+        ("waiting", if current { "这周没开工，我等你。".to_string() } else { "那周没开工。".to_string() })
     } else if h >= 40.0 {
-        ("proud", "这周顶一个人干了一整周。".to_string())
+        ("proud", format!("{when}顶一个人干了一整周。"))
     } else if prev_usd > 0.0 && t.usd > prev_usd * 1.2 {
-        ("proud", format!("这周比上周多 {}。", fmt_usd(t.usd - prev_usd)))
+        ("proud", format!("{when}比{}多 {}。", if current { "上周" } else { "前一周" }, fmt_usd(t.usd - prev_usd)))
     } else if t.night * 3 >= t.turns.len() {
-        ("sleepy", "这周有三分之一是夜班。".to_string())
+        ("sleepy", format!("{when}有三分之一是夜班。"))
     } else if t.by_job.len() >= 4 {
-        ("happy", format!("这周身兼 {} 职，主要当{}。", t.by_job.len(), t.top_job().unwrap_or("")))
+        ("happy", format!("{when}身兼 {} 职，主要当{}。", t.by_job.len(), t.top_job().unwrap_or("")))
     } else {
-        ("happy", format!("这周主要当{}，{active_days} 天在干。", t.top_job().unwrap_or("")))
+        ("happy", format!("{when}主要当{}，{active_days} 天在干。", t.top_job().unwrap_or("")))
     };
     let (title, number, sub) = if t.turns.is_empty() {
-        ("这周没开工".to_string(), String::new(), "休息也是节奏的一部分。".to_string())
+        (format!("{when}没开工"), String::new(), "休息也是节奏的一部分。".to_string())
     } else {
-        (headline("这周", tool), fmt_usd(t.usd), t.worth_line())
+        (headline(when, tool), fmt_usd(t.usd), t.worth_line())
     };
     let iso = monday.iso_week();
     let sunday = next - Duration::days(1);
 
     let mut r = base("week", &t, show_names, tool);
     r.insert("date".into(), json!(week_key(monday)));
+    r.insert("now_label".into(), json!(if current { "本周".to_string() } else { format!("第 {} 周", monday.iso_week().week()) }));
     r.insert("label".into(), json!(format!("{}月{}日 – {}月{}日 · 第 {} 周", monday.month(), monday.day(), sunday.month(), sunday.day(), iso.week())));
     r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
     r.insert("sessions".into(), json!(sessions));
@@ -460,46 +471,36 @@ pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: N
         })
         .collect();
     let active_days = days_v.iter().filter(|d| d.minutes > 0.0).count();
-    let mut longest = 0;
-    let mut run = 0;
-    for d in &days_v {
-        run = if d.minutes > 0.0 { run + 1 } else { 0 };
-        longest = longest.max(run);
-    }
+    let longest = longest_run(&days_v);
 
-    // When the work happens: human minutes by local hour of the turn's start.
-    let mut by_hour = [0.0f64; 24];
-    for x in &t.turns {
-        by_hour[tz.local(x.start).hour() as usize] += x.human_minutes;
-    }
-    let peak = (0..24).max_by(|a, b| {
-        let sum = |h: usize| by_hour[h] + by_hour[(h + 1) % 24] + by_hour[(h + 2) % 24];
-        sum(*a).partial_cmp(&sum(*b)).unwrap()
-    });
-    let window = peak.filter(|_| t.human > 0.0).map(|h| format!("{}–{} 点", h, (h + 3) % 24));
+    let (by_hour, window) = rhythm(&t, tz);
 
     let h = t.human / 60.0;
     let prev_first = if first.month() == 1 { NaiveDate::from_ymd_opt(first.year() - 1, 12, 1).unwrap() } else { NaiveDate::from_ymd_opt(first.year(), first.month() - 1, 1).unwrap() };
-    let last_month = prev(conn, tz, "上个月", midnight(tz, prev_first), start, tool)?;
+    let current = (first..next).contains(&today);
+    let when = if current { "这个月" } else { "那个月" };
+    let before = if current { "上个月".to_string() } else { format!("{} 月", prev_first.month()) };
+    let last_month = prev(conn, tz, &before, midnight(tz, prev_first), start, tool)?;
     let (mood, signoff) = if t.turns.is_empty() {
-        ("waiting", "这个月没开工，我等你。".to_string())
-    } else if h >= 160.0 {
-        ("proud", "这个月顶一个全职。".to_string())
+        ("waiting", if current { "这个月没开工，我等你。".to_string() } else { "那个月没开工。".to_string() })
+    } else if h >= FULL_TIME_MONTH_HOURS {
+        ("proud", format!("{when}顶一个全职。"))
     } else if longest >= 7 {
         ("happy", format!("连着 {longest} 天没停，我都记着。"))
     } else if let Some(w) = &window {
         ("happy", format!("{active_days} 天在干，你最常在 {w}开工。"))
     } else {
-        ("happy", format!("这个月 {active_days} 天在干。"))
+        ("happy", format!("{when} {active_days} 天在干。"))
     };
     let (title, number, sub) = if t.turns.is_empty() {
-        ("这个月没开工".to_string(), String::new(), "休息也是节奏的一部分。".to_string())
+        (format!("{when}没开工"), String::new(), "休息也是节奏的一部分。".to_string())
     } else {
-        (headline("这个月", tool), fmt_usd(t.usd), t.worth_line())
+        (headline(when, tool), fmt_usd(t.usd), t.worth_line())
     };
 
     let mut r = base("month", &t, show_names, tool);
     r.insert("date".into(), json!(format!("{}-{:02}", first.year(), first.month())));
+    r.insert("now_label".into(), json!(if current { "本月".to_string() } else { format!("{} 月", first.month()) }));
     r.insert("label".into(), json!(format!("{} 年 {} 月", first.year(), first.month())));
     r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
     r.insert("sessions".into(), json!(sessions));
@@ -510,6 +511,123 @@ pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: N
     r.insert("by_hour".into(), json!(by_hour.iter().map(|m| hours(*m)).collect::<Vec<_>>()));
     r.insert("peak_window".into(), json!(window));
     r.insert("prev".into(), last_month);
+    r.insert("record_day_usd".into(), json!(snapshot::best_day_usd(conn)));
+    Ok(Value::Object(r))
+}
+
+/// When the work happens: human minutes by local hour of the turn's
+/// start, and the three-hour window with the most.
+fn rhythm(t: &Tally, tz: Tz) -> ([f64; 24], Option<String>) {
+    let mut by_hour = [0.0f64; 24];
+    for x in &t.turns {
+        by_hour[tz.local(x.start).hour() as usize] += x.human_minutes;
+    }
+    let peak = (0..24).max_by(|a, b| {
+        let sum = |h: usize| by_hour[h] + by_hour[(h + 1) % 24] + by_hour[(h + 2) % 24];
+        sum(*a).partial_cmp(&sum(*b)).unwrap()
+    });
+    (by_hour, peak.filter(|_| t.human > 0.0).map(|h| format!("{}–{} 点", h, (h + 3) % 24)))
+}
+
+fn longest_run(days: &[DayTotal]) -> usize {
+    let (mut longest, mut run) = (0, 0);
+    for d in days {
+        run = if d.minutes > 0.0 { run + 1 } else { 0 };
+        longest = longest.max(run);
+    }
+    longest
+}
+
+// ---- year --------------------------------------------------------------
+
+/// Hours a full-time person works in a month (40 h × 4 weeks).
+const FULL_TIME_MONTH_HOURS: f64 = 160.0;
+
+/// The report for the calendar year containing `date`: twelve months
+/// stacked by occupation, and every day as a heatmap.
+pub fn year(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: NaiveDate, now: i64, show_names: bool, tool: Option<&str>) -> Result<Value> {
+    let first = NaiveDate::from_ymd_opt(date.year(), 1, 1).unwrap();
+    let next = NaiveDate::from_ymd_opt(date.year() + 1, 1, 1).unwrap();
+    let (start, end) = (midnight(tz, first), midnight(tz, next));
+    let t = tally(conn, tz, start, end, tool)?;
+    let sessions = t.sessions(conn, claude_dir, show_names, 3, |s, e| (md(tz.date(s)), md(tz.date(e))))?;
+    let today = tz.date(now);
+    let days_v = per_day(&t, tz, first, (next - first).num_days());
+    let rates = Table::builtin();
+    let mut months: Vec<(f64, f64, BTreeMap<String, f64>)> = vec![(0.0, 0.0, BTreeMap::new()); 12];
+    for d in &days_v {
+        let m = &mut months[d.date.month0() as usize];
+        m.0 += d.usd;
+        m.1 += d.minutes;
+        for (o, mins) in &d.by_job {
+            *m.2.entry(o.clone()).or_default() += mins;
+        }
+    }
+    let months_json: Vec<Value> = months
+        .iter()
+        .enumerate()
+        .map(|(i, (usd, mins, by_job))| {
+            let parts: Vec<Value> = by_job
+                .iter()
+                .filter(|(_, m)| **m > 0.0)
+                .map(|(o, m)| json!({ "job": o, "color": color(o), "hours": hours(*m), "usd": m / 60.0 * rates.rate(o) }))
+                .collect();
+            let starts = NaiveDate::from_ymd_opt(first.year(), i as u32 + 1, 1).unwrap();
+            json!({ "label": format!("{}月", i + 1), "usd": usd, "hours": hours(*mins), "parts": parts,
+                    "current": today.year() == first.year() && today.month0() as usize == i, "future": starts > today })
+        })
+        .collect();
+    let active_days = days_v.iter().filter(|d| d.minutes > 0.0).count();
+    let longest = longest_run(&days_v);
+    let best_day = days_v.iter().filter(|d| d.minutes > 0.0).max_by(|a, b| a.usd.total_cmp(&b.usd));
+    let best_month = (0..12).filter(|i| months[*i].0 > 0.0).max_by(|a, b| months[*a].0.total_cmp(&months[*b].0));
+    let (by_hour, window) = rhythm(&t, tz);
+
+    let h = t.human / 60.0;
+    let current = first.year() == today.year();
+    let when = if current { "今年" } else { "那一年" };
+    let before = if current { "去年".to_string() } else { format!("{} 年", first.year() - 1) };
+    let last_year = prev(conn, tz, &before, midnight(tz, NaiveDate::from_ymd_opt(first.year() - 1, 1, 1).unwrap()), start, tool)?;
+    let (mood, signoff) = if t.turns.is_empty() {
+        ("waiting", if current { "今年还没开工，我等你。".to_string() } else { "那一年没开工。".to_string() })
+    } else if h >= FULL_TIME_MONTH_HOURS * 12.0 {
+        ("proud", format!("{when}顶一个全职干了一整年。"))
+    } else if h >= FULL_TIME_MONTH_HOURS {
+        ("proud", format!("{when}顶一个全职干了 {} 个月。", fmt_short((h / FULL_TIME_MONTH_HOURS * 10.0).round() / 10.0)))
+    } else if longest >= 14 {
+        ("happy", format!("最长连着 {longest} 天没停，我都记着。"))
+    } else {
+        ("happy", format!("{when} {active_days} 天在干，主要当{}。", t.top_job().unwrap_or("")))
+    };
+    let (title, number, sub) = if t.turns.is_empty() {
+        (if current { "今年还没开工".to_string() } else { "那一年没开工".to_string() }, String::new(), "休息也是节奏的一部分。".to_string())
+    } else {
+        (headline(when, tool), fmt_usd(t.usd), t.worth_line())
+    };
+    let label = if first.year() == today.year() {
+        format!("{} 年 · 截至 {}月{}日", first.year(), today.month(), today.day())
+    } else {
+        format!("{} 年", first.year())
+    };
+
+    let mut r = base("year", &t, show_names, tool);
+    r.insert("date".into(), json!(first.year().to_string()));
+    r.insert("now_label".into(), json!(if current { "今年".to_string() } else { format!("{} 年", first.year()) }));
+    r.insert("label".into(), json!(label));
+    r.insert("character".into(), character(&cfg.character.name, mood, &title, number, sub, signoff));
+    r.insert("sessions".into(), json!(sessions));
+    r.insert("months".into(), json!(months_json));
+    r.insert("best_month".into(), json!(best_month));
+    // Every day's dollars from 1 January, for the heatmap.
+    r.insert("heat".into(), json!(days_v.iter().map(|d| (d.usd * 100.0).round() / 100.0).collect::<Vec<_>>()));
+    r.insert("first_weekday".into(), json!(first.weekday().num_days_from_monday()));
+    r.insert("today_index".into(), json!((first.year() == today.year()).then(|| (today - first).num_days())));
+    r.insert("active_days".into(), json!(active_days));
+    r.insert("longest_run".into(), json!(longest));
+    r.insert("best_day".into(), json!(best_day.map(|d| json!({ "date": md(d.date), "usd": d.usd }))));
+    r.insert("by_hour".into(), json!(by_hour.iter().map(|m| hours(*m)).collect::<Vec<_>>()));
+    r.insert("peak_window".into(), json!(window));
+    r.insert("prev".into(), last_year);
     r.insert("record_day_usd".into(), json!(snapshot::best_day_usd(conn)));
     Ok(Value::Object(r))
 }
@@ -531,7 +649,15 @@ pub fn text(r: &Value) -> String {
     if !tools.is_empty() {
         out.push(tools.join("  |  "));
     }
-    if let Some(days) = r["days"].as_array().filter(|_| r["kind"] != "day") {
+    if let Some(months) = r["months"].as_array() {
+        let line: Vec<String> = months
+            .iter()
+            .filter(|m| m["usd"].as_f64().unwrap_or(0.0) > 0.0)
+            .map(|m| format!("{} {}", m["label"].as_str().unwrap_or(""), fmt_usd(m["usd"].as_f64().unwrap_or(0.0))))
+            .collect();
+        out.push(String::new());
+        out.push(format!("  活跃 {} 天：{}", r["active_days"], line.join(" · ")));
+    } else if let Some(days) = r["days"].as_array().filter(|_| r["kind"] != "day") {
         let line: Vec<String> = days
             .iter()
             .filter(|d| d["hours"].as_f64().unwrap_or(0.0) > 0.0)

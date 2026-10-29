@@ -8,7 +8,7 @@
 - 安装到本机：`install -m 0755 target/release/shadowcorp target/release/shadowcorp-widget ~/.local/bin/`，然后 `launchctl kickstart -k gui/$(id -u)/com.shadowcorp.daemon`
 - 测试：`cargo test --workspace`（黄金回合 fixtures/scoring/golden.toml，由 occupation.rs 的 golden_turns 读；成就用例 crates/daemon/tests/achievements.rs）
 - 回放：`SHADOWCORP_HOME=/tmp/sc SHADOWCORP_TZ=+08:00 cargo run -p cli -- replay fixtures/hooks/claude_code`
-- 日报：`shadowcorp report --day yesterday --names [--tool claude|codex]`；卡片：`shadowcorp card --day yesterday --names --out /tmp/x.png --no-open`（渲染走 /Applications/ShadowCorp.app，改了 Swift 要先 bundle.sh + 重装）
+- 报告：`shadowcorp report [--week|--month|--year] --day yesterday --names [--tool claude|codex]`（`--day` 选哪天所在的周期）；卡片：`shadowcorp card …同上… --out /tmp/x.png --no-open`（渲染走 /Applications/ShadowCorp.app，改了 Swift 要先 bundle.sh + 重装；`card` 会覆盖剪贴板，只看渲染就 `report --json > x.json` 再 `shadowcorp-widget --card x.json out.png`）
 - 仪表盘截图：`ShadowCorp --snapshot-dashboard out.png [--board claude_code|codex] [--range 1|7|30] [--open-jobs] [--office N]`（`--office N` 编 N 个人进办公室看效果）（读 $SHADOWCORP_HOME/widget.json；按工具的数据在 widget.json 的 `views`）；宠物截图：`--snapshot-pet out.png --state working|waiting|happy|proud|sleepy|missing --job <职业id> [--helpers N] [--receipt] [--backdrop]`（透明 PNG，`--backdrop` 加深色底）；办公室截图：`--snapshot-office out.png --jobs id,id,… [--working K] [--walk 秒]`（前 K 个在干；`--walk` 把活交给下一个人，渲染走到一半的样子）。改角色 / 装扮 / 场景要把 49 种职业 × 在干 / 闲着都截一遍、11 个场景各截一张办公室看。
 - 隐私扫描：`cargo run -p cli -- privacy-scan`（提交前必跑）
 - 本地试验一律设 `SHADOWCORP_HOME` 指向临时目录，不要碰 ~/.shadowcorp 或 ~/.claude/settings.json。

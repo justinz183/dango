@@ -277,9 +277,42 @@ fn week_and_month_reports_from_fixtures() {
     let text = daemon::report::text(&m);
     assert!(text.contains("活跃 3 天"), "{text}");
 
+    let y = daemon::report::year(&p.conn, tz, &Config::default(), &claude, any, now, false, None).unwrap();
+    assert_eq!(y["kind"], "year");
+    assert_eq!(y["date"], "2026");
+    assert_eq!(y["label"], "2026 年 · 截至 10月28日");
+    let months = y["months"].as_array().unwrap();
+    assert_eq!(months.len(), 12);
+    assert_eq!(months[9]["current"], true);
+    assert_eq!(months[10]["future"], true);
+    let usd: f64 = months.iter().map(|m| m["usd"].as_f64().unwrap()).sum();
+    assert!((usd - y["usd"].as_f64().unwrap()).abs() < 1e-6, "months add up");
+    assert!((months[9]["usd"].as_f64().unwrap() - m["usd"].as_f64().unwrap()).abs() < 1e-6, "October is the month report");
+    let heat = y["heat"].as_array().unwrap();
+    assert_eq!(heat.len(), 365);
+    assert_eq!(y["first_weekday"], 3, "2026-01-01 is a Thursday");
+    assert_eq!(y["today_index"], 300);
+    assert_eq!(heat.iter().filter(|d| d.as_f64().unwrap() > 0.0).count(), 3);
+    assert_eq!(y["active_days"], 3);
+    assert_eq!(y["best_month"], 9);
+    assert!(y["best_day"]["usd"].as_f64().unwrap() > 0.0);
+    assert_eq!(y["prev"]["label"], "去年");
+    assert_eq!(y["turns"], m["turns"]);
+    assert!(daemon::report::text(&y).contains("10月 $"), "{}", daemon::report::text(&y));
+
     let empty = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any + chrono::Duration::days(14), now, false, None).unwrap();
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
+    let past = daemon::report::year(&p.conn, tz, &Config::default(), &claude, any - chrono::Duration::days(365), now, false, None).unwrap();
+    assert_eq!(past["label"], "2025 年");
+    assert_eq!((past["prev"]["label"].as_str(), past["now_label"].as_str()), (Some("2024 年"), Some("2025 年")));
+    assert_eq!((w["prev"]["label"].as_str(), w["now_label"].as_str()), (Some("上周"), Some("本周")));
+    let last = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any - chrono::Duration::days(7), now, false, None).unwrap();
+    assert_eq!((last["prev"]["label"].as_str(), last["now_label"].as_str()), (Some("第 42 周"), Some("第 43 周")));
+    let sept = daemon::report::month(&p.conn, tz, &Config::default(), &claude, any - chrono::Duration::days(30), now, false, None).unwrap();
+    assert_eq!((sept["prev"]["label"].as_str(), sept["now_label"].as_str()), (Some("8 月"), Some("9 月")));
+    assert_eq!(past["character"]["mood"], "waiting");
+    assert!(past["today_index"].is_null());
 }
 
 #[test]
@@ -359,7 +392,8 @@ fn codex_history_backfills_and_splits_by_tool() {
     let both_codex = tools.iter().find(|t| t["name"] == "Codex").unwrap()["usd"].as_f64().unwrap();
     assert!((only["usd"].as_f64().unwrap() - both_codex).abs() < 1e-6);
     assert_eq!(only["tool"], "codex");
-    assert!(only["character"]["headline"].as_str().unwrap().starts_with("Codex 今天"), "{}", only["character"]);
+    // 10/27 seen on 10/28: an earlier day is "那天".
+    assert!(only["character"]["headline"].as_str().unwrap().starts_with("Codex 那天"), "{}", only["character"]);
     assert_eq!(only["tools"].as_array().unwrap().len(), 1);
 
     // Running it again changes nothing.

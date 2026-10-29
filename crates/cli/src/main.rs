@@ -31,10 +31,10 @@ const USAGE: &str = "shadowcorp — 衡量产出的 AI 编码成就系统
   shadowcorp stats                 公司页
   shadowcorp badges                成就与职业图鉴
   shadowcorp widget                启动桌面小部件（屏幕右下角）
-  shadowcorp report [--week|--month] [--day DATE] [--tool claude|codex] [--names] [--json]
+  shadowcorp report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
                                    日报 / 周报 / 月报（DATE = YYYY-MM-DD | today | yesterday，
                                    周报取 DATE 所在的周，月报取所在的月）
-  shadowcorp card [--week|--month] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
+  shadowcorp card [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
                                    渲染分享卡到 ~/Pictures/ShadowCorp/ 并复制到剪贴板
   shadowcorp panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   shadowcorp backfill [--claude-dir DIR]
@@ -141,7 +141,8 @@ fn parse_tool(args: &[String]) -> Result<Option<&'static str>> {
     })
 }
 
-/// The day, week or month report the arguments ask for.
+/// The day, week, month or year report the arguments ask for (the one
+/// that contains `--day`).
 fn any_report(paths: &Paths, args: &[String]) -> Result<Value> {
     let date = parse_day(args)?;
     let tool = parse_tool(args)?;
@@ -149,7 +150,9 @@ fn any_report(paths: &Paths, args: &[String]) -> Result<Value> {
     let has = |f: &str| args.iter().any(|a| a == f);
     fresh_db(paths, |c, cfg| {
         let (tz, dir, now) = (Tz::from_env(), claude_dir(), now_ms());
-        if has("--month") {
+        if has("--year") {
+            daemon::report::year(c, tz, cfg, &dir, date, now, names, tool)
+        } else if has("--month") {
             daemon::report::month(c, tz, cfg, &dir, date, now, names, tool)
         } else if has("--week") {
             daemon::report::week(c, tz, cfg, &dir, date, now, names, tool)
@@ -201,7 +204,7 @@ fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     if !status.success() {
         return Err("渲染失败".into());
     }
-    let what = match kind.as_str() { "week" => "周报卡", "month" => "月报卡", _ => "日报卡" };
+    let what = match kind.as_str() { "week" => "周报卡", "month" => "月报卡", "year" => "年报卡", _ => "日报卡" };
     println!("{what}：{}（已复制到剪贴板）", out.display());
     if !args.iter().any(|a| a == "--no-open") {
         std::process::Command::new("open").arg(&out).status()?;

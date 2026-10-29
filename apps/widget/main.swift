@@ -288,7 +288,7 @@ final class DashboardView: NSView {
     private var hover: Int?
     private var chartRect = NSRect.zero
     private var headerBottom: CGFloat = 0
-    private var reportRect = NSRect.zero
+    private var exportRects: [(String, NSRect)] = []
     /// Which agent the dashboard shows: "all", "claude_code" or "codex".
     private(set) var filter = "all"
     private var pillRects: [(String, NSRect)] = []
@@ -555,18 +555,28 @@ final class DashboardView: NSView {
         }
         y += 18
 
-        let button = text("生成今日日报 →", size: 12, weight: .semibold, color: NSColor(red: 0.65, green: 0.88, blue: 0.81, alpha: 1))
-        let bs = button.size()
-        reportRect = NSRect(x: W - pad - bs.width - 16, y: y - 6, width: bs.width + 16, height: bs.height + 12)
+        // Export: this period's card, for the agent the board shows; the
+        // menu (right click) also has the period before.
+        section("导出报告", y, right: "存到 图片/ShadowCorp · 右键可导上一期", draw: draw)
+        y += 22
+        exportRects = []
+        let bw = (inner - gap * 3) / 4
+        for (i, (kind, label)) in [("day", "今日日报"), ("week", "本周周报"), ("month", "本月月报"), ("year", "今年年报")].enumerated() {
+            let r = NSRect(x: pad + CGFloat(i) * (bw + gap), y: y, width: bw, height: 32)
+            exportRects.append((kind, r))
+            if draw {
+                NSColor.white.withAlphaComponent(0.08).setFill()
+                NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8).fill()
+                put(text(label, size: 12, weight: .semibold, color: barToday), r.midX, r.minY + 8, align: 1)
+            }
+        }
+        y += 32 + 16
         if draw {
             var foot = "按 BLS 各职业中位时薪折算"
             if m.weekLeverage != nil { foot += " · 本周杠杆 " + fmtLev(m.weekUSD, m.weekCost) }
-            put(text(foot, size: 10, color: secondary), pad, y + 1)
-            NSColor.white.withAlphaComponent(0.08).setFill()
-            NSBezierPath(roundedRect: reportRect, xRadius: 8, yRadius: 8).fill()
-            put(button, reportRect.midX, reportRect.minY + 6, align: 1)
+            put(text(foot, size: 10, color: secondary), pad, y)
         }
-        y += 34
+        y += 30
         return y
     }
 
@@ -680,8 +690,8 @@ final class DashboardView: NSView {
         } else if moreRect.contains(p) {
             jobsOpen.toggle()
             onResize?()
-        } else if reportRect.contains(p) {
-            (NSApp.delegate as? App)?.makeCard(tool: filter)
+        } else if let (kind, _) = exportRects.first(where: { $0.1.contains(p) }) {
+            (NSApp.delegate as? App)?.makeCard(kind: kind, tool: filter)
         }
     }
 
@@ -2094,21 +2104,39 @@ final class App: NSObject, NSApplicationDelegate {
         panel.setFrame(f, display: true)
     }
 
-    /// Runs `shadowcorp card --day today` (for one agent when the dashboard
-    /// is switched to it), which renders the day card, copies it to the
-    /// clipboard and opens it.
-    @objc func makeTodayCard() { makeCard(tool: "all") }
-
-    func makeCard(tool: String) {
+    /// Runs `shadowcorp card` for a day, week, month or year — this one, or
+    /// with `back` 1 the one before — for one agent or all. The CLI renders
+    /// the card, saves it, copies it and opens it; the pet says when.
+    func makeCard(kind: String, back: Int = 0, tool: String = "all") {
+        let name = ["day": "日报", "week": "周报", "month": "月报", "year": "年报"][kind] ?? "日报"
         let candidates = [NSHomeDirectory() + "/.local/bin/shadowcorp", "/usr/local/bin/shadowcorp", "/opt/homebrew/bin/shadowcorp"]
-        guard let cli = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else { return }
+        guard let cli = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            pet?.flash("没找到 shadowcorp 命令")
+            return
+        }
+        let unit: Calendar.Component = ["week": .weekOfYear, "month": .month, "year": .year][kind] ?? .day
+        let date = Calendar.current.date(byAdding: unit, value: -back, to: Date()) ?? Date()
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = "yyyy-MM-dd"
         let p = Process()
         p.executableURL = URL(fileURLWithPath: cli)
-        p.arguments = ["card", "--day", "today"] + (tool == "all" ? [] : ["--tool", tool])
+        p.arguments = ["card", "--day", f.string(from: date)] + (kind == "day" ? [] : ["--\(kind)"]) + (tool == "all" ? [] : ["--tool", tool])
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
+        p.terminationHandler = { [weak self] proc in
+            DispatchQueue.main.async { self?.pet?.flash(proc.terminationStatus == 0 ? "\(name)已复制到剪贴板" : "\(name)没生成出来") }
+        }
+        pet?.flash("正在生成\(name)…")
         try? p.run()
         collapse()
+    }
+
+    /// From the menu: "week:1" is last week's card.
+    @objc func exportFromMenu(_ sender: NSMenuItem) {
+        let parts = (sender.representedObject as? String ?? "day:0").split(separator: ":")
+        makeCard(kind: String(parts[0]), back: parts.count > 1 ? Int(parts[1]) ?? 0 : 0, tool: isExpanded ? dashboard.filter : "all")
     }
 
     // MARK: menu
@@ -2116,7 +2144,20 @@ final class App: NSObject, NSApplicationDelegate {
     func popMenu(_ event: NSEvent, in view: NSView) {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: isExpanded ? "收起仪表盘" : "打开仪表盘", action: #selector(toggle), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "生成今日日报", action: #selector(makeTodayCard), keyEquivalent: ""))
+        let export = NSMenu()
+        for (i, (kind, now, before)) in [("day", "今日日报", "昨日日报"), ("week", "本周周报", "上周周报"),
+                                         ("month", "本月月报", "上月月报"), ("year", "今年年报", "去年年报")].enumerated() {
+            if i > 0 { export.addItem(.separator()) }
+            for (back, title) in [(0, now), (1, before)] {
+                let item = NSMenuItem(title: title, action: #selector(exportFromMenu(_:)), keyEquivalent: "")
+                item.representedObject = "\(kind):\(back)"
+                item.target = self
+                export.addItem(item)
+            }
+        }
+        let exportItem = NSMenuItem(title: "导出报告", action: nil, keyEquivalent: "")
+        exportItem.submenu = export
+        menu.addItem(exportItem)
         let auto = NSMenuItem(title: "登录时自动启动", action: #selector(toggleAutostart), keyEquivalent: "")
         auto.state = FileManager.default.fileExists(atPath: agentPlist) ? .on : .off
         menu.addItem(auto)
@@ -2811,7 +2852,8 @@ class CardView: NSView {
         let beating = today > 0 && best > 0 && today + 1e-9 >= best
         let tone = beating ? gold : (r.l("jobs").first?["color"] as? String).map { color(hex: $0) } ?? ink
         put(text(beating ? "今天就是单日纪录 ✦" : "单日纪录 \(fmtUSD(best))", size: 26, weight: .semibold, color: tone), pad, y)
-        var right = "比昨天 " + delta(today - Report(j: r.o("prev")).d("usd"))
+        let before = Report(j: r.o("prev"))
+        var right = (before.s("label") == "昨天" || before.s("label").isEmpty ? "比昨天 " : "比 \(before.s("label")) ") + delta(today - before.d("usd"))
         if r.i("streak") > 1 { right += " · 连续 \(r.i("streak")) 天" }
         put(text(right, size: 24, color: ink2, mono: true), W - pad, y + 2, align: 2)
         let track = NSRect(x: pad, y: y + 46, width: inner, height: 12)
@@ -2832,7 +2874,8 @@ class CardView: NSView {
         var x = pad + a.size().width + 20
         put(text("→", size: 28, color: ink2), x, y + 8)
         x += 44
-        put(text("\(r.s("kind") == "week" ? "本周" : "本月") \(fmtUSD(now))", size: 28, weight: .bold, color: ink), x, y + 8)
+        let name = r.s("now_label").isEmpty ? (r.s("kind") == "week" ? "本周" : "本月") : r.s("now_label")
+        put(text("\(name) \(fmtUSD(now))", size: 28, weight: .bold, color: ink), x, y + 8)
         let d = now - before
         var s = delta(d)
         if before > 0 { s += String(format: " · %@%.0f%%", d >= 0 ? "+" : "−", abs(d / before * 100)) }
@@ -3021,6 +3064,111 @@ final class MonthCardView: CardView {
     }
 }
 
+/// "$9,235" under ten thousand, "$12.6k" above: month labels stay narrow.
+func fmtK(_ usd: Double) -> String {
+    usd >= 10_000 ? String(format: "$%.1fk", usd / 1000) : fmtUSD(usd)
+}
+
+/// Year card, 1080 × up to 1920: the twelve months stacked by occupation,
+/// every day of the year as a heatmap, the year against the one before.
+final class YearCardView: CardView {
+    override func draw(_ dirtyRect: NSRect) {
+        guard let r = report else { return }
+        var y = header(r)
+        let months = r.l("months")
+        let best = r.j["best_month"] as? Int
+        title("每个月", y, right: best.map { "最好的是 \($0 + 1) 月" })
+        y += 48
+        let chart = NSRect(x: pad, y: y, width: inner, height: 270)
+        let base = chart.maxY - 40, top = chart.minY + 36
+        let maxU = max(months.map { ($0["usd"] as? Double) ?? 0 }.max() ?? 0, 1)
+        let slot = inner / 12
+        let bw = slot - 22
+        paper2.setFill()
+        NSBezierPath(rect: NSRect(x: chart.minX, y: base, width: inner, height: 2)).fill()
+        for (i, m) in months.enumerated() {
+            let mr = Report(j: m)
+            let cx = chart.minX + slot * CGFloat(i) + slot / 2
+            var yTop = base
+            for part in mr.l("parts") {
+                let h = CGFloat((part["usd"] as? Double ?? 0) / maxU) * (base - top)
+                guard h > 0.5 else { continue }
+                color(hex: part["color"] as? String ?? "").setFill()
+                NSBezierPath(roundedRect: NSRect(x: cx - bw / 2, y: yTop - h, width: bw, height: max(h - 3, 2)), xRadius: 6, yRadius: 6).fill()
+                yTop -= h
+            }
+            if mr.d("usd") > 0 {
+                put(text(fmtK(mr.d("usd")), size: 19, weight: best == i ? .bold : .regular, color: best == i ? ink : ink2, mono: true), cx, yTop - 30, align: 1)
+            }
+            let current = mr.j["current"] as? Bool ?? false, future = mr.j["future"] as? Bool ?? false
+            put(text(mr.s("label"), size: 22, weight: current ? .bold : .regular, color: current ? ink : ink2.withAlphaComponent(future ? 0.4 : 1)), cx, base + 10, align: 1)
+        }
+        y = chart.maxY + 26
+
+        // Every day, a column per week from the first Monday on or before 1 January.
+        title("全年", y, right: "活跃 \(r.i("active_days")) 天 · 最长连续 \(r.i("longest_run")) 天")
+        y += 46
+        let heat = (r.j["heat"] as? [Double]) ?? []
+        let first = r.i("first_weekday")
+        let todayIndex = r.j["today_index"] as? Int
+        let cols = (first + heat.count + 6) / 7
+        let gap: CGFloat = 3
+        let cw = (inner - gap * CGFloat(cols - 1)) / CGFloat(cols)
+        let maxH = max(heat.max() ?? 0, 1)
+        let light = (0.85, 0.92, 0.89), dark = (0.24, 0.42, 0.37)
+        // Month names over the first week that starts in the month.
+        var dayOfYear = 0
+        let year = Int(r.s("date")) ?? 2026
+        for mth in 1...12 {
+            let col = (first + dayOfYear + 6) / 7
+            put(text("\(mth)月", size: 17, color: ink2), pad + CGFloat(col) * (cw + gap), y, align: 0)
+            let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+            dayOfYear += [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mth - 1]
+        }
+        y += 28
+        for (k, usd) in heat.enumerated() {
+            let slotIndex = first + k
+            let cell = NSRect(x: pad + CGFloat(slotIndex / 7) * (cw + gap), y: y + CGFloat(slotIndex % 7) * (cw + gap), width: cw, height: cw)
+            var fill = paper2
+            if usd > 0 {
+                let f = sqrt(min(1, usd / maxH))
+                fill = NSColor(calibratedRed: light.0 + (dark.0 - light.0) * f, green: light.1 + (dark.1 - light.1) * f, blue: light.2 + (dark.2 - light.2) * f, alpha: 1)
+            } else if let ti = todayIndex, k > ti {
+                fill = paper2.withAlphaComponent(0.45)
+            }
+            fill.setFill()
+            NSBezierPath(roundedRect: cell, xRadius: 3, yRadius: 3).fill()
+            if k == todayIndex {
+                ink.setStroke()
+                let o = NSBezierPath(roundedRect: cell.insetBy(dx: 1, dy: 1), xRadius: 3, yRadius: 3)
+                o.lineWidth = 2
+                o.stroke()
+            }
+        }
+        y += 7 * (cw + gap) + 12
+        // Legend: less → more.
+        let legend = text("多", size: 17, color: ink2)
+        var lx = W - pad - legend.size().width
+        put(legend, lx, y)
+        for f in [1.0, 0.7, 0.45, 0.2] {
+            lx -= 22
+            NSColor(calibratedRed: light.0 + (dark.0 - light.0) * f, green: light.1 + (dark.1 - light.1) * f, blue: light.2 + (dark.2 - light.2) * f, alpha: 1).setFill()
+            NSBezierPath(roundedRect: NSRect(x: lx, y: y + 3, width: 16, height: 16), xRadius: 3, yRadius: 3).fill()
+        }
+        put(text("少", size: 17, color: ink2), lx - 8, y, align: 2)
+        if let bd = r.j["best_day"] as? [String: Any] {
+            put(text("最好的一天 \(bd["date"] as? String ?? "") · \(fmtUSD((bd["usd"] as? Double) ?? 0))", size: 20, color: ink2, mono: true), pad, y)
+        }
+        y += 52
+        y = jobs(r, y)
+        y = tiles([("活跃天数", "\(r.i("active_days"))"), ("回合", "\(r.i("turns"))"),
+                   ("测试通过", "\(r.i("tests_passed"))/\(r.i("tests_run"))"), ("杠杆", leverageText(r))], y)
+        y = compare(r, y)
+        _ = signoff(r, y + 10)
+        footer(r)
+    }
+}
+
 func renderCard(_ jsonPath: String, _ outPath: String, copy: Bool) -> Bool {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: jsonPath)),
           let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
@@ -3028,6 +3176,7 @@ func renderCard(_ jsonPath: String, _ outPath: String, copy: Bool) -> Bool {
     let tall = NSSize(width: 1080, height: 2400)
     let v: CardView = kind == "week" ? WeekCardView(frame: NSRect(origin: .zero, size: tall))
         : kind == "month" ? MonthCardView(frame: NSRect(origin: .zero, size: tall))
+        : kind == "year" ? YearCardView(frame: NSRect(origin: .zero, size: tall))
         : DayCardView(frame: NSRect(origin: .zero, size: tall))
     v.report = Report(j: j)
     // Measure on a tall canvas, then fit: content plus the footer, never
