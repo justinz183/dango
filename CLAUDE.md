@@ -12,14 +12,14 @@
 - 仪表盘截图：`dango-widget --snapshot-dashboard out.png [--board claude_code|codex] [--range 1|7|30] [--open-jobs] [--office N]`（`--office N` 编 N 个人进办公室看效果）（读 $DANGO_HOME/widget.json；按工具的数据在 widget.json 的 `views`）；宠物截图：`--snapshot-pet out.png --state working|waiting|happy|proud|sleepy|missing --job <职业id> [--helpers N] [--receipt] [--backdrop]`（透明 PNG，`--backdrop` 加深色底）；办公室截图：`--snapshot-office out.png --jobs id,id,… [--working K] [--walk 秒]`（前 K 个在干；`--walk` 把活交给下一个人，渲染走到一半的样子）。改角色 / 装扮 / 场景要把 22 种职业 × 在干 / 闲着都截一遍、每个场景截一张办公室看。
 - 隐私扫描：`cargo run -p cli -- privacy-scan`（提交前必跑）
 - 语言：`dango lang zh|en`（写 config.toml `general.locale`，守护进程看到改动就按新语言重写 widget.json）；截图在 `DANGO_HOME` 里先 `dango lang en` 再截，就是英文版。
-- 旧名兼容：仓库在 `~/dango`（GitHub justinz183/dango），本机插件是 `dango@dango`（目录市场指向 ~/dango，装的是 git HEAD，改了钩子要先提交再 `claude plugin marketplace update dango` + `claude plugin update dango@dango` + 重启 Claude Code），~/.codex/hooks.json 调 `~/.local/bin/dango hook --codex`。为了过渡还留着几个链接：`~/shadowcorp` → `~/dango`、`~/.shadowcorp` → `~/.dango`、`~/.local/bin/shadowcorp` → `dango`；代码也认 `SHADOWCORP_HOME` / `SHADOWCORP_TZ`。
+- 旧名兼容：仓库在 `~/dango`（GitHub justinz183/dango），本机插件是 `dango@dango`（目录市场指向 ~/dango，装的是 git HEAD，改了钩子要先提交再 `claude plugin marketplace update dango` + `claude plugin update dango@dango` + 重启 Claude Code）。Codex 不用钩子：守护进程每秒跟读 `~/.codex/sessions` 的 rollout（crates/daemon/src/codex_tail.rs，和回填共用 backfill.rs 的 `Rollout`，事件 id 相同所以不会重复计）；`dango hook --codex` 只是给旧的 ~/.codex/hooks.json 留的空操作。为了过渡还留着几个链接：`~/shadowcorp` → `~/dango`、`~/.shadowcorp` → `~/.dango`、`~/.local/bin/shadowcorp` → `dango`；代码也认 `SHADOWCORP_HOME` / `SHADOWCORP_TZ`。
 - 本地试验一律设 `DANGO_HOME` 指向临时目录，不要碰 ~/.dango 或 ~/.claude/settings.json。
 
 ## 结构
 - crates/core：事件 schema、分类器、职业归类与时薪（occupation.rs + assets/occupations.toml）、计分封顶、进度、成就引擎、终端文案。纯逻辑，无 IO。
 - crates/daemon：capture（hook JSON → 事件）、spool、SQLite、ingest、backfill、socket、snapshot。
 - crates/cli：单二进制 `dango`（hook [--codex] / status / stats / badges / backfill / daemon / replay / rebuild / privacy-scan / lang / report / card / widget）。
-- plugins/claude-code + .claude-plugin/marketplace.json：Claude Code 插件。plugins/codex/hooks.json：Codex hooks 模板（装到 ~/.codex/hooks.json，命令用绝对路径；改了要在 Codex 里重新信任）。
+- plugins/claude-code + .claude-plugin/marketplace.json：Claude Code 插件。Codex 没有插件或钩子，靠守护进程跟读它的会话日志。
 - fixtures/codex/sessions：Codex 回填用例（主线程、子 agent、Codex 自己的 guardian 线程）。
 
 ## 规则

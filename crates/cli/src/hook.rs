@@ -1,6 +1,8 @@
-//! `dango hook` (Claude Code) and `dango hook --codex` (Codex):
-//! the command every hook runs. Reads stdin, appends its events to the
-//! spool and exits 0 — always, so it can never block the agent. On Stop it asks the daemon for this turn's box and
+//! `dango hook`: the command every Claude Code hook runs. Reads stdin,
+//! appends its events to the spool and exits 0 — always, so it can never
+//! block the agent. Codex needs no hooks (the daemon follows its rollout
+//! files, codex_tail); `dango hook --codex`, from an old ~/.codex/hooks.json,
+//! does nothing. On Stop it asks the daemon for this turn's box and
 //! returns it as `systemMessage`, which Claude Code shows to the user and
 //! does not add to the model's context. Async hooks print nothing: their
 //! output would be delivered to Claude.
@@ -24,8 +26,7 @@ pub fn run(paths: &Paths, codex: bool) -> i32 {
         return 0;
     }
     let Ok(input) = serde_json::from_slice::<Value>(&raw) else { return 0 };
-    let sources = Config::load(paths).sources;
-    if !(if codex { sources.codex } else { sources.claude_code }) || paths.ensure().is_err() {
+    if codex || !Config::load(paths).sources.claude_code || paths.ensure().is_err() {
         return 0;
     }
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
@@ -35,12 +36,11 @@ pub fn run(paths: &Paths, codex: bool) -> i32 {
         nonce: format!("{}:{}", std::process::id(), now.as_nanos()),
         git_lookup: true,
     };
-    let events = if codex { capture::from_codex_hook(&input, &raw, &env) } else { capture::from_claude_hook(&input, &raw, &env).into_iter().collect() };
-    if events.iter().any(|ev| spool::append(paths, ev).is_err()) {
+    let Some(ev) = capture::from_claude_hook(&input, &raw, &env) else { return 0 };
+    if spool::append(paths, &ev).is_err() {
         return 0;
     }
-    // Codex shows a Stop hook's systemMessage too, as a notice.
-    for ev in events.iter().filter(|ev| ev.kind == Kind::TurnEnd && ev.payload.stop_hook_active != Some(true)) {
+    if ev.kind == Kind::TurnEnd && ev.payload.stop_hook_active != Some(true) {
         if let Some(sid) = &ev.session_id {
             let req = json!({ "op": "settle", "session_id": sid });
             if let Some(text) = server::request(paths, &req, SETTLE_TIMEOUT)

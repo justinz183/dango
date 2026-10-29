@@ -24,6 +24,8 @@ pub const POLL: Duration = Duration::from_millis(250);
 const USAGE_EVERY: u64 = 40;
 /// …for turns that ended at least this long ago, once their logs are written.
 const USAGE_SETTLE_MS: i64 = 15_000;
+/// Codex's rollout files are followed every this many polls (~1 s).
+const CODEX_EVERY: u64 = 4;
 
 /// Takes the processor lock without waiting. Ok(None) means another process
 /// (normally the daemon) holds it.
@@ -128,6 +130,7 @@ pub fn run(paths: &Paths) -> Result<()> {
     }
     let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
     let (claude_dir, codex_dir) = (home.join(".claude"), home.join(".codex"));
+    let mut codex = crate::codex_tail::CodexTail::new(&codex_dir);
     let mut tick: u64 = 0;
     let modified = |p: &Paths| fs::metadata(&p.config).and_then(|m| m.modified()).ok();
     let mut config_at = modified(paths);
@@ -143,6 +146,40 @@ pub fn run(paths: &Paths) -> Result<()> {
             }
             if let Err(e) = ingest_and_refresh(&mut p, paths) {
                 eprintln!("dango daemon: ingest failed: {e}");
+            }
+        }
+        // Every second, what Codex has written: its work, without hooks. The
+        // files are read without the lock.
+        if tick % CODEX_EVERY == 0 {
+            let on = shared.lock().unwrap_or_else(|e| e.into_inner()).cfg.sources.codex;
+            let events = if on { codex.poll(paths, now_ms()) } else { Vec::new() };
+            if !events.is_empty() {
+                let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+                // As backfill does: one transaction, a bad event skipped.
+                let mut fresh = 0;
+                let done = p.begin().and_then(|_| {
+                    for ev in &events {
+                        match p.handle(ev) {
+                            Ok(new) => fresh += new as usize,
+                            Err(e) => eprintln!("dango daemon: skipped {}: {e}", ev.id),
+                        }
+                    }
+                    p.commit()
+                });
+                match done {
+                    Ok(()) if fresh > 0 => {
+                        let _ = panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())
+                            .and_then(|_| widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms()));
+                    }
+                    Ok(()) => {}
+                    Err(e) => {
+                        // Nothing kept: read the files again from the top
+                        // next time (what did count is ignored by id).
+                        p.rollback();
+                        codex = crate::codex_tail::CodexTail::new(&codex_dir);
+                        eprintln!("dango daemon: codex failed: {e}");
+                    }
+                }
             }
         }
         // Every ~10 s, price turns that ended a little while ago. The logs

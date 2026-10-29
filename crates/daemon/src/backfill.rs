@@ -277,50 +277,65 @@ fn codex_step(item: &Value, cwd: &str) -> Vec<Value> {
     }
 }
 
-/// Events for one Codex rollout. Each step is an `item_completed` with its
-/// `turn_id`; turns end with `task_complete` or `turn_aborted`. A spawned
-/// sub-agent's steps count toward the parent session; Codex's own reviewer
-/// threads ("guardian") have no steps.
-pub fn codex_file_events(path: &Path, cutoff: i64, paths: &Paths) -> Vec<Event> {
-    let Ok(f) = fs::File::open(path) else { return Vec::new() };
-    let env = CaptureEnv { paths, now_ms: 0, nonce: String::new(), git_lookup: false };
-    let mut out = Vec::new();
-    let (mut sid, mut cwd, mut sub) = (None::<String>, String::new(), false);
-    let (mut first_ts, mut last_ts) = (None::<i64>, 0i64);
-    let mut prompted: HashSet<String> = HashSet::new();
-    let mut last_prompt: Option<(String, u32)> = None;
-    let mut n = 0usize;
-    let codex_event = |seed: &str, ts: i64, kind: Kind, sid: &str| {
+/// One Codex rollout read a line at a time: backfill reads a file whole and
+/// the daemon follows a live one as Codex writes it (codex_tail). Either way
+/// an event gets the same id, so it counts once. Each step is an
+/// `item_completed` with its `turn_id`; turns end with `task_complete` or
+/// `turn_aborted`. A spawned sub-agent's steps count toward the parent
+/// session; Codex's own reviewer threads ("guardian") have no steps.
+#[derive(Default)]
+pub struct Rollout {
+    path: String,
+    sid: Option<String>,
+    cwd: String,
+    sub: bool,
+    first_ts: Option<i64>,
+    last_ts: i64,
+    prompted: HashSet<String>,
+    last_prompt: Option<(String, u32)>,
+    n: usize,
+    ended: bool,
+}
+
+impl Rollout {
+    pub fn new(path: &Path) -> Rollout {
+        Rollout { path: path.display().to_string(), ..Default::default() }
+    }
+
+    fn event(seed: &str, ts: i64, kind: Kind, sid: &str) -> Event {
         let mut ev = bf_event(&format!("codex\0{seed}"), ts, kind, sid);
         ev.payload.origin = Some(Source::Codex);
         ev
-    };
-    for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
-        let Ok(e) = serde_json::from_str::<Value>(&line) else { continue };
-        let Some(ts) = ts_of(&e) else { continue };
+    }
+
+    /// The events in one line of the file, none at or after `cutoff`.
+    pub fn line(&mut self, line: &str, cutoff: i64, paths: &Paths) -> Vec<Event> {
+        let mut out = Vec::new();
+        let Ok(e) = serde_json::from_str::<Value>(line) else { return out };
+        let Some(ts) = ts_of(&e) else { return out };
         let p = e.get("payload").cloned().unwrap_or(Value::Null);
         let ty = e.get("type").and_then(Value::as_str).unwrap_or("");
-        if ty == "session_meta" && sid.is_none() {
-            sid = p.get("session_id").or_else(|| p.get("id")).and_then(Value::as_str).map(str::to_string);
-            cwd = p.get("cwd").and_then(Value::as_str).unwrap_or("").to_string();
-            sub = p.get("source").and_then(|s| s.get("subagent")).is_some();
-            continue;
+        if ty == "session_meta" && self.sid.is_none() {
+            self.sid = p.get("session_id").or_else(|| p.get("id")).and_then(Value::as_str).map(str::to_string);
+            self.cwd = p.get("cwd").and_then(Value::as_str).unwrap_or("").to_string();
+            self.sub = p.get("source").and_then(|s| s.get("subagent")).is_some();
+            return out;
         }
-        let (Some(sid), "event_msg") = (sid.clone(), ty) else { continue };
+        let (Some(sid), "event_msg") = (self.sid.clone(), ty) else { return out };
         if ts >= cutoff {
-            continue;
+            return out;
         }
-        if first_ts.is_none() && !sub {
-            first_ts = Some(ts);
-            let mut ev = codex_event(&format!("{sid}\0{}\0start", path.display()), ts, Kind::SessionStart, &sid);
+        if self.first_ts.is_none() && !self.sub {
+            self.first_ts = Some(ts);
+            let mut ev = Rollout::event(&format!("{sid}\0{}\0start", self.path), ts, Kind::SessionStart, &sid);
             ev.payload.session_source = Some("startup".into());
             out.push(ev);
         }
-        last_ts = ts;
+        self.last_ts = ts;
         let turn = p.get("turn_id").and_then(Value::as_str).unwrap_or("").to_string();
         match p.get("type").and_then(Value::as_str).unwrap_or("") {
-            "task_complete" | "turn_aborted" if !sub && !turn.is_empty() => {
-                let mut ev = codex_event(&format!("{sid}\0{turn}\0end"), ts, Kind::TurnEnd, &sid);
+            "task_complete" | "turn_aborted" if !self.sub && !turn.is_empty() => {
+                let mut ev = Rollout::event(&format!("{sid}\0{turn}\0end"), ts, Kind::TurnEnd, &sid);
                 ev.turn_id = Some(turn);
                 out.push(ev);
             }
@@ -333,52 +348,72 @@ pub fn codex_file_events(path: &Path, cutoff: i64, paths: &Paths) -> Vec<Event> 
                         .map(|c| c.iter().filter_map(|b| b.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join("\n"))
                         .unwrap_or_default();
                     let t = text.trim_start();
-                    if sub || turn.is_empty() || t.is_empty() || t.starts_with('<') || !prompted.insert(turn.clone()) {
-                        continue;
+                    if self.sub || turn.is_empty() || t.is_empty() || t.starts_with('<') || !self.prompted.insert(turn.clone()) {
+                        return out;
                     }
                     let fp = text.trim().to_string();
-                    let repeat = match &last_prompt {
+                    let repeat = match &self.last_prompt {
                         Some((q, n)) if *q == fp => n + 1,
                         _ => 1,
                     };
-                    last_prompt = Some((fp, repeat));
-                    let mut ev = codex_event(&format!("{sid}\0{turn}\0prompt"), ts, Kind::Prompt, &sid);
+                    self.last_prompt = Some((fp, repeat));
+                    let candidates = occupation::topic_candidates(&text);
+                    let mut ev = Rollout::event(&format!("{sid}\0{turn}\0prompt"), ts, Kind::Prompt, &sid);
                     ev.turn_id = Some(turn);
                     ev.payload = Payload {
                         origin: Some(Source::Codex),
                         task_class: Some(classify::classify_prompt(&text)),
                         is_correction: Some(classify::is_correction(&text)),
                         prompt_repeat: Some(repeat),
-                        topic: occupation::topic(&text).map(str::to_string),
+                        topic: candidates.first().map(|t| t.to_string()),
+                        topic_ties: (candidates.len() > 1).then(|| candidates[1..].iter().map(|t| t.to_string()).collect()),
                         ..Default::default()
                     };
-                    ev.cwd_hash = (!cwd.is_empty()).then(|| short_hash(&cwd));
+                    ev.cwd_hash = (!self.cwd.is_empty()).then(|| short_hash(&self.cwd));
                     out.push(ev);
-                    continue;
+                    return out;
                 }
+                let env = CaptureEnv { paths, now_ms: 0, nonce: String::new(), git_lookup: false };
                 let id = item.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-                for (i, mut hook) in codex_step(&item, &cwd).into_iter().enumerate() {
+                for (i, mut hook) in codex_step(&item, &self.cwd).into_iter().enumerate() {
                     hook["session_id"] = json!(sid);
-                    hook["cwd"] = json!(cwd);
+                    hook["cwd"] = json!(self.cwd);
                     let Some(mut ev) = from_claude_hook(&hook, b"", &env) else { continue };
-                    n += 1;
-                    let fresh = codex_event(&format!("{sid}\0{id}\0{i}\0{n}\0tool"), ts, Kind::Tool, &sid);
+                    self.n += 1;
+                    let fresh = Rollout::event(&format!("{sid}\0{id}\0{i}\0{}\0tool", self.n), ts, Kind::Tool, &sid);
                     ev.id = fresh.id;
                     ev.ts = fresh.ts;
                     ev.source = Source::Backfill;
                     ev.payload.origin = Some(Source::Codex);
-                    ev.turn_id = (!sub && !turn.is_empty()).then(|| turn.clone());
+                    ev.turn_id = (!self.sub && !turn.is_empty()).then(|| turn.clone());
                     out.push(ev);
                 }
             }
             _ => {}
         }
+        out
     }
-    if let Some(sid) = sid.filter(|_| !sub && first_ts.is_some() && cutoff - last_ts > OPEN_SESSION_MS) {
-        let mut ev = codex_event(&format!("{sid}\0{}\0end", path.display()), last_ts, Kind::SessionEnd, &sid);
+
+    /// The session's end, once it has been quiet for OPEN_SESSION_MS before
+    /// `now` (a session still in use gets none). Given once.
+    pub fn end(&mut self, now: i64) -> Option<Event> {
+        let sid = self.sid.clone().filter(|_| !self.sub && !self.ended && self.first_ts.is_some() && now - self.last_ts > OPEN_SESSION_MS)?;
+        self.ended = true;
+        let mut ev = Rollout::event(&format!("{sid}\0{}\0end", self.path), self.last_ts, Kind::SessionEnd, &sid);
         ev.payload.reason = Some("other".into());
-        out.push(ev);
+        Some(ev)
     }
+}
+
+/// Events for one Codex rollout, read whole.
+pub fn codex_file_events(path: &Path, cutoff: i64, paths: &Paths) -> Vec<Event> {
+    let Ok(f) = fs::File::open(path) else { return Vec::new() };
+    let mut r = Rollout::new(path);
+    let mut out = Vec::new();
+    for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
+        out.extend(r.line(&line, cutoff, paths));
+    }
+    out.extend(r.end(cutoff));
     out
 }
 

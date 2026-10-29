@@ -426,17 +426,73 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert_eq!(again.new_events, 0);
 }
 
+/// Codex with no hooks: the daemon follows a rollout while Codex writes it
+/// (a half-written line waits for the rest), with the same ids as backfill,
+/// so running both counts every turn once.
+#[test]
+fn codex_rollouts_are_followed_without_hooks() {
+    let paths = home("codextail");
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/codex/sessions/2026/10/27/rollout-2026-10-27T11-00-00-th-main.jsonl");
+    let lines: Vec<String> = fs::read_to_string(fixture).unwrap().lines().map(str::to_string).collect();
+    let codex = paths.home.join("codex");
+    let day = codex.join("sessions").join(chrono::Local::now().format("%Y/%m/%d").to_string());
+    fs::create_dir_all(&day).unwrap();
+    let file = day.join("rollout-th-main.jsonl");
+    // Half the file, and the start of the next line.
+    let cut = lines.len() / 2;
+    fs::write(&file, format!("{}\n{}", lines[..cut].join("\n"), &lines[cut][..30])).unwrap();
+    let now = DateTime::parse_from_rfc3339("2026-10-27T03:30:00Z").unwrap().timestamp_millis();
+    let mut tail = daemon::codex_tail::CodexTail::new(&codex);
+    let mut p = processor(&paths);
+    let mut take = |evs: &[Event]| {
+        p.begin().unwrap();
+        let n = evs.iter().filter(|e| p.handle(e).unwrap()).count();
+        p.commit().unwrap();
+        n
+    };
+    let first = tail.poll(&paths, now);
+    assert!(!first.is_empty() && take(&first) == first.len());
+    assert!(tail.poll(&paths, now).is_empty(), "nothing new, nothing read");
+    // Codex finishes the line and writes the rest.
+    let mut f = fs::OpenOptions::new().append(true).open(&file).unwrap();
+    std::io::Write::write_all(&mut f, format!("{}\n{}\n", &lines[cut][30..], lines[cut + 1..].join("\n")).as_bytes()).unwrap();
+    let second = tail.poll(&paths, now);
+    assert_eq!(take(&second), second.len());
+
+    // The same events, by id, as reading the file whole.
+    let mut followed: Vec<String> = first.iter().chain(&second).map(|e| e.id.clone()).collect();
+    let mut whole: Vec<String> = daemon::backfill::codex_file_events(&file, i64::MAX, &paths)
+        .into_iter()
+        .filter(|e| e.kind != dango_core::event::Kind::SessionEnd)
+        .map(|e| e.id)
+        .collect();
+    followed.sort();
+    whole.sort();
+    assert_eq!(followed, whole);
+    drop(take);
+    let q = |sql: &str| -> String { p.conn.query_row(sql, [], |r| r.get::<_, String>(0)).unwrap() };
+    assert_eq!(q("SELECT source FROM sessions WHERE id = 'th-main'"), "codex");
+    assert_eq!(q("SELECT COUNT(*) || '' FROM turns WHERE session_id = 'th-main' AND ended_at IS NOT NULL"), "2");
+    let usd = p.ctr("usd:codex", "all");
+    assert!(usd > 0.0);
+    // Backfill over the same file adds nothing but the session's end.
+    let none = paths.home.join("no-claude-dir");
+    let again = daemon::backfill::run(&mut p, &paths, &none, i64::MAX, Some((&codex, i64::MAX))).unwrap();
+    assert!(again.new_events <= 1, "{again:?}");
+    assert!((p.ctr("usd:codex", "all") - usd).abs() < 1e-9, "counted once");
+}
+
 #[test]
 fn each_tool_has_its_own_live_cutoff() {
     let paths = home("cutoff");
     let mut p = processor(&paths);
-    let env = CaptureEnv { paths: &paths, now_ms: 1_793_000_000_000, nonce: String::new(), git_lookup: false };
-    let hook = serde_json::json!({ "hook_event_name": "UserPromptSubmit", "session_id": "cx", "turn_id": "t", "prompt": "hi" });
-    for ev in daemon::capture::from_codex_hook(&hook, b"x", &env) {
-        p.begin().unwrap();
-        p.handle(&ev).unwrap();
-        p.commit().unwrap();
-    }
+    // A live Codex event (an old spool's; Codex is now followed through its
+    // rollout files, as backfill events).
+    let mut ev = Event::new("cx-1".into(), 1_793_000_000_000, dango_core::event::Source::Codex, dango_core::event::Kind::Prompt);
+    ev.session_id = Some("cx".into());
+    p.begin().unwrap();
+    p.handle(&ev).unwrap();
+    p.commit().unwrap();
     assert_eq!(db::get_meta(&p.conn, "live_since:codex").unwrap().as_deref(), Some("1793000000000"));
     assert_eq!(db::get_meta(&p.conn, "live_since").unwrap(), None, "Claude Code history is still open for backfill");
 }

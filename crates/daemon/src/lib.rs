@@ -2,6 +2,7 @@
 
 pub mod backfill;
 pub mod capture;
+pub mod codex_tail;
 pub mod config;
 pub mod db;
 pub mod ingest;

@@ -111,9 +111,9 @@ DANGO_HOME=/tmp/sc-mine ./target/release/dango badges
 
 ## 接入 Codex
 
-1. 把 [plugins/codex/hooks.json](plugins/codex/hooks.json) 复制到 `~/.codex/hooks.json`，把里面的 `dango` 换成绝对路径（Codex 桌面版不一定能找到 `~/.local/bin`）。
-2. 在 Codex 里用 `/hooks` 审阅并信任这些 hook（Codex 要求非托管 hook 先信任才会运行，改过文件要重新信任）。
-3. `dango backfill` 会一起导入 `~/.codex/sessions` 的历史。每个工具各有自己的分界点（第一个实时事件），所以重复跑不会重复计。信任 hook 之后再跑一次，可以补上中间那段。
+什么都不用装，也不用在 Codex 里信任任何东西：守护进程每秒读一次 Codex 自己写的会话日志（`~/.codex/sessions/年/月/日/*.jsonl`，只读最近 36 小时动过的文件，只读新写的整行），和回填用同一个读法，所以同一件事不管是实时读到的还是 `dango backfill` 导入的，事件 id 都一样，只算一次。日志读完即丢，只留职业 id 和分钟数。
+
+以前装过的 `~/.codex/hooks.json` 可以删掉：`dango hook --codex` 现在什么都不做。
 
 Codex 的每一步按和 Claude Code 一样的规则归给职业：命令（`Bash` / unified exec）、`apply_patch`（按文件拆开）、MCP 工具、子 agent。
 

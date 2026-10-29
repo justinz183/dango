@@ -21,7 +21,7 @@
 
 ## 2026-10-29 Codex 接入（用户要求，分开显示 Claude Code 和 Codex）
 
-0000. **实现**：Codex hooks（`~/.codex/hooks.json`，`shadowcorp hook --codex`）把 Codex 的字段换成 Claude Code 的形状后走同一套规则；回填读 `~/.codex/sessions` 里的 `item_completed` 记录。每个工具单独的分界点：Claude Code 仍用 `live_since`，Codex 用 `live_since:codex`。新增计数器 `usd:<工具>`、`minutes:<工具>`。本机：Codex 108 个回合 ≈ $3,649，Claude Code ≈ $7,933（2026-10-29）。**待定 / 未验证**：
+0000. **实现**：~~Codex hooks（`~/.codex/hooks.json`，`shadowcorp hook --codex`）~~（2026-10-29 起不用了：Codex 要求用户手动信任钩子，大多数人不会去点。守护进程改为每秒跟读 `~/.codex/sessions` 的 rollout，和回填共用一个读法、事件 id 相同，见 codex_tail.rs）；回填读 `~/.codex/sessions` 里的 `item_completed` 记录。每个工具单独的分界点：Claude Code 仍用 `live_since`，Codex 用 `live_since:codex`。新增计数器 `usd:<工具>`、`minutes:<工具>`。本机：Codex 108 个回合 ≈ $3,649，Claude Code ≈ $7,933（2026-10-29）。**待定 / 未验证**：
    - Codex 的电脑操作（`cua_repl` / `js`，本机历史 1,137 次点击、滚动、截图）目前不计钱。要不要按"资料录入"或"运维"每次计 1 分钟，需要用户定。
    - Codex 的"code mode"把工具调用包在脚本里执行，嵌套的调用会不会触发 hook 没有文档说明，需要信任 hook 后实测；回填不受影响。
    - Codex 内置网页搜索不触发 PostToolUse（官方文档），实时漏记，回填能补。
