@@ -207,28 +207,39 @@ pub fn output(conn: &Connection, tz: Tz, now_ms: i64) -> Output {
 }
 
 /// Agents at work right now: open turns with activity in the last 20
-/// minutes, how many subagents they have running, and the last live event.
+/// minutes, how many subagents they have running, and the last event. Events
+/// read from the tools' own logs count (a Mac without Dango's hooks has no
+/// other kind); an import only brings past ones, so the latest is still the
+/// last time anything happened.
 pub fn activity(conn: &Connection, now_ms: i64) -> Result<(i64, i64, Option<i64>)> {
     const WORKING_WINDOW_MS: i64 = 20 * 60_000;
     let mut working = 0;
     let mut subagents = 0;
     let mut st = conn.prepare(
         "SELECT json_extract(t.agg, '$.last_activity'), json_extract(t.agg, '$.agent_calls'),
-                json_extract(t.agg, '$.subagent_stops')
+                json_extract(t.agg, '$.subagent_stops'), json_extract(t.agg, '$.subagent_starts')
          FROM sessions s JOIN turns t ON t.id = json_extract(s.state, '$.open_turn') WHERE t.ended_at IS NULL",
     )?;
     let rows = st.query_map([], |r| {
-        Ok((r.get::<_, Option<i64>>(0)?.unwrap_or(0), r.get::<_, Option<i64>>(1)?.unwrap_or(0), r.get::<_, Option<i64>>(2)?.unwrap_or(0)))
+        let n = |i: usize| -> rusqlite::Result<i64> { Ok(r.get::<_, Option<i64>>(i)?.unwrap_or(0)) };
+        Ok((n(0)?, n(1)?, n(2)?, n(3)?))
     })?;
-    for (last, calls, stops) in rows.flatten() {
+    for (last, calls, stops, starts) in rows.flatten() {
         if now_ms - last < WORKING_WINDOW_MS {
             working += 1;
-            subagents += (calls - stops).max(0);
+            subagents += running_helpers(calls, starts, stops);
         }
     }
     let last_event: Option<i64> =
-        conn.query_row("SELECT MAX(ts) FROM events WHERE source != 'backfill'", [], |r| r.get(0)).unwrap_or(None);
+        conn.query_row("SELECT MAX(ts) FROM events WHERE kind != 'usage'", [], |r| r.get(0)).unwrap_or(None);
     Ok((working, subagents, last_event))
+}
+
+/// Subagents at work in a turn: started and not yet finished, from a
+/// transcript (which shows both); with only the hooks (no starts), the
+/// Task calls not yet matched by a stop.
+pub fn running_helpers(calls: i64, starts: i64, stops: i64) -> i64 {
+    if starts > 0 { (starts - stops).max(0) } else { (calls - stops).max(0) }
 }
 
 /// One status line: the total, today's and this week's value, and the

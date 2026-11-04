@@ -22,6 +22,13 @@ use crate::paths::{short_hash, Paths};
 /// A session whose last entry is this recent may still be running; it gets
 /// no session_end so live hooks can carry on with it.
 const OPEN_SESSION_MS: i64 = 30 * 60_000;
+/// A Claude Code turn still open this long after its last entry is over (an
+/// interruption writes no end); one with a tool still running gets
+/// OPEN_SESSION_MS.
+const OPEN_TURN_MS: i64 = 10 * 60_000;
+/// After Claude ends a turn (`end_turn`), how long to wait for it to carry
+/// on (a hook asking for more) before the turn counts as done.
+const END_GRACE_MS: i64 = 20_000;
 
 #[derive(Debug, Default)]
 pub struct Report {
@@ -89,88 +96,148 @@ pub fn transcript_files(claude_dir: &Path) -> Vec<(PathBuf, Option<String>)> {
     out
 }
 
-fn bf_event(id_seed: &str, ts: i64, kind: Kind, session: &str) -> Event {
+pub(crate) fn bf_event(id_seed: &str, ts: i64, kind: Kind, session: &str) -> Event {
     let mut ev = Event::new(format!("bf_{}", short_hash(id_seed)), ts, Source::Backfill, kind);
     ev.session_id = Some(session.to_string());
     ev.payload.origin = Some(Source::ClaudeCode);
     ev
 }
 
-/// Events for one transcript file. `parent` is set for subagent files, whose
-/// tool calls count toward the parent session's open turn.
-pub fn file_events(path: &Path, parent: Option<&str>, cutoff: i64, paths: &Paths) -> Vec<Event> {
-    let Ok(f) = fs::File::open(path) else { return Vec::new() };
-    let env = CaptureEnv { paths, now_ms: 0, nonce: String::new(), git_lookup: false };
-    let mut out = Vec::new();
-    let mut session: Option<String> = parent.map(str::to_string);
-    let mut cwd = String::new();
-    let (mut first_ts, mut last_ts) = (None::<i64>, 0i64);
-    let mut pending: HashMap<String, (String, Value)> = HashMap::new();
-    let mut turn: Option<(String, i64, String)> = None; // (turn id, last assistant ts, seed)
-    let mut last_prompt: Option<(String, u32)> = None;
+/// One Claude Code transcript read line by line: whole for backfill
+/// (`file_events`), or as Claude Code writes it (claude_tail.rs). `parent`
+/// is set for subagent files, whose tool calls count toward the parent
+/// session's open turn.
+#[derive(Default)]
+pub struct Transcript {
+    parent: Option<String>,
+    session: Option<String>,
+    cwd: String,
+    first_ts: Option<i64>,
+    last_ts: i64,
+    pending: HashMap<String, (String, Value)>,
+    /// The open turn: (turn id, last assistant ts, seed).
+    turn: Option<(String, i64, String)>,
+    /// Claude ended the open turn: `end_turn` with no tool calls.
+    turn_done: bool,
+    last_prompt: Option<(String, u32)>,
+    ended: bool,
+}
 
-    let close = |turn: &mut Option<(String, i64, String)>, out: &mut Vec<Event>, session: &str| {
-        if let Some((tid, at, seed)) = turn.take() {
-            let mut ev = bf_event(&format!("{seed}\0end"), at, Kind::TurnEnd, session);
+impl Transcript {
+    pub fn new(parent: Option<&str>) -> Transcript {
+        Transcript { parent: parent.map(str::to_string), session: parent.map(str::to_string), ..Default::default() }
+    }
+
+    /// The session this file belongs to, once a line has said.
+    pub fn session(&self) -> Option<&str> {
+        self.session.as_deref()
+    }
+
+    /// When the last line was written.
+    pub fn last_ts(&self) -> i64 {
+        self.last_ts
+    }
+
+    /// A turn is open (a main transcript only).
+    pub fn turn_open(&self) -> bool {
+        self.parent.is_none() && self.turn.is_some()
+    }
+
+    /// Ends the open turn now: Claude Code says the session is idle.
+    pub fn end_turn(&mut self) -> Vec<Event> {
+        let mut out = Vec::new();
+        if self.turn_open() {
+            self.close(&mut out);
+        }
+        out
+    }
+
+    fn close(&mut self, out: &mut Vec<Event>) {
+        if let (Some((tid, at, seed)), Some(sid)) = (self.turn.take(), self.session.clone()) {
+            let mut ev = bf_event(&format!("{seed}\0end"), at, Kind::TurnEnd, &sid);
             ev.turn_id = Some(tid);
             out.push(ev);
         }
-    };
+        self.turn_done = false;
+    }
 
-    for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
-        let Ok(e) = serde_json::from_str::<Value>(&line) else { continue };
+    /// The events in one line of the file, none at or after `cutoff`.
+    pub fn line(&mut self, line: &str, cutoff: i64, paths: &Paths) -> Vec<Event> {
+        let mut out = Vec::new();
+        let Ok(e) = serde_json::from_str::<Value>(line) else { return out };
         let ty = e.get("type").and_then(Value::as_str).unwrap_or("");
         if ty != "user" && ty != "assistant" {
-            continue;
+            return out;
         }
-        let Some(ts) = ts_of(&e) else { continue };
+        let Some(ts) = ts_of(&e) else { return out };
         if ts >= cutoff {
-            continue;
+            return out;
         }
-        if session.is_none() {
-            session = e.get("sessionId").and_then(Value::as_str).map(str::to_string);
+        if self.session.is_none() {
+            self.session = e.get("sessionId").and_then(Value::as_str).map(str::to_string);
         }
-        let Some(sid) = session.clone() else { continue };
-        if cwd.is_empty() {
-            cwd = e.get("cwd").and_then(Value::as_str).unwrap_or("").to_string();
+        let Some(sid) = self.session.clone() else { return out };
+        if self.cwd.is_empty() {
+            self.cwd = e.get("cwd").and_then(Value::as_str).unwrap_or("").to_string();
         }
-        if first_ts.is_none() && parent.is_none() {
-            first_ts = Some(ts);
+        if self.first_ts.is_none() && self.parent.is_none() {
+            self.first_ts = Some(ts);
             let mut ev = bf_event(&format!("{sid}\0start"), ts, Kind::SessionStart, &sid);
             ev.payload.session_source = Some("startup".into());
             out.push(ev);
         }
-        last_ts = ts;
+        self.last_ts = ts;
         let uuid = e.get("uuid").and_then(Value::as_str).unwrap_or("").to_string();
         let blocks = e.get("message").and_then(|m| m.get("content")).and_then(Value::as_array).cloned().unwrap_or_default();
 
         if ty == "assistant" {
+            let mut calls = false;
             for b in &blocks {
                 if b.get("type").and_then(Value::as_str) == Some("tool_use") {
+                    calls = true;
                     let id = b.get("id").and_then(Value::as_str).unwrap_or("").to_string();
                     let name = b.get("name").and_then(Value::as_str).unwrap_or("").to_string();
-                    pending.insert(id, (name, b.get("input").cloned().unwrap_or(Value::Null)));
+                    // A subagent sets off: a helper at work until its call returns.
+                    if is_subagent(&name) && self.parent.is_none() {
+                        let mut ev = bf_event(&format!("{sid}\0{id}\0substart"), ts, Kind::SubagentStart, &sid);
+                        ev.turn_id = self.turn.as_ref().map(|t| t.0.clone());
+                        out.push(ev);
+                    }
+                    self.pending.insert(id, (name, b.get("input").cloned().unwrap_or(Value::Null)));
                 }
             }
-            if let Some(t) = turn.as_mut() {
+            if let Some(t) = self.turn.as_mut() {
                 t.1 = ts;
             }
-            continue;
+            let stop = e.get("message").and_then(|m| m.get("stop_reason")).and_then(Value::as_str);
+            if calls {
+                self.turn_done = false;
+            } else if stop == Some("end_turn") {
+                self.turn_done = true;
+            }
+            return out;
         }
 
         // user entry: tool results first
+        let env = CaptureEnv { paths, now_ms: 0, nonce: String::new(), git_lookup: false };
         let mut had_result = false;
         for b in &blocks {
             if b.get("type").and_then(Value::as_str) != Some("tool_result") {
                 continue;
             }
             had_result = true;
+            self.turn_done = false;
             let id = b.get("tool_use_id").and_then(Value::as_str).unwrap_or("");
-            let Some((name, input)) = pending.remove(id) else { continue };
+            let Some((name, input)) = self.pending.remove(id) else { continue };
+            if is_subagent(&name) && self.parent.is_none() {
+                let mut ev = bf_event(&format!("{sid}\0{id}\0substop"), ts, Kind::SubagentStop, &sid);
+                ev.turn_id = self.turn.as_ref().map(|t| t.0.clone());
+                out.push(ev);
+            }
             let failed = b.get("is_error").and_then(Value::as_bool).unwrap_or(false);
             let hook = json!({
                 "hook_event_name": if failed { "PostToolUseFailure" } else { "PostToolUse" },
-                "session_id": sid, "cwd": cwd, "tool_name": name, "tool_input": input,
+                "session_id": sid, "cwd": self.cwd, "tool_name": name, "tool_input": input,
                 "tool_response": e.get("toolUseResult").cloned().unwrap_or(Value::Null),
             });
             if let Some(mut ev) = from_claude_hook(&hook, b"", &env) {
@@ -179,22 +246,22 @@ pub fn file_events(path: &Path, parent: Option<&str>, cutoff: i64, paths: &Paths
                 ev.ts = fresh.ts;
                 ev.source = Source::Backfill;
                 ev.payload.origin = Some(Source::ClaudeCode);
-                ev.turn_id = if parent.is_none() { turn.as_ref().map(|t| t.0.clone()) } else { None };
+                ev.turn_id = if self.parent.is_none() { self.turn.as_ref().map(|t| t.0.clone()) } else { None };
                 out.push(ev);
             }
         }
-        if had_result || parent.is_some() || e.get("isSidechain").and_then(Value::as_bool) == Some(true) {
-            continue;
+        if had_result || self.parent.is_some() || e.get("isSidechain").and_then(Value::as_bool) == Some(true) {
+            return out;
         }
-        let Some(text) = prompt_text(&e) else { continue };
-        close(&mut turn, &mut out, &sid);
+        let Some(text) = prompt_text(&e) else { return out };
+        self.close(&mut out);
         let tid = e.get("promptId").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| format!("bf_{uuid}"));
         let fp = text.trim().to_string();
-        let repeat = match &last_prompt {
+        let repeat = match &self.last_prompt {
             Some((p, n)) if *p == fp => n + 1,
             _ => 1,
         };
-        last_prompt = Some((fp, repeat));
+        self.last_prompt = Some((fp, repeat));
         let seed = format!("{sid}\0{uuid}");
         let mut ev = bf_event(&format!("{seed}\0prompt"), ts, Kind::Prompt, &sid);
         ev.turn_id = Some(tid.clone());
@@ -206,18 +273,52 @@ pub fn file_events(path: &Path, parent: Option<&str>, cutoff: i64, paths: &Paths
             topic: occupation::topic(&text).map(str::to_string),
             ..Default::default()
         };
-        ev.cwd_hash = (!cwd.is_empty()).then(|| short_hash(&cwd));
+        ev.cwd_hash = (!self.cwd.is_empty()).then(|| short_hash(&self.cwd));
         out.push(ev);
-        turn = Some((tid, ts, seed));
+        self.turn = Some((tid, ts, seed));
+        out
     }
-    if let Some(sid) = session.filter(|_| parent.is_none()) {
-        close(&mut turn, &mut out, &sid);
-        if first_ts.is_some() && cutoff - last_ts > OPEN_SESSION_MS {
-            let mut ev = bf_event(&format!("{sid}\0end"), last_ts, Kind::SessionEnd, &sid);
+
+    /// What closes because nothing more was written before `now`: the open
+    /// turn once Claude ended it and END_GRACE_MS passed (or the file went
+    /// quiet: OPEN_TURN_MS, OPEN_SESSION_MS with a tool still running), and
+    /// the session after OPEN_SESSION_MS. A session still in use keeps both
+    /// open, for the follower or the hooks to carry on.
+    pub fn finish(&mut self, now: i64) -> Vec<Event> {
+        let mut out = Vec::new();
+        if self.parent.is_some() || self.session.is_none() {
+            return out;
+        }
+        let quiet = now.saturating_sub(self.last_ts);
+        let over = if self.pending.is_empty() { (self.turn_done && quiet >= END_GRACE_MS) || quiet > OPEN_TURN_MS } else { quiet > OPEN_SESSION_MS };
+        if self.turn.is_some() && over {
+            self.close(&mut out);
+        }
+        if !self.ended && self.first_ts.is_some() && quiet > OPEN_SESSION_MS {
+            self.ended = true;
+            let sid = self.session.clone().unwrap_or_default();
+            let mut ev = bf_event(&format!("{sid}\0end"), self.last_ts, Kind::SessionEnd, &sid);
             ev.payload.reason = Some("other".into());
             out.push(ev);
         }
+        out
     }
+}
+
+/// Claude Code's tools that run a subagent.
+fn is_subagent(tool: &str) -> bool {
+    matches!(tool, "Task" | "Agent")
+}
+
+/// Events for one transcript file, read whole.
+pub fn file_events(path: &Path, parent: Option<&str>, cutoff: i64, paths: &Paths) -> Vec<Event> {
+    let Ok(f) = fs::File::open(path) else { return Vec::new() };
+    let mut t = Transcript::new(parent);
+    let mut out = Vec::new();
+    for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
+        out.extend(t.line(&line, cutoff, paths));
+    }
+    out.extend(t.finish(cutoff));
     out
 }
 

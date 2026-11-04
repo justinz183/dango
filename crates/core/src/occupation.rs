@@ -23,8 +23,8 @@ pub const CONSULT: (&str, f64) = ("research", 5.0);
 /// pick (2026-10-29), at the fast end of what writers report.
 pub const WORDS_PER_HOUR: f64 = 2000.0;
 
-/// Minutes for `words` of prose, at least 3. Writing is a researcher's
-/// work: there is no writer (user, 2026-10-29).
+/// Minutes for `words` of prose, at least 3: a writer's, or a product
+/// manager's when the file is a spec or a plan.
 pub fn prose_minutes(words: u32) -> f64 {
     (words as f64 / WORDS_PER_HOUR * 60.0).max(3.0)
 }
@@ -197,7 +197,7 @@ pub fn topic_candidates(prompt: &str) -> Vec<&'static str> {
 }
 
 /// Every id the attribution rules can return.
-const REQUIRED: [&str; 10] = ["swe", "web", "qa", "ops", "data", "fin", "research", "designer", "video", "entry"];
+const REQUIRED: [&str; 12] = ["swe", "web", "qa", "ops", "data", "fin", "research", "writer", "pm", "designer", "video", "entry"];
 
 fn ext(path: &str) -> String {
     let name = path.rsplit(['/', '\\']).next().unwrap_or("");
@@ -233,7 +233,10 @@ pub fn for_edit(path: &str, lines: u32, words: u32) -> (&'static str, f64) {
     // A leading "/" so relative paths match the directory patterns too.
     let low = format!("/{}", path.to_lowercase());
     match e.as_str() {
-        "md" | "mdx" | "txt" | "rst" | "docx" | "tex" | "adoc" => ("research", prose_minutes(words)),
+        "md" | "mdx" | "txt" | "rst" | "docx" | "tex" | "adoc" => {
+            let plan = ["prd", "roadmap", "需求", "规划", "排期"].iter().any(|k| low.rsplit('/').next().is_some_and(|n| n.contains(k)));
+            (if plan { "pm" } else { "writer" }, prose_minutes(words))
+        }
         "toml" | "yaml" | "yml" | "json" | "plist" | "ini" | "env" | "conf" | "lock" => ("ops", 5.0),
         "svg" | "png" | "jpg" | "jpeg" | "webp" | "gif" | "psd" | "ai" | "fig" => ("designer", 30.0),
         _ => {
@@ -367,7 +370,7 @@ mod tests {
     #[test]
     fn table_is_complete_and_sourced() {
         let t = Table::builtin();
-        assert_eq!(t.occupation.len(), 21, "one representative per field, and the programmer's three step roles");
+        assert_eq!(t.occupation.len(), 23, "one representative per field, the programmer's three step roles, writer and product manager");
         assert!(t.occupation.iter().all(|o| !o.scene.is_empty() && o.consult > 0.0 && (!o.strong.is_empty() || STEP_ONLY.contains(&o.id.as_str()))));
         assert_eq!(t.scene("doctor"), "clinic");
         // Families: every occupation in one, every default a member of its
@@ -410,8 +413,9 @@ mod tests {
         assert_eq!(for_edit("tests/test_api.py", 10, 0).0, "qa");
         assert_eq!(for_edit("config.toml", 3, 0), ("ops", 5.0));
         assert_eq!(for_edit("poster.svg", 300, 0), ("designer", 30.0));
-        assert_eq!(for_edit("notes.md", 40, 1000), ("research", 30.0), "writing is a researcher's work");
-        assert_eq!(for_edit("notes.md", 1, 10), ("research", 3.0), "a floor for tiny edits");
+        assert_eq!(for_edit("notes.md", 40, 1000), ("writer", 30.0));
+        assert_eq!(for_edit("notes.md", 1, 10), ("writer", 3.0), "a floor for tiny edits");
+        assert_eq!(for_edit("docs/PRD-v2.md", 40, 1000), ("pm", 30.0), "a spec is the product manager's");
         let (_, m) = for_edit("a.rs", 252, 0);
         assert!((m - (2.5 + 0.45 * 252f64.powf(0.8))).abs() < 1e-9);
     }
@@ -454,7 +458,8 @@ mod tests {
         assert_eq!(topic("帮我看看英伟达的财报"), Some("fin"));
         assert_eq!(topic("Compare NVDA earnings"), Some("fin"));
         assert_eq!(topic("restock the fridge list"), None, "whole words only");
-        assert_eq!(topic("把这段翻译成英文"), Some("research"), "writing is the researcher's talk");
+        assert_eq!(topic("把这段翻译成英文"), Some("writer"));
+        assert_eq!(topic("帮我写一份 PRD，排一下下个版本的需求优先级"), Some("pm"));
         assert_eq!(topic("最近老是头疼，要不要去医院看看"), Some("doctor"));
         assert_eq!(topic("帮我排一个深蹲和硬拉的训练计划"), Some("trainer"));
         assert_eq!(topic("番茄炒蛋怎么做才嫩"), Some("chef"));
@@ -541,8 +546,8 @@ mod tests {
             ("个人所得税怎么报税，有哪些专项扣除", "fin"), ("公司这笔费用怎么做账，发票怎么开", "fin"),
             ("美联储加息对房贷利率有什么影响", "fin"), ("最近 CPI 数据说明通胀怎么样", "fin"),
             // writing
-            ("帮我写一篇公众号文章，讲远程办公", "research"), ("这段文案润色一下，更有感染力", "research"), ("帮我写一封辞职信", "research"),
-            ("把这段翻译成英文", "research"), ("这封邮件帮我翻成日语", "research"),
+            ("帮我写一篇公众号文章，讲远程办公", "writer"), ("这段文案润色一下，更有感染力", "writer"), ("帮我写一封辞职信", "writer"),
+            ("把这段翻译成英文", "writer"), ("这封邮件帮我翻成日语", "writer"),
             // design and images
             ("帮我设计一张海报，主题是周年庆", "designer"), ("logo 配色用什么好", "designer"),
             ("人像摄影光圈开多大，镜头怎么选", "designer"), ("客厅装修选什么地板，吊顶要不要做", "designer"),
@@ -573,7 +578,7 @@ mod tests {
             ("车子启动有异响，刹车也软，去 4s店 要多少钱", "research"),
             // law and business
             ("合同条款写了违约金，能起诉吗", "lawyer"), ("劳动仲裁要准备什么材料", "lawyer"),
-            ("团队绩效怎么定目标，okr 怎么拆", "research"), ("帮我写需求文档，这个功能的用户故事", "research"),
+            ("团队绩效怎么定目标，okr 怎么拆", "research"), ("帮我写需求文档，这个功能的用户故事", "pm"),
             ("招聘后端工程师的 jd 怎么写，面试问什么", "research"), ("客户嫌报价高，怎么谈判成交", "research"),
             // tech
             ("写个 python 脚本处理 csv", "swe"), ("这个页面的 css 布局怎么居中", "swe"), ("给这个函数写单元测试", "swe"),

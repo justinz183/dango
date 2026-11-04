@@ -12,3 +12,4 @@ toml.workspace = true
 chrono.workspace = true
 rusqlite.workspace = true
 sha2.workspace = true
+libc = "0.2"

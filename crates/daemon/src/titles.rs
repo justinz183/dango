@@ -1,8 +1,10 @@
 //! Session titles and project names (DESIGN.md §4), read from the Claude
 //! Code transcript of a session: the title Claude Code gave it (custom
-//! over AI-generated) and the folder name of its working directory. Cached
-//! in session_meta. Local only: never uploaded, off share cards unless the
-//! user asks for names.
+//! over AI-generated) and the folder name of its working directory. Codex
+//! sessions get the thread name Codex keeps in ~/.codex/session_index.jsonl
+//! and the folder from their rollout (~/.codex sits next to ~/.claude).
+//! Cached in session_meta. Local only: never uploaded, off share cards
+//! unless the user asks for names.
 
 use std::collections::HashMap;
 use std::fs;
@@ -76,22 +78,89 @@ pub fn read(path: &Path) -> Meta {
     m
 }
 
+/// A Codex session's title (the newest thread name Codex gave it) and
+/// project (the folder most of its turns ran in, never the home folder).
+/// Only the index and the rollout's context lines are parsed.
+pub fn codex(codex_dir: &Path, sid: &str) -> Meta {
+    let mut m = Meta::default();
+    if sid.is_empty() || sid.contains(['/', '\\']) {
+        return m;
+    }
+    if let Ok(f) = fs::File::open(codex_dir.join("session_index.jsonl")) {
+        for line in BufReader::new(f).lines().map_while(|l| l.ok()).filter(|l| l.contains(sid)) {
+            if let Ok(v) = serde_json::from_str::<Value>(&line) {
+                if v.get("id").and_then(Value::as_str) == Some(sid) {
+                    if let Some(t) = v.get("thread_name").and_then(Value::as_str).and_then(|s| clean(s, TITLE_MAX)) {
+                        m.title = Some(t);
+                    }
+                }
+            }
+        }
+    }
+    let Some(path) = codex_rollout(codex_dir, sid) else { return m };
+    let Ok(f) = fs::File::open(path) else { return m };
+    let home = std::env::var("HOME").ok().map(PathBuf::from);
+    let mut cwds: HashMap<String, usize> = HashMap::new();
+    for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
+        if !(line.contains("\"type\":\"turn_context\"") || line.contains("\"type\":\"session_meta\"")) {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        if !matches!(v.get("type").and_then(Value::as_str), Some("turn_context") | Some("session_meta")) {
+            continue;
+        }
+        if let Some(cwd) = v["payload"].get("cwd").and_then(Value::as_str) {
+            if home.as_deref() != Some(Path::new(cwd)) {
+                *cwds.entry(cwd.to_string()).or_default() += 1;
+            }
+        }
+    }
+    m.project = cwds
+        .into_iter()
+        .max_by_key(|(c, n)| (*n, std::cmp::Reverse(c.clone())))
+        .and_then(|(c, _)| Path::new(&c).file_name().and_then(|n| n.to_str()).and_then(|n| clean(n, PROJECT_MAX)));
+    m
+}
+
+/// The rollout file of a Codex session: sessions/YYYY/MM/DD/rollout-…-<id>.jsonl.
+fn codex_rollout(codex_dir: &Path, sid: &str) -> Option<PathBuf> {
+    let tail = format!("{sid}.jsonl");
+    let list = |p: &Path| -> Vec<PathBuf> { fs::read_dir(p).map(|d| d.flatten().map(|e| e.path()).collect()).unwrap_or_default() };
+    for y in list(&codex_dir.join("sessions")) {
+        for mo in list(&y) {
+            for d in list(&mo) {
+                if let Some(f) = list(&d).into_iter().find(|f| f.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.ends_with(&tail))) {
+                    return Some(f);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// The cached meta for a session, looking the transcript up when nothing
 /// is cached yet or an open session still has no title.
 pub fn cached(conn: &Connection, claude_dir: &Path, sid: &str, ended: bool) -> Result<Meta> {
-    let row: Option<(Option<String>, Option<String>)> = conn
-        .query_row("SELECT project, title FROM session_meta WHERE session_id = ?1", [sid], |r| Ok((r.get(0)?, r.get(1)?)))
+    let now = chrono::Utc::now().timestamp_millis();
+    let row: Option<(Option<String>, Option<String>, i64)> = conn
+        .query_row("SELECT project, title, looked_up_at FROM session_meta WHERE session_id = ?1", [sid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
         .optional()?;
-    if let Some((project, title)) = row {
-        if title.is_some() || ended {
+    if let Some((project, title, at)) = row {
+        // A finished session with nothing found is looked at again once a
+        // day: its tool may name it later (Codex renames threads), or the
+        // lookup may have learned a new place to look.
+        if title.is_some() || (ended && (project.is_some() || now - at < 24 * 3600 * 1000)) {
             return Ok(Meta { title, project });
         }
     }
-    let m = transcript_for(claude_dir, sid).map(|p| read(&p)).unwrap_or_default();
+    let m = match transcript_for(claude_dir, sid) {
+        Some(p) => read(&p),
+        None => claude_dir.parent().map(|home| codex(&home.join(".codex"), sid)).unwrap_or_default(),
+    };
     conn.execute(
         "INSERT INTO session_meta (session_id, project, title, looked_up_at) VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(session_id) DO UPDATE SET project = excluded.project, title = excluded.title, looked_up_at = excluded.looked_up_at",
-        params![sid, m.project, m.title, chrono::Utc::now().timestamp_millis()],
+        params![sid, m.project, m.title, now],
     )?;
     Ok(m)
 }
@@ -121,5 +190,34 @@ mod tests {
         assert_eq!(read(&p), Meta { title: Some("登录重构".into()), project: Some("app".into()) });
         assert!(transcript_for(&dir, "../abc").is_none());
         assert!(transcript_for(&dir, "nope").is_none());
+    }
+
+    #[test]
+    fn codex_sessions_get_their_thread_name_and_folder() {
+        let dir = std::env::temp_dir().join(format!("sc-codex-titles-{}", std::process::id()));
+        let day = dir.join("sessions/2026/10/31");
+        fs::create_dir_all(&day).unwrap();
+        fs::write(
+            dir.join("session_index.jsonl"),
+            concat!(
+                "{\"id\":\"s1\",\"thread_name\":\"Old name\",\"updated_at\":\"2026-10-31T01:00:00Z\"}\n",
+                "{\"id\":\"other\",\"thread_name\":\"Not this\",\"updated_at\":\"2026-10-31T01:00:00Z\"}\n",
+                "{\"id\":\"s1\",\"thread_name\":\"修复 Codex 计数\",\"updated_at\":\"2026-10-31T02:00:00Z\"}\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            day.join("rollout-2026-10-31T01-46-15-s1.jsonl"),
+            concat!(
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"s1\",\"cwd\":\"/Users/me/tmp\"}}\n",
+                "{\"type\":\"response_item\",\"payload\":{\"text\":\"\\\"type\\\":\\\"turn_context\\\" cwd /Users/me/secret\"}}\n",
+                "{\"type\":\"turn_context\",\"payload\":{\"cwd\":\"/Users/me/dango\"}}\n",
+                "{\"type\":\"turn_context\",\"payload\":{\"cwd\":\"/Users/me/dango\"}}\n",
+            ),
+        )
+        .unwrap();
+        assert_eq!(codex(&dir, "s1"), Meta { title: Some("修复 Codex 计数".into()), project: Some("dango".into()) });
+        assert_eq!(codex(&dir, "nope"), Meta::default());
+        assert_eq!(codex(&dir, "../s1"), Meta::default());
     }
 }

@@ -386,13 +386,13 @@ mod tests {
         let doc = "第一段文字。\nSecond paragraph here.";
         let p = e(json!({ "hook_event_name": "PostToolUse", "tool_name": "Write", "cwd": "/w",
                           "tool_input": { "file_path": "/w/notes.md", "content": doc }, "tool_response": { "type": "create", "structuredPatch": [] } }));
-        assert_eq!((p.occupation.as_deref(), p.words, p.minutes), (Some("research"), Some(8), Some(3.0)));
+        assert_eq!((p.occupation.as_deref(), p.words, p.minutes), (Some("writer"), Some(8), Some(3.0)));
         let line = serde_json::to_string(&p).unwrap();
         assert!(!line.contains("第一段") && !line.contains("paragraph"), "words counted, never kept");
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "fx", "prompt": "帮我分析一下这只股票的财报" }));
         assert_eq!(p.topic.as_deref(), Some("fin"));
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "tr", "prompt": "Translate this into Chinese" }));
-        assert_eq!(p.topic.as_deref(), Some("research"));
+        assert_eq!(p.topic.as_deref(), Some("writer"));
         let p = e(json!({ "hook_event_name": "UserPromptSubmit", "session_id": "hp", "prompt": "SECRET 最近血压有点高，要不要吃药" }));
         assert_eq!(p.topic.as_deref(), Some("doctor"));
         assert!(!serde_json::to_string(&p).unwrap().contains("SECRET"), "only the topic id is kept");

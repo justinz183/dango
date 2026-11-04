@@ -14,6 +14,7 @@
 
 import AppKit
 import Foundation
+import UserNotifications
 
 signal(SIGHUP, SIG_IGN)
 
@@ -27,17 +28,46 @@ let home: String = {
 let dataURL = URL(fileURLWithPath: home + "/widget.json")
 let agentLabel = "com.dango.widget"
 let agentPlist = NSHomeDirectory() + "/Library/LaunchAgents/\(agentLabel).plist"
-let dashboardWidth: CGFloat = 420
+/// The dashboard's width: the v3 themes' panel is 440.
+var dashboardWidth: CGFloat { theme.isV3 ? 440 : 420 }
 /// The interface language ("zh" / "en"): from widget.json, or from a card's
 /// report while it is drawn; remembered for the next launch.
 var lang = UserDefaults.standard.string(forKey: "lang") ?? "zh"
 /// The Chinese or the English text.
 func L(_ zh: String, _ en: String) -> String { lang == "en" ? en : zh }
 
-/// The dango command, wherever it is installed (the old name still works).
+/// The dango the app carries (a packaged install, apps/widget/package.sh).
+/// In Contents/Helpers: next to the app's own "Dango" in Contents/MacOS it
+/// would be the same file, the disk not telling the two names apart.
+let bundledCLI = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/dango").path
+
+/// The dango command: the one the app carries, else wherever a developer
+/// installed it (the old name still works).
 func cliPath() -> String? {
-    [NSHomeDirectory() + "/.local/bin/dango", "/usr/local/bin/dango", "/opt/homebrew/bin/dango", NSHomeDirectory() + "/.local/bin/shadowcorp"]
+    [bundledCLI, NSHomeDirectory() + "/.local/bin/dango", "/usr/local/bin/dango", "/opt/homebrew/bin/dango", NSHomeDirectory() + "/.local/bin/shadowcorp"]
         .first { FileManager.default.isExecutableFile(atPath: $0) }
+}
+
+/// The daemon's LaunchAgent (it records Claude Code and Codex in the
+/// background, and imports the history on its first start).
+let daemonLabel = "com.dango.daemon"
+let daemonPlist = NSHomeDirectory() + "/Library/LaunchAgents/\(daemonLabel).plist"
+
+/// The LaunchAgent a packaged install writes: the dango it carries, run at
+/// login, restarted if it dies, logging next to its data.
+func daemonAgent(cli: String) -> Data? {
+    let log = home + "/daemon.log"
+    let plist: [String: Any] = [
+        "Label": daemonLabel,
+        "ProgramArguments": [cli, "daemon"],
+        "RunAtLoad": true,
+        "KeepAlive": ["SuccessfulExit": false],
+        "ThrottleInterval": 10,
+        "ProcessType": "Background",
+        "StandardOutPath": log,
+        "StandardErrorPath": log,
+    ]
+    return try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
 }
 let originKey = "petOrigin"
 
@@ -62,6 +92,10 @@ struct Occupant {
     var usd = 0.0
     /// Last worked at, unix ms.
     var since = 0.0
+    /// An event-driven state from the daemon (waiting, fuming, happy) or a
+    /// snapshot (--statuses), and when it began; else officeStatus decides.
+    var status: String? = nil
+    var statusSince = 0.0
 }
 
 /// A hash that is the same on every launch (Swift's hashValue is not).
@@ -212,7 +246,7 @@ func loadModel() -> Model? {
     }
     m.office = list("office").map {
         Occupant(job: job($0), working: $0["working"] as? Bool ?? false, helpers: $0["helpers"] as? Int ?? 0, usd: $0["usd"] as? Double ?? 0,
-                 since: $0["since"] as? Double ?? 0)
+                 since: $0["since"] as? Double ?? 0, status: $0["status"] as? String, statusSince: $0["status_since"] as? Double ?? 0)
     }
     m.daysTogether = ch["days_together"] as? Int ?? 0
     if let jb = act["job"] as? [String: Any] { m.job = job(jb) }
@@ -239,15 +273,17 @@ let intFormatter: NumberFormatter = {
 }()
 
 func fmtUSD(_ x: Double) -> String {
+    // A counter's float dust (−0.0, 1e-13) is no money: "$0.0", never "$-0.0".
+    let x = abs(x) < 0.05 ? 0 : x
     if abs(x) < 10 { return String(format: "$%.1f", x) }
     return "$" + (intFormatter.string(from: NSNumber(value: x.rounded())) ?? "0")
 }
 
-/// "25 分钟" under an hour, "3.4h" under a hundred, "123h" above.
+/// "25 分钟" under an hour, "3.4h" / "3.4 小时" under a hundred, "123h" above.
 func fmtHours(_ h: Double) -> String {
     if h < 1 { return "\(Int((h * 60).rounded())) " + L("分钟", "min") }
-    if h < 100 { return String(format: "%.1fh", h) }
-    return fmtInt(Int(h.rounded())) + "h"
+    if h < 100 { return String(format: "%.1f", h) + L(" 小时", "h") }
+    return fmtInt(Int(h.rounded())) + L(" 小时", "h")
 }
 
 /// The character sitting on a paper disc ringed in the rank colour, so the
@@ -313,7 +349,7 @@ final class DashboardView: NSView {
     private(set) var filter = "all"
     private var pillRects: [(String, NSRect)] = []
     /// The window the three middle blocks cover: 1, 7 or 30 days.
-    private(set) var range: Int = {
+    var range: Int = {
         let r = UserDefaults.standard.integer(forKey: "range")
         return [1, 7, 30].contains(r) ? r : 30
     }()
@@ -322,8 +358,11 @@ final class DashboardView: NSView {
     private var chartCount = 0
     /// The office scene, a subview so it can animate on its own.
     let office = OfficeView(frame: .zero)
+    /// The v3 themes' office, and what can be clicked on their panel.
+    let officeV3 = V3OfficeView(frame: .zero)
+    var v3Hits: [(String, NSRect)] = []
     /// The "还有 N 种" line under the jobs; clicking it opens the full list.
-    private var jobsOpen = false
+    var jobsOpen = false
     private var moreRect = NSRect.zero
     /// Called when the content changes height (switch, jobs list).
     var onResize: (() -> Void)?
@@ -349,7 +388,7 @@ final class DashboardView: NSView {
     func contentHeight() -> CGFloat { layout(draw: false) }
 
     override func draw(_ dirtyRect: NSRect) {
-        if drawBackground {
+        if drawBackground && !theme.isV3 {
             NSColor(calibratedWhite: 0.11, alpha: 0.97).setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill()
         }
@@ -366,6 +405,9 @@ final class DashboardView: NSView {
     /// the total height so measuring and drawing can never disagree.
     @discardableResult
     private func layout(draw: Bool) -> CGFloat {
+        if theme.isV3 { return layoutV3(draw: draw) }
+        officeV3.isHidden = true
+        office.isHidden = false
         let W = bounds.width
         let inner = W - 2 * pad
         var y: CGFloat = 16
@@ -675,7 +717,7 @@ final class DashboardView: NSView {
         return lang == "en" ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i] : ["日", "一", "二", "三", "四", "五", "六"][i]
     }
 
-    private func shortDay(_ d: String) -> String {
+    func shortDay(_ d: String) -> String {
         let p = d.split(separator: "-")
         guard p.count == 3, let mo = Int(p[1]), let da = Int(p[2]) else { return d }
         return "\(mo)/\(da)"
@@ -711,7 +753,9 @@ final class DashboardView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if p.y < headerBottom {
+        if theme.isV3 {
+            v3MouseDown(p)
+        } else if p.y < headerBottom {
             onCollapse?()
         } else if let (id, _) = pillRects.first(where: { $0.1.contains(p) }) {
             guard id != filter else { return }
@@ -730,7 +774,7 @@ final class DashboardView: NSView {
             jobsOpen.toggle()
             onResize?()
         } else if let (kind, _) = exportRects.first(where: { $0.1.contains(p) }) {
-            (NSApp.delegate as? App)?.makeCard(kind: kind, tool: filter)
+            (NSApp.delegate as? App)?.makeCard(kind: kind)
         }
     }
 
@@ -1461,7 +1505,7 @@ struct Receipt { var usd: Double; var name: String; var color: NSColor; var born
 final class PetView: NSView {
     /// Wide enough for the caption's line; only the character and the
     /// caption take clicks, the rest is see-through.
-    static let size = NSSize(width: 260, height: 168)
+    static var size: NSSize { theme.isV3 ? NSSize(width: 300, height: 100) : NSSize(width: 260, height: 168) }
     var model: Model?
     var drawBackground = false
     /// Seconds since launch, advanced by the app's frame timer.
@@ -1471,6 +1515,8 @@ final class PetView: NSView {
     var flashText = ""
     var flashUntil = -1.0
     var onClick: (() -> Void)?
+    /// A turn settled: the receipt is out (the app may also notify).
+    var onSettle: ((TurnRow, Model) -> Void)?
     var onDrag: ((CGFloat, CGFloat) -> Void)?
     var onDragEnd: (() -> Void)?
     private var blinkAt = 3.0
@@ -1487,7 +1533,7 @@ final class PetView: NSView {
 
     var characterRect: NSRect { NSRect(x: (Self.size.width - 80) / 2, y: 50, width: 80, height: 80) }
     /// What takes the pointer: the character and the caption.
-    var hitRect: NSRect { characterRect.insetBy(dx: -8, dy: -8).union(captionRect) }
+    var hitRect: NSRect { theme.isV3 ? cardRect : characterRect.insetBy(dx: -8, dy: -8).union(captionRect) }
 
     /// New data: a newer last turn means a receipt.
     func take(_ m: Model) {
@@ -1495,6 +1541,7 @@ final class PetView: NSView {
             if lastTurnAt > 0, first.at > lastTurnAt {
                 receipts.append(Receipt(usd: first.usd, name: first.name, color: first.color, born: t))
                 Sounds.play("Tink")
+                onSettle?(first, m)
             }
             lastTurnAt = max(lastTurnAt, first.at)
         }
@@ -1536,6 +1583,7 @@ final class PetView: NSView {
             NSColor(calibratedWhite: 0.11, alpha: 1).setFill()
             bounds.fill()
         }
+        if theme.isV3 { return drawCard() }
         guard let m = model else { return }
         let working = m.working > 0
         let mood = t < sparkleUntil ? "proud" : (working ? "focused" : m.mood)
@@ -2160,6 +2208,9 @@ final class App: NSObject, NSApplicationDelegate {
     var outsideClick: Any?
     var petPanel: NSPanel!
     var pet: PetView?
+    /// The panel's two backs: dark glass (classic) and plain white (v3).
+    var glassHost: NSView!
+    var plainHost: NSView!
 
     private func glass(_ size: NSSize, radius: CGFloat) -> NSVisualEffectView {
         let e = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
@@ -2198,6 +2249,13 @@ final class App: NSObject, NSApplicationDelegate {
         scroll.documentView = dashboard
         expanded.addSubview(scroll)
         panel.contentView = expanded
+        glassHost = expanded
+        let plain = NSView(frame: expanded.bounds)
+        plain.wantsLayer = true
+        plain.layer?.backgroundColor = NSColor.white.cgColor
+        plain.layer?.cornerRadius = 36
+        plain.layer?.masksToBounds = true
+        plainHost = plain
 
         // The pet: the whole collapsed UI, in a transparent panel that takes
         // clicks only on the character and its caption.
@@ -2219,6 +2277,7 @@ final class App: NSObject, NSApplicationDelegate {
         v.wantsLayer = true
         v.layer?.contentsFormat = .RGBA8Uint
         v.onClick = { [weak self] in self?.toggle() }
+        v.onSettle = { turn, m in SettleNotice.post(turn, m) }
         v.onDrag = { [weak self] dx, dy in
             guard let self else { return }
             self.petPanel.setFrameOrigin(NSPoint(x: self.petPanel.frame.minX + dx, y: self.petPanel.frame.minY + dy))
@@ -2229,7 +2288,9 @@ final class App: NSObject, NSApplicationDelegate {
         petPanel.setFrameOrigin(savedOrigin() ?? defaultOrigin())
         petPanel.orderFrontRegardless()
         watchPointer()
+        applyTheme(movePet: false)
 
+        ensureDaemon()
         reload()
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reload() }
         Timer.scheduledTimer(withTimeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
@@ -2240,8 +2301,8 @@ final class App: NSObject, NSApplicationDelegate {
                 if self.petPanel.occlusionState.contains(.visible) { pet.needsDisplay = true }
             }
             if self.isExpanded {
-                let office = self.dashboard.office
-                office.tick(1.0 / 24.0)
+                let office: NSView = theme.isV3 ? self.dashboard.officeV3 : self.dashboard.office
+                theme.isV3 ? self.dashboard.officeV3.tick(1.0 / 24.0) : self.dashboard.office.tick(1.0 / 24.0)
                 office.needsDisplay = true
             }
         }
@@ -2331,6 +2392,40 @@ final class App: NSObject, NSApplicationDelegate {
 
     @objc func toggle() { isExpanded ? collapse() : expand() }
 
+    /// Dresses the panel and the pet in the current theme: the glass or the
+    /// white back, and the pet's size (it keeps its centre and its feet).
+    func applyTheme(movePet: Bool = true) {
+        let host: NSView = theme.isV3 ? plainHost : glassHost
+        if scroll.superview !== host {
+            host.frame = expanded.frame
+            scroll.removeFromSuperview()
+            host.addSubview(scroll)
+            scroll.frame = host.bounds
+            expanded = host
+            panel.contentView = host
+        }
+        panel.appearance = NSAppearance(named: theme.isV3 ? .aqua : .darkAqua)
+        dashboard.frame.size.width = dashboardWidth
+        dashboard.frame.size.height = dashboard.contentHeight()
+        dashboard.needsDisplay = true
+        guard movePet else { return }
+        let old = petPanel.frame, size = PetView.size
+        petPanel.setFrame(NSRect(x: old.midX - size.width / 2, y: old.minY, width: size.width, height: size.height), display: true)
+        pet?.frame = NSRect(origin: .zero, size: size)
+        pet?.needsDisplay = true
+        saveOrigin()
+    }
+
+    /// The theme menu.
+    @objc func setTheme(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, id != theme.rawValue else { return }
+        let was = isExpanded
+        if was { collapse() }
+        UserDefaults.standard.set(id, forKey: "theme")
+        applyTheme()
+        if was { expand() }
+    }
+
     /// Re-fits the open dashboard after its content changed height,
     /// keeping its bottom edge where it is.
     func refit() {
@@ -2345,48 +2440,33 @@ final class App: NSObject, NSApplicationDelegate {
         panel.setFrame(f, display: true)
     }
 
-    /// Runs `dango card` for a day, week, month or year — this one, or
-    /// with `back` 1 the one before — for one agent or all. The CLI renders
-    /// the card, saves it, copies it and opens it; the pet says when.
-    func makeCard(kind: String, back: Int = 0, tool: String = "all") {
-        let name = lang == "en" ? (["day": "day card", "week": "week card", "month": "month card", "year": "year card"][kind] ?? "day card")
-                                : (["day": "日报", "week": "周报", "month": "月报", "year": "年报"][kind] ?? "日报")
-        guard let cli = cliPath() else {
+    /// Exports a period's 4:5 share image (the report window's design) to
+    /// ~/Pictures/DONGO and the clipboard. `back` counts periods back.
+    func makeCard(kind: String, back: Int = 0) {
+        let name = ReportText.kindName(kind, share: true)
+        let unit: Calendar.Component = ["week": .weekOfYear, "month": .month, "year": .year][kind] ?? .day
+        let day = ReportView.fmt.string(from: Calendar.current.date(byAdding: unit, value: -back, to: Date()) ?? Date())
+        let failed = L("\(name)没生成出来", "Couldn't make the \(name.lowercased()) image")
+        guard cliPath() != nil else {
             pet?.flash(L("没找到 dango 命令", "Can't find the dango command"))
             return
         }
-        let unit: Calendar.Component = ["week": .weekOfYear, "month": .month, "year": .year][kind] ?? .day
-        let date = Calendar.current.date(byAdding: unit, value: -back, to: Date()) ?? Date()
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.calendar = Calendar(identifier: .gregorian)
-        f.dateFormat = "yyyy-MM-dd"
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: cli)
-        p.arguments = ["card", "--day", f.string(from: date)] + (kind == "day" ? [] : ["--\(kind)"]) + (tool == "all" ? [] : ["--tool", tool])
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
-        p.terminationHandler = { [weak self] proc in
+        pet?.flash(L("正在生成\(name)…", "Making the \(name.lowercased()) image…"))
+        DispatchQueue.global().async {
+            let j = dangoJSON(["abti", "--report", kind, "--day", day])
             DispatchQueue.main.async {
-                self?.pet?.flash(proc.terminationStatus == 0 ? L("\(name)已复制到剪贴板", "\(name.prefix(1).uppercased() + name.dropFirst()) copied") : L("\(name)没生成出来", "Couldn't make the \(name)"))
+                guard let j else { return self.pet?.flash(failed) ?? () }
+                try? FileManager.default.createDirectory(atPath: exportDir, withIntermediateDirectories: true)
+                let path = exportDir + "/dongo-\(kind)-\(j["from"].s).png"
+                let ok = exportPage(ShareView(size: NSSize(width: 540, height: 675), data: j), path, copy: true)
+                self.pet?.flash(ok ? L("\(name)已导出并复制", "\(name) image saved and copied") : failed)
             }
         }
-        pet?.flash(L("正在生成\(name)…", "Making the \(name)…"))
-        try? p.run()
         collapse()
     }
 
-    /// From the menu: "week:1" is last week's card.
-    @objc func exportFromMenu(_ sender: NSMenuItem) {
-        let parts = (sender.representedObject as? String ?? "day:0").split(separator: ":")
-        makeCard(kind: String(parts[0]), back: parts.count > 1 ? Int(parts[1]) ?? 0 : 0, tool: isExpanded ? dashboard.filter : "all")
-    }
-
-    // MARK: menu
-
-    func popMenu(_ event: NSEvent, in view: NSView) {
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: isExpanded ? L("收起仪表盘", "Close dashboard") : L("打开仪表盘", "Open dashboard"), action: #selector(toggle), keyEquivalent: ""))
+    /// Day, week, month and year: this one and the last one of each.
+    func exportMenu() -> NSMenu {
         let export = NSMenu()
         for (i, (kind, now, before)) in [("day", L("今日日报", "Today"), L("昨日日报", "Yesterday")), ("week", L("本周周报", "This week"), L("上周周报", "Last week")),
                                          ("month", L("本月月报", "This month"), L("上月月报", "Last month")), ("year", L("今年年报", "This year"), L("去年年报", "Last year"))].enumerated() {
@@ -2398,8 +2478,34 @@ final class App: NSObject, NSApplicationDelegate {
                 export.addItem(item)
             }
         }
+        return export
+    }
+
+    /// From the menu: "week:1" is last week's card.
+    @objc func exportFromMenu(_ sender: NSMenuItem) {
+        let parts = (sender.representedObject as? String ?? "day:0").split(separator: ":")
+        makeCard(kind: String(parts[0]), back: parts.count > 1 ? Int(parts[1]) ?? 0 : 0)
+    }
+
+    // MARK: menu
+
+    func popMenu(_ event: NSEvent, in view: NSView) {
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: isExpanded ? L("收起仪表盘", "Close dashboard") : L("打开仪表盘", "Open dashboard"), action: #selector(toggle), keyEquivalent: ""))
+        let boss = NSMenu()
+        for (id, title) in [("story", L("看测试结果", "See my result")), ("types", L("16 型图鉴", "All 16 types")),
+                            ("scale", L("规模和压榨率怎么算", "How scale and margin work")), ("roles", L("团子构成怎么算", "How the crew works"))] {
+            let item = NSMenuItem(title: title, action: #selector(openBoss(_:)), keyEquivalent: "")
+            item.representedObject = id
+            item.target = self
+            boss.addItem(item)
+        }
+        let bossItem = NSMenuItem(title: L("老板人格测试", "AI Boss Type"), action: nil, keyEquivalent: "")
+        bossItem.submenu = boss
+        menu.addItem(bossItem)
+        menu.addItem(NSMenuItem(title: L("报告", "Reports"), action: #selector(openReports), keyEquivalent: ""))
         let exportItem = NSMenuItem(title: L("导出报告", "Export report"), action: nil, keyEquivalent: "")
-        exportItem.submenu = export
+        exportItem.submenu = exportMenu()
         menu.addItem(exportItem)
         let langs = NSMenu()
         for (code, title) in [("zh", "中文"), ("en", "English")] {
@@ -2412,6 +2518,17 @@ final class App: NSObject, NSApplicationDelegate {
         let langItem = NSMenuItem(title: "语言 / Language", action: nil, keyEquivalent: "")
         langItem.submenu = langs
         menu.addItem(langItem)
+        let themes = NSMenu()
+        for th in Theme.allCases {
+            let item = NSMenuItem(title: th.title, action: #selector(setTheme(_:)), keyEquivalent: "")
+            item.representedObject = th.rawValue
+            item.state = theme == th ? .on : .off
+            item.target = self
+            themes.addItem(item)
+        }
+        let themeItem = NSMenuItem(title: L("主题", "Theme"), action: nil, keyEquivalent: "")
+        themeItem.submenu = themes
+        menu.addItem(themeItem)
         let flav = NSMenu()
         for f in flavors {
             let item = NSMenuItem(title: f.name, action: #selector(setFlavor(_:)), keyEquivalent: "")
@@ -2436,6 +2553,11 @@ final class App: NSObject, NSApplicationDelegate {
         let snd = NSMenuItem(title: L("结算提示音", "Sounds"), action: #selector(toggleSound), keyEquivalent: "")
         snd.state = Sounds.enabled ? .on : .off
         menu.addItem(snd)
+        if SettleNotice.available {
+            let note = NSMenuItem(title: L("结算时发系统通知", "Notify when a turn settles"), action: #selector(toggleSettleNotice), keyEquivalent: "")
+            note.state = SettleNotice.enabled ? .on : .off
+            menu.addItem(note)
+        }
         menu.addItem(NSMenuItem(title: L("回到右下角", "Back to the corner"), action: #selector(resetPosition), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: L("退出", "Quit"), action: #selector(quit), keyEquivalent: ""))
@@ -2445,7 +2567,27 @@ final class App: NSObject, NSApplicationDelegate {
 
     @objc func quit() { NSApp.terminate(nil) }
 
+    /// The boss-type menu: the story (ending on the card) or one of its pages.
+    @objc func openBoss(_ sender: NSMenuItem) {
+        let id = sender.representedObject as? String ?? "story"
+        if id == "story" { StoryWindow.show() } else { PageWindow.show(id) }
+    }
+
+    @objc func openReports() { ReportWindow.show() }
+
     @objc func toggleSound() { Sounds.enabled.toggle() }
+
+    @objc func toggleSettleNotice() {
+        if SettleNotice.enabled {
+            SettleNotice.enabled = false
+            return
+        }
+        SettleNotice.enable { [weak self] granted in
+            if !granted {
+                self?.pet?.flash(L("通知没打开：去「系统设置 → 通知 → Dango」允许", "Notifications are off: allow Dango in System Settings → Notifications"))
+            }
+        }
+    }
 
     /// The flavour menu: the pet, its dashboard badge and new cards.
     @objc func setFlavor(_ sender: NSMenuItem) {
@@ -2495,6 +2637,40 @@ final class App: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// A packaged app sets up its daemon itself: on the first launch (or
+    /// after the app moved) it writes the LaunchAgent for the dango inside
+    /// the app and starts it, turns the pet's start-at-login on, and says
+    /// the history is being read; after an update in place it restarts the
+    /// daemon once on the new binary. A developer's own agent, pointing at
+    /// a dango that exists elsewhere, is left alone, and so is a bare build.
+    func ensureDaemon() {
+        let fm = FileManager.default
+        let cli = bundledCLI
+        guard Bundle.main.bundleURL.pathExtension == "app", fm.isExecutableFile(atPath: cli) else { return }
+        let uid = getuid()
+        let current = (NSDictionary(contentsOfFile: daemonPlist)?["ProgramArguments"] as? [String])?.first
+        if let current, current != cli, fm.isExecutableFile(atPath: current) { return }
+        let stamp = ((try? fm.attributesOfItem(atPath: cli))?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        if current == cli {
+            if UserDefaults.standard.double(forKey: "daemonStamp") != stamp {
+                run("/bin/launchctl", ["kickstart", "-k", "gui/\(uid)/\(daemonLabel)"])
+                UserDefaults.standard.set(stamp, forKey: "daemonStamp")
+            }
+            return
+        }
+        try? fm.createDirectory(atPath: home, withIntermediateDirectories: true)
+        guard let data = daemonAgent(cli: cli) else { return }
+        try? fm.createDirectory(atPath: (daemonPlist as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        guard (try? data.write(to: URL(fileURLWithPath: daemonPlist))) != nil else { return }
+        run("/bin/launchctl", ["bootout", "gui/\(uid)/\(daemonLabel)"])
+        run("/bin/launchctl", ["bootstrap", "gui/\(uid)", daemonPlist])
+        UserDefaults.standard.set(stamp, forKey: "daemonStamp")
+        if !fm.fileExists(atPath: agentPlist) { toggleAutostart() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.pet?.flash(L("团子们在翻你的 Claude Code 和 Codex 历史…", "Your dangos are reading your Claude Code and Codex history…"))
+        }
+    }
+
     private func run(_ path: String, _ args: [String]) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
@@ -2506,6 +2682,8 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     // MARK: data
+
+    private var storyTried = false
 
     func reload() {
         guard let m = loadModel() else { return }
@@ -2520,6 +2698,47 @@ final class App: NSObject, NSApplicationDelegate {
             dashboard.needsDisplay = true
         }
         last = m
+        // The first scan with anything in it opens the story: one try per
+        // launch until the window has shown once (StoryWindow sets the flag).
+        if m.totalUSD > 0 && !storyTried && !UserDefaults.standard.bool(forKey: "abtiShown") {
+            storyTried = true
+            DispatchQueue.main.async { StoryWindow.show() }
+        }
+    }
+}
+
+// MARK: - Settle notices
+
+/// A macOS notification when a turn settles, in place of the box Claude
+/// Code shows when Dango's hooks are installed. Off until the person turns
+/// it on (right-click menu), which asks macOS for permission. Only an app
+/// bundle can post one; a bare build has no menu item.
+enum SettleNotice {
+    static let key = "settleNotice"
+    static var available: Bool { Bundle.main.bundleURL.pathExtension == "app" && Bundle.main.bundleIdentifier != nil }
+    static var enabled: Bool {
+        get { UserDefaults.standard.bool(forKey: key) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    static func enable(_ done: @escaping (Bool) -> Void) {
+        guard available else { return done(false) }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
+            DispatchQueue.main.async {
+                enabled = granted
+                done(granted)
+            }
+        }
+    }
+
+    /// "+$78 · Software engineer", and today's total underneath.
+    static func post(_ turn: TurnRow, _ m: Model) {
+        guard enabled, available else { return }
+        let c = UNMutableNotificationContent()
+        c.title = "+" + fmtUSD(turn.usd) + (turn.name.isEmpty ? "" : " · " + turn.name)
+        c.body = L("今天累计 \(fmtUSD(m.todayUSD))", "\(fmtUSD(m.todayUSD)) so far today")
+        let req = UNNotificationRequest(identifier: "settle-\(Int(turn.at))", content: c, trigger: nil)
+        UNUserNotificationCenter.current().add(req)
     }
 }
 
@@ -3695,6 +3914,10 @@ func snapshot(_ v: NSView, _ size: NSSize, _ path: String) {
 }
 
 let args = CommandLine.arguments
+// Snapshots can pin the theme: --theme classic|a|b.
+if let i = args.firstIndex(of: "--theme"), args.count > i + 1 {
+    themeOverride = ["classic": .classic, "a": .vector, "vector": .vector, "b": .illustrated, "illustrated": .illustrated][args[i + 1]]
+}
 if let i = args.firstIndex(of: "--moods"), args.count > i + 1 {
     _ = NSApplication.shared
     for (flip, suffix) in [(true, "flipped"), (false, "plain")] {
@@ -3761,6 +3984,46 @@ if let i = args.firstIndex(of: "--snapshot-flavors"), args.count > i + 1 {
     snapshot(v, v.bounds.size, args[i + 1])
     exit(0)
 }
+if args.contains("--print-daemon-agent") {
+    // The LaunchAgent a fresh install of this app would write, and nothing
+    // else: for checking a package without touching the running daemon.
+    if let d = daemonAgent(cli: bundledCLI) { FileHandle.standardOutput.write(d) }
+    exit(0)
+}
+if let i = args.firstIndex(of: "--abti"), args.count > i + 2 {
+    // --abti RESULT.json out.png [--page card|types|scale|roles] [--lang zh|en] [--copy]:
+    // the boss card and its pages, from `dango abti --json`.
+    _ = NSApplication.shared
+    let d = JV.load(args[i + 1])
+    let flagv = { (f: String) -> String? in args.firstIndex(of: f).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
+    lang = flagv("--lang") ?? (d["lang"].s.isEmpty ? lang : d["lang"].s)
+    if flagv("--page") == "story" {
+        // --screen N (1–8) [--guess HMSL|skip] [--t SEC] [--bare]: one story screen.
+        let s = StoryView(frame: NSRect(x: 0, y: 0, width: 540, height: 960))
+        s.data = d
+        s.screen = flagv("--screen").flatMap { Int($0) } ?? 1
+        if let g = flagv("--guess") {
+            if g == "skip" { s.skipped = true } else { s.guess = (0..<4).map { k in k < g.count ? String(Array(g)[k]) : nil } }
+        }
+        s.t = flagv("--t").flatMap { Double($0) } ?? 10
+        s.bare = args.contains("--bare")
+        exit(exportPage(s, args[i + 2]) ? 0 : 1)
+    }
+    let v: ABPage
+    switch flagv("--page") ?? "card" {
+    case "types": v = TypesView(size: NSSize(width: 540, height: 960), data: d)
+    case "scale": v = ScaleView(size: NSSize(width: 540, height: 604), data: d)
+    case "roles": v = RolesView(size: NSSize(width: 540, height: 724), data: d)
+    case "share": v = ShareView(size: NSSize(width: 540, height: 675), data: d)
+    case "report":
+        let r = ReportView(size: NSSize(width: 560, height: 822), data: d)
+        r.kind = d["kind"].s
+        r.section = flagv("--section") ?? "crew"
+        v = r
+    default: v = BossCardView(size: NSSize(width: 540, height: 960), data: d)
+    }
+    exit(exportPage(v, args[i + 2], copy: args.contains("--copy")) ? 0 : 1)
+}
 if let i = args.firstIndex(of: "--card"), args.count > i + 2 {
     _ = NSApplication.shared
     exit(renderCard(args[i + 1], args[i + 2], copy: args.contains("--copy")) ? 0 : 1)
@@ -3779,9 +4042,13 @@ if let i = args.firstIndex(of: "--snapshot-dashboard"), args.count > i + 1 {
             Occupant(job: m.occupations[(i * 3) % m.occupations.count], working: i == 0 || i == 3, helpers: i == 0 ? 2 : 0,
                      usd: Double(140 * (i + 1)), since: Date().timeIntervalSince1970 * 1000 - [2.0, 40, 200, 1, 5, 70][i % 6] * 60_000)
         }
+        let flagv = { (f: String) -> String? in args.firstIndex(of: f).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
+        for (k, st) in (flagv("--statuses")?.split(separator: ",") ?? []).enumerated() where k < m.office.count { m.office[k].status = String(st) }
         v.model = m
     }
     v.office.t = 0.9
+    v.officeV3.instant = true
+    v.officeV3.t = 0.9
     let h = v.contentHeight()
     snapshot(v, NSSize(width: dashboardWidth, height: h), args[i + 1])
     exit(0)
@@ -3800,6 +4067,19 @@ if let i = args.firstIndex(of: "--snapshot-office"), args.count > i + 1 {
         m.occupations.first { $0.id == id }.map {
             Occupant(job: $0, working: n < k, helpers: n == 0 ? 2 : 0, usd: Double(140 * (n + 1)), since: now - [1.0, 5, 40, 200, 70, 30, 90, 10][n % 8] * 60_000)
         }
+    }
+    // --statuses s,s,…: the state of each, for the v3 themes.
+    for (n, st) in (flagv("--statuses")?.split(separator: ",") ?? []).enumerated() where n < staff.count { staff[n].status = String(st) }
+    if theme.isV3 {
+        let size = NSSize(width: 392, height: V3OfficeView.height)
+        let v = V3OfficeView(frame: NSRect(origin: .zero, size: size))
+        v.model = m
+        v.occupants = staff
+        v.instant = true
+        // --t SEC: the moment to render (4.35 catches the first one's blink).
+        v.tick(flagv("--t").flatMap { Double($0) } ?? 0.9)
+        snapshot(v, size, args[i + 1])
+        exit(0)
     }
     let size = NSSize(width: dashboardWidth - 36, height: OfficeView.height)
     let v = OfficeView(frame: NSRect(origin: .zero, size: size))

@@ -361,13 +361,12 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert_eq!(q("SELECT COUNT(*) || '' FROM turns WHERE session_id = 'th-main' AND ended_at IS NOT NULL"), "2");
     let work: std::collections::BTreeMap<String, f64> = serde_json::from_str(&q("SELECT work FROM turns WHERE id = 't1'")).unwrap();
     assert_eq!(dango_core::occupation::main(&work).as_deref(), Some("video"), "{work:?}");
-    for job in ["swe", "data"] {
+    for job in ["swe", "writer", "data"] {
         assert!(work.contains_key(job), "{job} missing from {work:?}");
     }
     // ffmpeg 15 + whisper 20 + turn base 5 + one sub-agent 12, plus the web
-    // search (5) and the NOTES.md edit (3 min of prose, a researcher's): in a
-    // turn about a video, research is the editor's work.
-    assert!(!work.contains_key("research") && (work["video"] - 60.0).abs() < 1e-9, "{work:?}");
+    // search (5): in a turn about a video, research is the editor's work.
+    assert!(!work.contains_key("research") && (work["video"] - 57.0).abs() < 1e-9, "{work:?}");
     let failed: String = q("SELECT test_passed || '' FROM turns WHERE id = 't2'");
     assert_eq!(failed, "0", "cargo test exited 101");
 
@@ -427,6 +426,104 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert_eq!(again.new_events, 0);
 }
 
+/// ABTI from the fixtures: a type that exists, four dimensions, money that
+/// matches the counters, and report pages that add up.
+#[test]
+fn abti_from_fixtures() {
+    let paths = home("abti");
+    for e in &events(&paths) {
+        spool::append(&paths, e).unwrap();
+    }
+    let mut p = processor(&paths);
+    p.ingest_spool(&paths).unwrap();
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let now = 1_793_200_000_000;
+    let r = daemon::abti::result(&p.conn, tz, &Config::default(), now).unwrap();
+    let code = r["code"].as_str().unwrap();
+    assert!(daemon::abti::config()["types"][code].is_object(), "{code}");
+    assert_eq!(r["dims"].as_array().unwrap().len(), 4);
+    assert_eq!(r["match"]["code"], daemon::abti::config()["types"][code]["match"]);
+    let usd = p.ctr("usd", "all");
+    assert!(usd > 0.0 && (r["usd"].as_f64().unwrap() - usd).abs() < 1e-6);
+    let share: f64 = r["crew"].as_array().unwrap().iter().map(|c| c["share"].as_f64().unwrap()).sum();
+    assert!((share - 1.0).abs() < 1e-6, "{share}");
+    assert_eq!(r["checkup"].as_array().unwrap().len(), 6);
+    let nowhere = std::path::Path::new("/nonexistent/.claude");
+    let total = daemon::abti::report(&p.conn, tz, &Config::default(), nowhere, "total", tz.date(now), now).unwrap();
+    assert!((total["usd"].as_f64().unwrap() - usd).abs() < 1e-6, "the total page is the total");
+    let days: f64 = total["heat"].as_array().unwrap().len() as f64;
+    assert_eq!(days, total["days"].as_f64().unwrap());
+    for kind in ["day", "week", "month", "year"] {
+        let v = daemon::abti::report(&p.conn, tz, &Config::default(), nowhere, kind, tz.date(now), now).unwrap();
+        assert!(v["usd"].as_f64().unwrap() <= usd + 1e-6, "{kind}");
+        assert!(v["sessions"].is_array() && v["projects"].is_array(), "{kind}");
+    }
+    let year = daemon::abti::report(&p.conn, tz, &Config::default(), nowhere, "year", tz.date(now), now).unwrap();
+    assert_eq!(year["monthly"].as_array().unwrap().len(), 12);
+    let dump = serde_json::to_string(&r).unwrap();
+    assert!(!dump.contains("/Users") && !dump.contains("secret"), "no paths or prompts");
+    // In English every word the story and the card get is English.
+    let mut en = Config::default();
+    en.general.locale = "en".into();
+    let r = daemon::abti::result(&p.conn, tz, &en, now).unwrap();
+    let words = serde_json::to_string(&[&r["type"], &r["scale"], &r["margin_tier"], &r["match"], &r["story"], &r["checkup"], &r["crew"]]).unwrap();
+    assert!(!words.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c)), "Chinese in the English result: {words}");
+}
+
+/// The office's event-driven states: waiting on a permission prompt until
+/// the session does anything, fuming after three failed test commands in
+/// a turn, happy for half an hour after a turn that ended with tests green.
+#[test]
+fn office_states_follow_the_events() {
+    use dango_core::event::{Event, Kind, Payload, Source};
+    let paths = home("states");
+    let mut p = processor(&paths);
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let t0 = 1_793_200_000_000;
+    let mut n = 0;
+    let mut ev = |ts: i64, kind: Kind, f: &dyn Fn(&mut Payload)| {
+        n += 1;
+        let mut e = Event::new(format!("st{n}"), ts, Source::ClaudeCode, kind);
+        e.session_id = Some("s-st".into());
+        f(&mut e.payload);
+        e
+    };
+    let status = |p: &Processor, now: i64| -> Option<String> {
+        daemon::widget::office(&p.conn, tz, now).unwrap().iter().find(|o| o["id"] == "swe").and_then(|o| o["status"].as_str().map(str::to_string))
+    };
+    let test = |passed: bool| move |pl: &mut Payload| {
+        pl.tool = Some("bash".into());
+        pl.test_cmd = Some(true);
+        pl.test_passed = Some(passed);
+        pl.occupation = Some("qa".into());
+        pl.minutes = Some(2.0);
+    };
+    p.begin().unwrap();
+    p.handle(&ev(t0, Kind::Prompt, &|pl| pl.topic = Some("swe".into()))).unwrap();
+    p.handle(&ev(t0 + 10_000, Kind::Tool, &|pl| {
+        pl.tool = Some("edit".into());
+        pl.occupation = Some("swe".into());
+        pl.minutes = Some(20.0);
+    }))
+    .unwrap();
+    p.handle(&ev(t0 + 20_000, Kind::Notification, &|pl| pl.notification_type = Some("permission_prompt".into()))).unwrap();
+    p.commit().unwrap();
+    assert_eq!(status(&p, t0 + 30_000).as_deref(), Some("waiting"));
+    assert_eq!(status(&p, t0 + 3 * 3_600_000).as_deref(), Some("waiting"), "a prompt waits as long as it takes");
+    p.begin().unwrap();
+    for k in 0..3 {
+        p.handle(&ev(t0 + 40_000 + k * 1000, Kind::Tool, &test(false))).unwrap();
+    }
+    p.commit().unwrap();
+    assert_eq!(status(&p, t0 + 50_000).as_deref(), Some("fuming"), "answered, then three failed tests");
+    p.begin().unwrap();
+    p.handle(&ev(t0 + 60_000, Kind::Tool, &test(true))).unwrap();
+    p.handle(&ev(t0 + 70_000, Kind::TurnEnd, &|_| {})).unwrap();
+    p.commit().unwrap();
+    assert_eq!(status(&p, t0 + 80_000).as_deref(), Some("happy"));
+    assert_eq!(status(&p, t0 + 80_000 + 31 * 60_000), None, "half an hour later it is over");
+}
+
 /// Codex with no hooks: the daemon follows a rollout while Codex writes it
 /// (a half-written line waits for the rest), with the same ids as backfill,
 /// so running both counts every turn once.
@@ -481,6 +578,208 @@ fn codex_rollouts_are_followed_without_hooks() {
     let again = daemon::backfill::run(&mut p, &paths, &none, i64::MAX, Some((&codex, i64::MAX))).unwrap();
     assert!(again.new_events <= 1, "{again:?}");
     assert!((p.ctr("usd:codex", "all") - usd).abs() < 1e-9, "counted once");
+}
+
+/// Claude Code with no hooks: the daemon follows a transcript and its
+/// subagent's while Claude Code writes them (a half-written line waits),
+/// with the same ids as backfill, so running both counts every turn once.
+#[test]
+fn claude_transcripts_are_followed_without_hooks() {
+    let paths = home("claudetail");
+    let fx = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/claude/projects/-tmp-demo");
+    let lines: Vec<String> = fs::read_to_string(fx.join("s-demo.jsonl")).unwrap().lines().map(str::to_string).collect();
+    let claude = paths.home.join("claude");
+    let proj = claude.join("projects").join("-tmp-demo");
+    fs::create_dir_all(proj.join("s-demo").join("subagents")).unwrap();
+    fs::copy(fx.join("s-demo/subagents/agent-1.jsonl"), proj.join("s-demo/subagents/agent-1.jsonl")).unwrap();
+    let file = proj.join("s-demo.jsonl");
+    let cut = lines.len() / 2;
+    fs::write(&file, format!("{}\n{}", lines[..cut].join("\n"), &lines[cut][..20])).unwrap();
+    let mut tail = daemon::claude_tail::ClaudeTail::new(&claude);
+    assert!(!tail.hooks_installed(), "no settings.json: follow");
+    let mut p = processor(&paths);
+    let mut take = |evs: &[Event]| {
+        p.begin().unwrap();
+        let n = evs.iter().filter(|e| p.handle(e).unwrap()).count();
+        p.commit().unwrap();
+        n
+    };
+    let end = DateTime::parse_from_rfc3339("2026-10-27T05:30:02Z").unwrap().timestamp_millis();
+    let first = tail.poll(&paths, end);
+    assert!(!first.is_empty() && take(&first) == first.len());
+    assert!(tail.poll(&paths, end).is_empty(), "nothing new, nothing read");
+    let mut f = fs::OpenOptions::new().append(true).open(&file).unwrap();
+    std::io::Write::write_all(&mut f, format!("{}\n{}\n", &lines[cut][20..], lines[cut + 1..].join("\n")).as_bytes()).unwrap();
+    // The last turn is still open a minute after its last line…
+    let second = tail.poll(&paths, end + 60_000);
+    assert_eq!(take(&second), second.len());
+    assert!(!second.iter().any(|e| e.kind == dango_core::event::Kind::SessionEnd));
+    // …and over once the file has been quiet long enough.
+    let third = tail.poll(&paths, end + 40 * 60_000);
+    assert!(third.iter().any(|e| e.kind == dango_core::event::Kind::TurnEnd));
+    assert_eq!(take(&third), third.len());
+
+    // The same events, by id, as reading the files whole.
+    let mut followed: Vec<String> = first.iter().chain(&second).chain(&third).map(|e| e.id.clone()).collect();
+    let mut whole: Vec<String> = daemon::backfill::file_events(&file, None, i64::MAX, &paths)
+        .into_iter()
+        .chain(daemon::backfill::file_events(&proj.join("s-demo/subagents/agent-1.jsonl"), Some("s-demo"), i64::MAX, &paths))
+        .map(|e| e.id)
+        .collect();
+    followed.sort();
+    whole.sort();
+    assert_eq!(followed, whole);
+    drop(take);
+    let ended: i64 = p.conn.query_row("SELECT COUNT(*) FROM turns WHERE session_id = 's-demo' AND ended_at IS NOT NULL", [], |r| r.get(0)).unwrap();
+    assert_eq!(ended, 2);
+    let usd = p.ctr("usd:claude_code", "all");
+    assert!(usd > 0.0);
+    // Backfill over the same files adds nothing.
+    let none = paths.home.join("no-codex-dir");
+    let again = daemon::backfill::run(&mut p, &paths, &claude, i64::MAX, Some((&none, i64::MAX))).unwrap();
+    assert_eq!(again.new_events, 0, "{again:?}");
+    assert!((p.ctr("usd:claude_code", "all") - usd).abs() < 1e-9, "counted once");
+
+    // With Dango's plugin on, following stops (checked again after a minute).
+    fs::write(claude.join("settings.json"), r#"{"enabledPlugins":{"dango@dango":true}}"#).unwrap();
+    assert!(daemon::claude_tail::hooked(&claude));
+}
+
+/// Without Dango's hooks, a followed session still shows live: at work (the
+/// pet's mood too), its running subagents counted, waiting for you while
+/// Claude Code's own session file says a dialog is open (without keeping the
+/// dialog's words), and its turn over as soon as that file says idle, with
+/// no 20 s guess. A file whose process is gone says nothing.
+#[test]
+fn a_followed_session_without_hooks_shows_live() {
+    use dango_core::event::Kind;
+    let paths = home("nohooks");
+    let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
+    let claude = paths.home.join("claude");
+    let proj = claude.join("projects").join("-tmp-live");
+    fs::create_dir_all(&proj).unwrap();
+    fs::create_dir_all(claude.join("sessions")).unwrap();
+    let file = proj.join("s-live.jsonl");
+    let t0 = chrono::Utc::now().timestamp_millis() - 120_000;
+    let at = |ms: i64| chrono::DateTime::from_timestamp_millis(t0 + ms).unwrap().to_rfc3339();
+    let line = |ty: &str, ms: i64, extra: &str| format!(r#"{{"type":"{ty}","sessionId":"s-live","uuid":"u{ms}","cwd":"/tmp/live","timestamp":"{}",{extra}}}"#, at(ms));
+    let append = |lines: &[String]| {
+        let mut f = fs::OpenOptions::new().create(true).append(true).open(&file).unwrap();
+        std::io::Write::write_all(&mut f, (lines.join("\n") + "\n").as_bytes()).unwrap();
+    };
+    let status = |name: &str, pid: u32, status: &str, ms: i64, waiting: Option<&str>| {
+        let v = serde_json::json!({ "pid": pid, "sessionId": "s-live", "status": status, "statusUpdatedAt": t0 + ms, "waitingFor": waiting });
+        fs::write(claude.join("sessions").join(name), v.to_string()).unwrap();
+    };
+    let me = std::process::id();
+    let mut tail = daemon::claude_tail::ClaudeTail::new(&claude);
+    let mut p = processor(&paths);
+    fn take(p: &mut Processor, evs: &[Event]) {
+        p.begin().unwrap();
+        for e in evs {
+            p.handle(e).unwrap();
+        }
+        p.commit().unwrap();
+    }
+
+    // A prompt; Claude sends a subagent off.
+    append(&[
+        line("user", 0, r#""message":{"content":"fix the login page"}"#),
+        line("assistant", 2_000, r#""message":{"stop_reason":"tool_use","content":[{"type":"tool_use","id":"tu-agent","name":"Task","input":{"description":"look around","subagent_type":"general-purpose"}}]}"#),
+    ]);
+    status("1.json", me, "busy", 0, None);
+    let evs = tail.poll(&paths, t0 + 3_000);
+    assert!(evs.iter().any(|e| e.kind == Kind::SubagentStart));
+    take(&mut p, &evs);
+    let (working, helpers, last) = daemon::snapshot::activity(&p.conn, t0 + 3_000).unwrap();
+    assert_eq!((working, helpers), (1, 1), "at work, one helper out");
+    assert!(last.is_some(), "followed events count as activity");
+    let d = daemon::widget::data(&p.conn, tz, &Config::default(), t0 + 3_000).unwrap();
+    assert_eq!(d["character"]["mood"], "focused", "{}", d["character"]);
+
+    // The subagent comes back; Claude writes a file, then asks to run a
+    // command and the dialog is open.
+    append(&[
+        line("user", 30_000, r#""message":{"content":[{"type":"tool_result","tool_use_id":"tu-agent","content":"done"}]}"#),
+        line("assistant", 30_200, r#""message":{"stop_reason":"tool_use","content":[{"type":"tool_use","id":"tu-write","name":"Write","input":{"file_path":"/tmp/live/login.py","content":"a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6\ng = 7\nh = 8\n"}}]}"#),
+        line("user", 30_500, r#""message":{"content":[{"type":"tool_result","tool_use_id":"tu-write","content":"written"}]}"#),
+        line("assistant", 31_000, r#""message":{"stop_reason":"tool_use","content":[{"type":"tool_use","id":"tu-bash","name":"Bash","input":{"command":"make secret-target"}}]}"#),
+    ]);
+    status("1.json", me, "busy", 32_000, Some("approve Bash: make secret-target"));
+    let evs = tail.poll(&paths, t0 + 33_000);
+    assert_eq!(evs.iter().filter(|e| e.kind == Kind::Notification).count(), 1);
+    take(&mut p, &evs);
+    assert!(tail.poll(&paths, t0 + 34_000).iter().all(|e| e.kind != Kind::Notification), "said once");
+    let (_, helpers, _) = daemon::snapshot::activity(&p.conn, t0 + 33_000).unwrap();
+    assert_eq!(helpers, 0, "the helper is back");
+    let office = daemon::widget::office(&p.conn, tz, t0 + 33_000).unwrap();
+    assert!(office.iter().any(|o| o["status"] == "waiting"), "{office:?}");
+    let kept: String = p.conn.query_row("SELECT payload FROM events WHERE kind = 'notification'", [], |r| r.get(0)).unwrap();
+    assert!(!kept.contains("make") && !kept.contains("approve"), "the dialog's words are not kept: {kept}");
+
+    // Approved: the command runs, Claude finishes, Claude Code says idle.
+    append(&[
+        line("user", 40_000, r#""message":{"content":[{"type":"tool_result","tool_use_id":"tu-bash","content":"ok"}]}"#),
+        line("assistant", 41_000, r#""message":{"stop_reason":"end_turn","content":[{"type":"text","text":"fixed"}]}"#),
+    ]);
+    status("1.json", me, "idle", 41_500, None);
+    let evs = tail.poll(&paths, t0 + 42_000);
+    assert!(evs.iter().any(|e| e.kind == Kind::TurnEnd), "over at once, not 20 s later");
+    take(&mut p, &evs);
+    let ended: i64 = p.conn.query_row("SELECT COUNT(*) FROM turns WHERE session_id = 's-live' AND ended_at IS NOT NULL", [], |r| r.get(0)).unwrap();
+    assert_eq!(ended, 1);
+    let office = daemon::widget::office(&p.conn, tz, t0 + 42_000).unwrap();
+    assert!(office.iter().all(|o| o["status"] != "waiting"));
+
+    // A process that is gone says nothing, whatever its file says.
+    fs::remove_file(claude.join("sessions/1.json")).unwrap();
+    status("2.json", 999_999, "busy", 50_000, Some("dialog open"));
+    assert!(daemon::claude_tail::live_sessions(&claude).is_empty());
+}
+
+/// A followed turn closes once Claude has ended it and 20 s have passed
+/// (it may carry on); one with a tool still running waits half an hour.
+#[test]
+fn a_followed_turn_closes_after_claude_ends_it() {
+    let paths = home("claudeturn");
+    let t0 = 1_793_000_000_000i64;
+    let at = |ms: i64| chrono::DateTime::from_timestamp_millis(t0 + ms).unwrap().to_rfc3339();
+    let line = |ty: &str, ms: i64, extra: &str| format!(r#"{{"type":"{ty}","sessionId":"s1","uuid":"u{ms}","timestamp":"{}",{extra}}}"#, at(ms));
+    let ended = |evs: &[Event]| evs.iter().filter(|e| e.kind == dango_core::event::Kind::TurnEnd).count();
+    let mut t = daemon::backfill::Transcript::new(None);
+    let mut feed = |l: String| t.line(&l, i64::MAX, &paths);
+    feed(line("user", 0, r#""message":{"content":"fix the login"}"#));
+    feed(line("assistant", 5_000, r#""message":{"stop_reason":"end_turn","content":[{"type":"text","text":"done"}]}"#));
+    drop(feed);
+    assert_eq!(ended(&t.finish(t0 + 10_000)), 0, "it may still carry on");
+    let closed = t.finish(t0 + 26_000);
+    assert_eq!(ended(&closed), 1);
+    assert_eq!(closed[0].ts_ms(), Some(t0 + 5_000), "at Claude's last word, as backfill has it");
+
+    let mut t = daemon::backfill::Transcript::new(None);
+    t.line(&line("user", 0, r#""message":{"content":"run the build"}"#), i64::MAX, &paths);
+    t.line(&line("assistant", 1_000, r#""message":{"stop_reason":"tool_use","content":[{"type":"tool_use","id":"tu1","name":"Bash","input":{"command":"make"}}]}"#), i64::MAX, &paths);
+    assert_eq!(ended(&t.finish(t0 + 15 * 60_000)), 0, "the build is still running");
+    assert_eq!(ended(&t.finish(t0 + 31 * 60_000)), 1, "half an hour of nothing: over");
+}
+
+/// A fresh install: the daemon's first start imports the history of both
+/// tools once, with past badges not celebrated again; a second start finds
+/// it done.
+#[test]
+fn the_first_start_imports_history_once() {
+    let paths = home("firststart");
+    let fx = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
+    let mut p = processor(&paths);
+    daemon::server::import_history(&mut p, &paths, &fx.join("claude"), &fx.join("codex")).unwrap();
+    assert!(db::get_meta(&p.conn, "history_imported").unwrap().is_some());
+    assert_eq!(p.mode, Mode::Live, "back to live after the import");
+    let (cc, cx) = (p.ctr("usd:claude_code", "all"), p.ctr("usd:codex", "all"));
+    assert!(cc > 0.0 && cx > 0.0, "{cc} {cx}");
+    let events: i64 = p.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0)).unwrap();
+    daemon::server::import_history(&mut p, &paths, &fx.join("claude"), &fx.join("codex")).unwrap();
+    let again: i64 = p.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0)).unwrap();
+    assert_eq!(events, again);
 }
 
 /// Codex's hook events (sent before it was followed through its logs) are

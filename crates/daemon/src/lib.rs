@@ -1,7 +1,9 @@
 //! Everything with IO: capture, the spool, SQLite, backfill and the socket.
 
+pub mod abti;
 pub mod backfill;
 pub mod capture;
+pub mod claude_tail;
 pub mod codex_tail;
 pub mod config;
 pub mod db;

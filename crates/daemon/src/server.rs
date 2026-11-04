@@ -26,6 +26,8 @@ const USAGE_EVERY: u64 = 40;
 const USAGE_SETTLE_MS: i64 = 15_000;
 /// Codex's rollout files are followed every this many polls (~1 s).
 const CODEX_EVERY: u64 = 4;
+/// Claude Code's transcripts, when its hooks are not installed (~2 s).
+const CLAUDE_EVERY: u64 = 8;
 
 /// Takes the processor lock without waiting. Ok(None) means another process
 /// (normally the daemon) holds it.
@@ -130,7 +132,14 @@ pub fn run(paths: &Paths) -> Result<()> {
     }
     let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
     let (claude_dir, codex_dir) = (home.join(".claude"), home.join(".codex"));
+    {
+        let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = import_history(&mut p, paths, &claude_dir, &codex_dir) {
+            eprintln!("dango daemon: history import failed: {e}");
+        }
+    }
     let mut codex = crate::codex_tail::CodexTail::new(&codex_dir);
+    let mut claude = crate::claude_tail::ClaudeTail::new(&claude_dir);
     let mut tick: u64 = 0;
     let modified = |p: &Paths| fs::metadata(&p.config).and_then(|m| m.modified()).ok();
     let mut config_at = modified(paths);
@@ -155,30 +164,24 @@ pub fn run(paths: &Paths) -> Result<()> {
             let events = if on { codex.poll(paths, now_ms()) } else { Vec::new() };
             if !events.is_empty() {
                 let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
-                // As backfill does: one transaction, a bad event skipped.
-                let mut fresh = 0;
-                let done = p.begin().and_then(|_| {
-                    for ev in &events {
-                        match p.handle(ev) {
-                            Ok(new) => fresh += new as usize,
-                            Err(e) => eprintln!("dango daemon: skipped {}: {e}", ev.id),
-                        }
-                    }
-                    p.commit()
-                });
-                match done {
-                    Ok(()) if fresh > 0 => {
-                        let _ = panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())
-                            .and_then(|_| widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms()));
-                    }
-                    Ok(()) => {}
-                    Err(e) => {
-                        // Nothing kept: read the files again from the top
-                        // next time (what did count is ignored by id).
-                        p.rollback();
-                        codex = crate::codex_tail::CodexTail::new(&codex_dir);
-                        eprintln!("dango daemon: codex failed: {e}");
-                    }
+                if let Err(e) = take_followed(&mut p, paths, &events) {
+                    // Nothing kept: read the files again from the top next
+                    // time (what did count is ignored by id).
+                    codex = crate::codex_tail::CodexTail::new(&codex_dir);
+                    eprintln!("dango daemon: codex failed: {e}");
+                }
+            }
+        }
+        // Every ~2 s, what Claude Code has written, unless Dango's hooks are
+        // installed and report it themselves.
+        if tick % CLAUDE_EVERY == 0 && !claude.hooks_installed() {
+            let mut events = claude.poll(paths, now_ms());
+            if !events.is_empty() {
+                let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+                drop_hooked_sessions(&p.conn, &mut events);
+                if let Err(e) = take_followed(&mut p, paths, &events) {
+                    claude = crate::claude_tail::ClaudeTail::new(&claude_dir);
+                    eprintln!("dango daemon: claude failed: {e}");
                 }
             }
         }
@@ -204,6 +207,75 @@ pub fn run(paths: &Paths) -> Result<()> {
         tick += 1;
         thread::sleep(POLL);
     }
+}
+
+/// Ingests events followed from a tool's own logs, as backfill does: one
+/// transaction, a bad event skipped, the panel rewritten when anything was
+/// new. On an error nothing is kept.
+fn take_followed(p: &mut Processor, paths: &Paths, events: &[dango_core::event::Event]) -> Result<()> {
+    let mut fresh = 0;
+    let done = p.begin().and_then(|_| {
+        for ev in events {
+            match p.handle(ev) {
+                Ok(new) => fresh += new as usize,
+                Err(e) => eprintln!("dango daemon: skipped {}: {e}", ev.id),
+            }
+        }
+        p.commit()
+    });
+    match done {
+        Ok(()) => {
+            if fresh > 0 {
+                let _ = panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())
+                    .and_then(|_| widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms()));
+            }
+            Ok(())
+        }
+        Err(e) => {
+            p.rollback();
+            Err(e)
+        }
+    }
+}
+
+/// Followed Claude Code events of sessions its hooks have reported (they
+/// count those live; following them too would count twice).
+fn drop_hooked_sessions(conn: &rusqlite::Connection, events: &mut Vec<dango_core::event::Event>) {
+    let mut seen: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
+    events.retain(|e| {
+        let Some(sid) = e.session_id.clone() else { return true };
+        let hooked = *seen.entry(sid.clone()).or_insert_with(|| {
+            conn.query_row("SELECT 1 FROM events WHERE session_id = ?1 AND source = 'claude_code' LIMIT 1", [&sid], |_| Ok(()))
+                .is_ok()
+        });
+        !hooked
+    });
+}
+
+/// The first start on a Mac: imports the history (Claude Code before its
+/// hooks first reported, all of Codex) the way `dango backfill` does, so a
+/// fresh install has its boss type at once. Done once (meta
+/// `history_imported`); afterwards the followers and hooks keep it current,
+/// and running it again would only find what is already counted.
+pub fn import_history(p: &mut Processor, paths: &Paths, claude_dir: &std::path::Path, codex_dir: &std::path::Path) -> Result<()> {
+    if db::get_meta(&p.conn, "history_imported")?.is_some() {
+        return Ok(());
+    }
+    let now = now_ms();
+    let cutoff = db::get_meta(&p.conn, "live_since")?.and_then(|v| v.parse().ok()).unwrap_or(now);
+    let codex = p.cfg.sources.codex && codex_dir.join("sessions").is_dir();
+    eprintln!("dango daemon: importing history…");
+    let mode = p.mode;
+    p.mode = Mode::Backfill;
+    let r = crate::backfill::run(p, paths, claude_dir, cutoff, codex.then_some((codex_dir, now)))
+        .and_then(|_| crate::usage::fill(p, claude_dir, codex_dir, now, usize::MAX).map(|_| ()));
+    p.mode = mode;
+    r?;
+    // As `dango backfill`: badges earned in the past are not celebrated now.
+    p.conn.execute("UPDATE unlocks SET celebrated = 1 WHERE backfilled = 1", [])?;
+    db::set_meta(&p.conn, "history_imported", &now.to_string())?;
+    panel::write(paths, &p.conn, p.tz, p.cfg.general.weekly_target, now_ms())?;
+    widget::write(paths, &p.conn, p.tz, &p.cfg, now_ms())
 }
 
 /// Sends one request; None if no daemon answers within `timeout`.

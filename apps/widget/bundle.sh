@@ -10,6 +10,9 @@ version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp target/release/dango-widget "$app/Contents/MacOS/Dango"
+cp -R apps/widget/assets/theme-b "$app/Contents/Resources/theme-b"
+cp -R apps/widget/assets/abti "$app/Contents/Resources/abti"
+cp assets/abti.json "$app/Contents/Resources/abti/abti.json"
 
 tmp="$(mktemp -d)"
 swiftc -O -framework AppKit -o "$tmp/icon" apps/widget/icon.swift

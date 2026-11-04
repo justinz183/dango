@@ -1,0 +1,872 @@
+{
+  "$comment": "DONGO ABTI 老板人格：所有门槛和文案。门槛是 Dango 自定的固定标准，不和别人比；上线后按真实结果调这个文件，不改代码。10-31 产品已确认全部取值。",
+  "version": "2026-10-31",
+  "dimensions": {
+    "order": [
+      "hands_off",
+      "build",
+      "range",
+      "hours"
+    ],
+    "hands_off": {
+      "letters": [
+        "H",
+        "M"
+      ],
+      "name_zh": [
+        "放权",
+        "微操"
+      ],
+      "name_en": [
+        "Hands-off",
+        "Micro"
+      ],
+      "rule": "一个回合里 AI 连续调用工具 ≥ min_tool_calls 次，或用了子 agent，算放手回合。放手回合数 / 全部回合数 > threshold → H，否则 M。卡上显示获胜那一边的百分比。",
+      "min_tool_calls": 8,
+      "subagent_counts": true,
+      "threshold": 0.5
+    },
+    "build": {
+      "letters": [
+        "B",
+        "F"
+      ],
+      "name_zh": [
+        "开荒",
+        "修缮"
+      ],
+      "name_en": [
+        "Build",
+        "Fix"
+      ],
+      "rule": "新建文件里写的行数 / 全部改动行数（新增 + 删除） > threshold → B，否则 F。",
+      "threshold": 0.5
+    },
+    "range": {
+      "letters": [
+        "S",
+        "G"
+      ],
+      "name_zh": [
+        "专精",
+        "跨界"
+      ],
+      "name_en": [
+        "Specialist",
+        "Generalist"
+      ],
+      "rule": "8 个角色里（隐藏款各算一个工种），占比 ≥ role_share_min 的角色数 ≥ min_roles → G，否则 S。卡上画 8 个小格，涂黑的格数 = 达标的角色数，第 2 格后面有一道刻度。占比按金额算（和团子构成一致）。",
+      "role_share_min": 0.1,
+      "min_roles": 3
+    },
+    "hours": {
+      "letters": [
+        "L",
+        "O"
+      ],
+      "name_zh": [
+        "早鸟",
+        "夜猫"
+      ],
+      "name_en": [
+        "Lark",
+        "Owl"
+      ],
+      "rule": "本地时间 night_start 点到次日 night_end 点之间的工作分钟 / 全部工作分钟 > threshold → O，否则 L。",
+      "night_start": 20,
+      "night_end": 8,
+      "threshold": 0.5
+    },
+    "tie_band": {
+      "min": 0.45,
+      "max": 0.55,
+      "rule": "放权、开荒、夜猫的比例落在这个区间时，卡上数字前加「≈」并用灰色，字母照常按 threshold 判。专精 / 跨界不设这一档。"
+    },
+    "exact_half": "正好 50% 时判第二个字母（M / F / L），因为规则写的是「过半」。"
+  },
+  "types": {
+    "HBSL": {
+      "name_zh": "流水线厂长",
+      "name_en": "Assembly-Line Boss",
+      "roast_zh": "你的团子比你还准时打卡。",
+      "roast_en": "Your dangos clock in more reliably than you do.",
+      "portrait_zh": "一条线跑通就交给团子，准点上下班",
+      "portrait_en": "Gets one line running, hands it to the dangos, leaves on time.",
+      "match": "MFSL",
+      "match_line_zh": "你负责开线，TA 负责把脉",
+      "match_line_en": "You start the line, they take its pulse.",
+      "scene": "assets/types/scene/T-HBSL.png",
+      "icon": "assets/types/icon/T-HBSL.png",
+      "icon_24": "assets/types/24px/T-HBSL.png"
+    },
+    "HBSO": {
+      "name_zh": "睡后收入家",
+      "name_en": "Sleep-Money Mogul",
+      "roast_zh": "你最高产的时间，是你睡着的时候。",
+      "roast_en": "Your most productive hours are the ones you sleep through.",
+      "portrait_zh": "睡前派活，醒来验收",
+      "portrait_en": "Assigns work at bedtime, signs it off at breakfast.",
+      "match": "MFSO",
+      "match_line_zh": "你睡着的时候，TA 在磨细节",
+      "match_line_en": "While you sleep, they polish.",
+      "scene": "assets/types/scene/T-HBSO.png",
+      "icon": "assets/types/icon/T-HBSO.png",
+      "icon_24": "assets/types/24px/T-HBSO.png"
+    },
+    "HBGL": {
+      "name_zh": "连续创业者",
+      "name_en": "Serial Founder",
+      "roast_zh": "开新坑的速度，永远比填坑快。",
+      "roast_en": "You start new things faster than you finish old ones.",
+      "portrait_zh": "什么都想做，而且真的开工了",
+      "portrait_en": "Wants to build everything, and actually starts.",
+      "match": "MFGL",
+      "match_line_zh": "你开坑，TA 盯着把坑填完",
+      "match_line_en": "You break ground, they make sure it gets finished.",
+      "scene": "assets/types/scene/T-HBGL.png",
+      "icon": "assets/types/icon/T-HBGL.png",
+      "icon_24": "assets/types/24px/T-HBGL.png"
+    },
+    "HBGO": {
+      "name_zh": "通宵包工头",
+      "name_en": "Night-Shift Foreman",
+      "roast_zh": "白天开会，晚上开工，团子没见过你的早上。",
+      "roast_en": "Meetings by day, building by night. Your dangos have never seen your morning.",
+      "portrait_zh": "什么活都接，天黑以后最能打",
+      "portrait_en": "Takes any job, at full strength after dark.",
+      "match": "MFGO",
+      "match_line_zh": "你晚上盖，TA 晚上验",
+      "match_line_en": "You build at night, they check at night.",
+      "scene": "assets/types/scene/T-HBGO.png",
+      "icon": "assets/types/icon/T-HBGO.png",
+      "icon_24": "assets/types/24px/T-HBGO.png"
+    },
+    "HFSL": {
+      "name_zh": "物业经理",
+      "name_en": "Property Manager",
+      "roast_zh": "你派的活永远是「这里又坏了，你看看」。",
+      "roast_en": "Every task you hand out is “it broke again, take a look.”",
+      "portrait_zh": "楼不是你盖的，但哪里漏水你最清楚",
+      "portrait_en": "Didn't build the place, but knows exactly where it leaks.",
+      "match": "MBSL",
+      "match_line_zh": "TA 盖的楼，你来管",
+      "match_line_en": "They build it, you keep it running.",
+      "scene": "assets/types/scene/T-HFSL.png",
+      "icon": "assets/types/icon/T-HFSL.png",
+      "icon_24": "assets/types/24px/T-HFSL.png"
+    },
+    "HFSO": {
+      "name_zh": "救火队长",
+      "name_en": "Fire Chief",
+      "roast_zh": "你和团子的交情，是在凌晨的报错里攒下的。",
+      "roast_en": "You and your dangos bonded over 2 AM stack traces.",
+      "portrait_zh": "半夜出事，第一个到场的是你的团子",
+      "portrait_en": "When something breaks at night, your dangos are first on the scene.",
+      "match": "MBSO",
+      "match_line_zh": "TA 夜里盯着盖，你夜里出警",
+      "match_line_en": "They build all night, you take the 2 AM call.",
+      "scene": "assets/types/scene/T-HFSO.png",
+      "icon": "assets/types/icon/T-HFSO.png",
+      "icon_24": "assets/types/24px/T-HFSO.png"
+    },
+    "HFGL": {
+      "name_zh": "包租公",
+      "name_en": "The Landlord",
+      "roast_zh": "你名下的项目，比你记得住的还多。",
+      "roast_en": "You own more projects than you can remember.",
+      "portrait_zh": "手里项目多，哪个响了修哪个，修完继续喝茶",
+      "portrait_en": "Owns a lot of projects, fixes whichever one rings, goes back to tea.",
+      "match": "MBGL",
+      "match_line_zh": "TA 天天提新要求，你慢悠悠全接住",
+      "match_line_en": "They keep asking for more, you calmly take it all.",
+      "scene": "assets/types/scene/T-HFGL.png",
+      "icon": "assets/types/icon/T-HFGL.png",
+      "icon_24": "assets/types/24px/T-HFGL.png"
+    },
+    "HFGO": {
+      "name_zh": "急诊科主任",
+      "name_en": "ER Chief",
+      "roast_zh": "你的「就改一行」，通常发生在凌晨一点。",
+      "roast_en": "Your “just one line” fixes tend to happen at 1 AM.",
+      "portrait_zh": "夜里什么病都收，分诊给团子，稳得住",
+      "portrait_en": "Takes every case at night, triages it to the dangos, stays calm.",
+      "match": "MBGO",
+      "match_line_zh": "TA 凌晨拍板，你凌晨收治",
+      "match_line_en": "They sign off at 2 AM, you treat whatever breaks.",
+      "scene": "assets/types/scene/T-HFGO.png",
+      "icon": "assets/types/icon/T-HFGO.png",
+      "icon_24": "assets/types/24px/T-HFGO.png"
+    },
+    "MFSL": {
+      "name_zh": "老中医",
+      "name_en": "The Old Doctor",
+      "roast_zh": "别人让 AI 写新功能，你让它先讲讲旧代码。",
+      "roast_en": "Others ask AI for new features. You ask it to explain the old code.",
+      "portrait_zh": "望闻问切，把一个问题看透再下药",
+      "portrait_en": "Looks, listens, asks, then treats: one problem, understood all the way.",
+      "match": "HBSL",
+      "match_line_zh": "TA 负责开线，你负责把脉",
+      "match_line_en": "They start the line, you take its pulse.",
+      "scene": "assets/types/scene/T-MFSL.png",
+      "icon": "assets/types/icon/T-MFSL.png",
+      "icon_24": "assets/types/24px/T-MFSL.png"
+    },
+    "MFSO": {
+      "name_zh": "修表匠",
+      "name_en": "Watchmaker",
+      "roast_zh": "一个缩进你能盯十分钟。",
+      "roast_en": "You can stare at one indent for ten minutes.",
+      "portrait_zh": "夜里一个人，把一处细节磨到完美",
+      "portrait_en": "Alone at night, polishing one detail until it's perfect.",
+      "match": "HBSO",
+      "match_line_zh": "TA 睡着的时候，你在磨细节",
+      "match_line_en": "While they sleep, you polish.",
+      "scene": "assets/types/scene/T-MFSO.png",
+      "icon": "assets/types/icon/T-MFSO.png",
+      "icon_24": "assets/types/24px/T-MFSO.png"
+    },
+    "MFGL": {
+      "name_zh": "装修业主",
+      "name_en": "Hovering Homeowner",
+      "roast_zh": "团子最怕听到的一句话：「我就随便看看。」",
+      "roast_en": "The words your dangos fear most: “just taking a quick look.”",
+      "portrait_zh": "水电瓦木都过问，每天来工地看一眼",
+      "portrait_en": "Checks on the plumbing, the wiring and the tiles, and visits the site daily.",
+      "match": "HBGL",
+      "match_line_zh": "TA 开坑，你盯着把坑填完",
+      "match_line_en": "They break ground, you make sure it gets finished.",
+      "scene": "assets/types/scene/T-MFGL.png",
+      "icon": "assets/types/icon/T-MFGL.png",
+      "icon_24": "assets/types/24px/T-MFGL.png"
+    },
+    "MFGO": {
+      "name_zh": "质检总监",
+      "name_en": "Midnight QA Chief",
+      "roast_zh": "测试全绿的时候，你反而开始担心。",
+      "roast_en": "When every test passes, that’s when you start worrying.",
+      "portrait_zh": "什么都查，越晚越清醒",
+      "portrait_en": "Inspects everything, sharper the later it gets.",
+      "match": "HBGO",
+      "match_line_zh": "TA 晚上盖，你晚上验",
+      "match_line_en": "They build at night, you check at night.",
+      "scene": "assets/types/scene/T-MFGO.png",
+      "icon": "assets/types/icon/T-MFGO.png",
+      "icon_24": "assets/types/24px/T-MFGO.png"
+    },
+    "MBSL": {
+      "name_zh": "主理人",
+      "name_en": "Head Craftsman",
+      "roast_zh": "团子写完你重写一遍，然后说「思路是对的」。",
+      "roast_en": "Your dangos write it, you rewrite it, then call it “the right idea.”",
+      "portrait_zh": "只做一件事，每一步都亲自过目",
+      "portrait_en": "Makes one thing, and looks over every step personally.",
+      "match": "HFSL",
+      "match_line_zh": "你盖的楼，TA 来管",
+      "match_line_en": "You build it, they keep it running.",
+      "scene": "assets/types/scene/T-MBSL.png",
+      "icon": "assets/types/icon/T-MBSL.png",
+      "icon_24": "assets/types/24px/T-MBSL.png"
+    },
+    "MBSO": {
+      "name_zh": "夜班监工",
+      "name_en": "Night Overseer",
+      "roast_zh": "你不睡，团子也不敢睡。",
+      "roast_en": "You don’t sleep, so neither do your dangos.",
+      "portrait_zh": "夜深人静，盯着团子把东西一点点盖起来",
+      "portrait_en": "In the quiet of the night, watches the dangos build it brick by brick.",
+      "match": "HFSO",
+      "match_line_zh": "你夜里盯着盖，TA 夜里出警",
+      "match_line_en": "You build all night, they take the 2 AM call.",
+      "scene": "assets/types/scene/T-MBSO.png",
+      "icon": "assets/types/icon/T-MBSO.png",
+      "icon_24": "assets/types/24px/T-MBSO.png"
+    },
+    "MBGL": {
+      "name_zh": "甲方爸爸",
+      "name_en": "The Client",
+      "roast_zh": "改到第八版，你说还是第一版好。",
+      "roast_en": "Eight revisions later, you went back to v1.",
+      "portrait_zh": "想法多、标准高，每一版都要亲自看",
+      "portrait_en": "Lots of ideas, high standards, reviews every version in person.",
+      "match": "HFGL",
+      "match_line_zh": "你天天提新要求，TA 慢悠悠全接住",
+      "match_line_en": "You keep asking for more, they calmly take it all.",
+      "scene": "assets/types/scene/T-MBGL.png",
+      "icon": "assets/types/icon/T-MBGL.png",
+      "icon_24": "assets/types/24px/T-MBGL.png"
+    },
+    "MBGO": {
+      "name_zh": "霸道总裁",
+      "name_en": "Midnight CEO",
+      "roast_zh": "凌晨两点逐条审批，团子大气不敢出。",
+      "roast_en": "Approving every step at 2 AM. Your dangos barely breathe.",
+      "portrait_zh": "什么都要，什么都要管，凌晨还在批",
+      "portrait_en": "Wants it all, runs it all, still approving at 2 AM.",
+      "match": "HFGO",
+      "match_line_zh": "你凌晨拍板，TA 凌晨收治",
+      "match_line_en": "You sign off at 2 AM, they treat whatever breaks.",
+      "scene": "assets/types/scene/T-MBGO.png",
+      "icon": "assets/types/icon/T-MBGO.png",
+      "icon_24": "assets/types/24px/T-MBGO.png"
+    }
+  },
+  "scale_tiers": [
+    {
+      "id": "solo",
+      "name_zh": "个体户",
+      "name_en": "Solo Stall",
+      "min_usd": 0,
+      "line_zh": "刚支起摊子，团子还在试用期。",
+      "line_en": "Just opened the stall. Your dangos are on probation."
+    },
+    {
+      "id": "workshop",
+      "name_zh": "小作坊",
+      "name_en": "Workshop",
+      "min_usd": 1000,
+      "line_zh": "门面不大，团子们已经开始轮班。",
+      "line_en": "Small shop, but the dangos already work in shifts."
+    },
+    {
+      "id": "studio",
+      "name_zh": "工作室",
+      "name_en": "Studio",
+      "min_usd": 10000,
+      "line_zh": "有了工位和咖啡机，团子开始管你叫老板。",
+      "line_en": "Desks, a coffee machine, and dangos who call you boss."
+    },
+    {
+      "id": "group",
+      "name_zh": "集团",
+      "name_en": "Group",
+      "min_usd": 100000,
+      "line_zh": "团子分了部门，茶水间开始有人议论你。",
+      "line_en": "Your dangos have departments now, and opinions about you."
+    },
+    {
+      "id": "listed",
+      "name_zh": "上市公司",
+      "name_en": "Listed",
+      "min_usd": 1000000,
+      "line_zh": "敲钟了。团子们在问期权什么时候发。",
+      "line_en": "You rang the bell. The dangos are asking about stock options."
+    }
+  ],
+  "scale_rule": "按扫描到的累计「团子替你打的工」（$）取最高的 min_usd ≤ 金额 的那一档，不年化。卡上写成「工作室级」/「Studio tier」。",
+  "margin_tiers": [
+    {
+      "min": 0.95,
+      "name_zh": "黑心老板",
+      "name_en": "Ruthless Boss",
+      "line_zh": "团子们在茶水间说你坏话。",
+      "line_en": "The dangos badmouth you in the break room."
+    },
+    {
+      "min": 0.8,
+      "name_zh": "标准资本家",
+      "name_en": "Textbook Capitalist",
+      "line_zh": "算盘打得响，团子们服气。",
+      "line_en": "Sharp with the numbers, and the dangos respect it."
+    },
+    {
+      "min": 0.5,
+      "name_zh": "良心老板",
+      "name_en": "Decent Boss",
+      "line_zh": "团子们说你人还行。",
+      "line_en": "The dangos say you're alright."
+    },
+    {
+      "min": 0,
+      "name_zh": "慈善家",
+      "name_en": "Philanthropist",
+      "line_zh": "你给团子开的工资，快赶上它们干的活了。",
+      "line_en": "What you pay the dangos almost matches the work they do."
+    },
+    {
+      "min": null,
+      "name_zh": "倒贴老板",
+      "name_en": "Paying to Work",
+      "line_zh": "你付给团子的，比它们干的还多。",
+      "line_en": "You pay the dangos more than their work is worth."
+    }
+  ],
+  "margin_rule": "压榨率 = 1 − 模型花费 ÷ 团子替你打的工；从上往下取第一个 min ≤ 压榨率 的档，都不满足就是最后一档（< 0）。英文卡叫 margin。杠杆 = 打的工 ÷ 模型花费，和压榨率是同一件事的两种说法，卡上一起出现。",
+  "roles": [
+    {
+      "id": "coder",
+      "name_zh": "程序员",
+      "name_en": "Coder",
+      "art": "R06",
+      "alt_art": [
+        "R07",
+        "R09"
+      ],
+      "color": "#6250D6",
+      "text_on_color": "#FFFFFF",
+      "covers_zh": "写代码、改代码、测试、部署、脚本",
+      "covers_en": "Code, tests, deploys, scripts",
+      "occupations": [
+        "swe",
+        "web",
+        "qa",
+        "ops"
+      ]
+    },
+    {
+      "id": "research",
+      "name_zh": "研究员",
+      "name_en": "Researcher",
+      "art": "R11",
+      "alt_art": [],
+      "color": "#EDA100",
+      "text_on_color": "#1C1C1C",
+      "covers_zh": "查资料、读文档、学东西",
+      "covers_en": "Look things up, read docs, learn",
+      "occupations": [
+        "research",
+        "mathematician",
+        "physicist",
+        "chemist",
+        "biologist"
+      ]
+    },
+    {
+      "id": "data",
+      "name_zh": "数据分析师",
+      "name_en": "Data analyst",
+      "art": "R04",
+      "alt_art": [],
+      "color": "#1BAF7A",
+      "text_on_color": "#1C1C1C",
+      "covers_zh": "表格、SQL、图表",
+      "covers_en": "Sheets, SQL, charts",
+      "occupations": [
+        "data"
+      ]
+    },
+    {
+      "id": "design",
+      "name_zh": "设计师",
+      "name_en": "Designer",
+      "art": "R02",
+      "alt_art": [
+        "R03"
+      ],
+      "color": "#E87BA4",
+      "text_on_color": "#1C1C1C",
+      "covers_zh": "界面、视觉、图片、视频、音频",
+      "covers_en": "UI, visuals, images, video, audio",
+      "occupations": [
+        "designer",
+        "video",
+        "musician"
+      ]
+    },
+    {
+      "id": "writer",
+      "name_zh": "文案",
+      "name_en": "Writer",
+      "art": "R05",
+      "alt_art": [
+        "R01"
+      ],
+      "color": "#008300",
+      "text_on_color": "#FFFFFF",
+      "covers_zh": "文档、文章、演示稿、起名、营销",
+      "covers_en": "Docs, posts, decks, naming, marketing",
+      "occupations": [
+        "writer"
+      ]
+    },
+    {
+      "id": "pm",
+      "name_zh": "产品经理",
+      "name_en": "Product manager",
+      "art": "R08",
+      "alt_art": [],
+      "color": "#EB6834",
+      "text_on_color": "#1C1C1C",
+      "covers_zh": "需求、规划、排期",
+      "covers_en": "Specs, planning, roadmaps",
+      "occupations": [
+        "pm"
+      ]
+    },
+    {
+      "id": "biz",
+      "name_zh": "商务分析师",
+      "name_en": "Business analyst",
+      "art": "R10",
+      "alt_art": [],
+      "color": "#2A78D6",
+      "text_on_color": "#FFFFFF",
+      "covers_zh": "财务、报价、市场数据",
+      "covers_en": "Finance, pricing, market data",
+      "occupations": [
+        "fin"
+      ]
+    },
+    {
+      "id": "assistant",
+      "name_zh": "助理",
+      "name_en": "Assistant",
+      "art": "R12",
+      "alt_art": [],
+      "color": "#E34948",
+      "text_on_color": "#1C1C1C",
+      "covers_zh": "整理文件、录入、转格式、批量改名、排日程、会议纪要",
+      "covers_en": "Files, data entry, formats, schedules, notes",
+      "occupations": [
+        "entry"
+      ]
+    }
+  ],
+  "hidden_roles": [
+    {
+      "id": "doctor",
+      "name_zh": "医生",
+      "name_en": "Doctor",
+      "art": "assets/hidden/H1-doctor.png",
+      "occupations": [
+        "doctor"
+      ]
+    },
+    {
+      "id": "lawyer",
+      "name_zh": "律师",
+      "name_en": "Lawyer",
+      "art": "assets/hidden/H2-lawyer.png",
+      "occupations": [
+        "lawyer"
+      ]
+    },
+    {
+      "id": "architect",
+      "name_zh": "建筑师",
+      "name_en": "Architect",
+      "art": "assets/hidden/H3-architect.png",
+      "occupations": [
+        "architect"
+      ]
+    },
+    {
+      "id": "chef",
+      "name_zh": "厨师",
+      "name_en": "Chef",
+      "art": "assets/hidden/H4-chef.png",
+      "occupations": [
+        "chef"
+      ]
+    },
+    {
+      "id": "trainer",
+      "name_zh": "健身教练",
+      "name_en": "Coach",
+      "art": "assets/hidden/H5-trainer.png",
+      "occupations": [
+        "trainer"
+      ]
+    },
+    {
+      "id": "counselor",
+      "name_zh": "心理咨询师",
+      "name_en": "Counselor",
+      "art": "assets/hidden/H6-counselor.png",
+      "occupations": [
+        "counselor"
+      ]
+    }
+  ],
+  "new_occupations": {
+    "$comment": "10-31 决定：把文案、产品经理两个职业加回 occupations.toml。时薪请取 occupations.toml 现在用的同一版 BLS OEWS 的全国中位时薪，和其他职业保持同一口径。分类时把原来算进 research 的写作类、规划类回合分出来。",
+    "writer": {
+      "name_zh": "文案",
+      "name_en": "Writer",
+      "soc": "27-3043",
+      "soc_title": "Writers and Authors",
+      "covers_zh": "文档、文章、演示稿、起名、营销",
+      "covers_en": "Docs, articles, slides, naming, marketing",
+      "bls": "https://www.bls.gov/oes/current/oes273043.htm"
+    },
+    "pm": {
+      "name_zh": "产品经理",
+      "name_en": "Product manager",
+      "soc": "13-1082",
+      "soc_title": "Project Management Specialists",
+      "covers_zh": "需求、规划、排期",
+      "covers_en": "Requirements, planning, schedules",
+      "bls": "https://www.bls.gov/oes/current/oes131082.htm"
+    }
+  },
+  "hidden_rule": "隐藏款照样按各自职业的 BLS 时薪算钱；某一个占比 ≥ 10% 时，才在团子构成里单独出现，算一个工种；不到 10% 时并进「其他」。构成条上隐藏款用灰色 #B5B5BA 加一个小星标，不占新颜色。",
+  "money_rule": "团子替你打的工 = Σ 各职业计时分钟 / 60 × 该职业 BLS 中位时薪（occupations.toml 里已有）。角色金额 = 该角色下所有职业金额之和。卡上的「≈ N 小时」= 该角色下各职业计时分钟之和 ÷ 60（等于金额 ÷ 时薪），≥ 10 小时取整，< 10 小时保留一位小数。",
+  "checkup": {
+    "$comment": "总卡和故事第 6 屏「体检单」的分档（10-31 确认）。每档 [门槛, 中文, English, 文字色(可选)]，取最后一个门槛 ≤ 数值的档。",
+    "tokens_total": {
+      "label_zh": "累计 token",
+      "label_en": "Lifetime tokens",
+      "source": "Σ turns.tokens（含缓存）",
+      "note": "10-31 决定：「界面上不列 token 数」这条规则只在体检单里放开，CLAUDE.md 和 SPEC 8.5 要同步改；面板等其他地方照旧不列。",
+      "tiers": [
+        [
+          0,
+          "起步",
+          "Starter"
+        ],
+        [
+          100000000,
+          "小康",
+          "Comfortable"
+        ],
+        [
+          1000000000,
+          "土豪",
+          "Big Spender"
+        ],
+        [
+          10000000000,
+          "★ 传说",
+          "★ Legend"
+        ]
+      ]
+    },
+    "lines_added": {
+      "label_zh": "新增代码",
+      "label_en": "Lines added",
+      "source": "Σ turns.lines_added",
+      "tiers": [
+        [
+          0,
+          "起步",
+          "Starter"
+        ],
+        [
+          10000,
+          "勤快",
+          "Busy"
+        ],
+        [
+          100000,
+          "高产",
+          "Prolific"
+        ],
+        [
+          1000000,
+          "★ 传说",
+          "★ Legend"
+        ]
+      ]
+    },
+    "first_try_pass": {
+      "label_zh": "测试一次过",
+      "label_en": "First-try pass",
+      "source": "test_passed / test_run",
+      "min_runs": 20,
+      "too_few_zh": "样本少",
+      "too_few_en": "Too few runs",
+      "tiers": [
+        [
+          0,
+          "↓ 偏低",
+          "↓ Low",
+          "#B45309"
+        ],
+        [
+          0.6,
+          "正常",
+          "Normal"
+        ],
+        [
+          0.8,
+          "✓ 健康",
+          "✓ Healthy",
+          "#15803D"
+        ]
+      ]
+    },
+    "night_shift": {
+      "label_zh": "夜班指数",
+      "label_en": "Night shift",
+      "source": "0–5 点的回合 / 全部回合（注意：和「夜猫」维度的 20–8 点是两个口径）",
+      "tiers": [
+        [
+          0,
+          "正常",
+          "Normal"
+        ],
+        [
+          0.15,
+          "↑ 偏高",
+          "↑ High",
+          "#B45309"
+        ]
+      ]
+    },
+    "longest_streak": {
+      "label_zh": "最长连续开工",
+      "label_en": "Longest streak",
+      "source": "daily.is_active 最长连续天数",
+      "tiers": [
+        [
+          0,
+          "起步",
+          "Warming up"
+        ],
+        [
+          7,
+          "不错",
+          "Steady"
+        ],
+        [
+          30,
+          "良好",
+          "Solid"
+        ],
+        [
+          100,
+          "★ 传说",
+          "★ Legend"
+        ]
+      ]
+    },
+    "max_subagents": {
+      "label_zh": "最多同时带帮手",
+      "label_en": "Max subagents",
+      "source": "max(turns.subagents)",
+      "tiers": [
+        [
+          0,
+          "单干",
+          "Solo"
+        ],
+        [
+          2,
+          "有帮手",
+          "Has help"
+        ],
+        [
+          5,
+          "多线程",
+          "Multithreaded"
+        ]
+      ]
+    }
+  },
+  "story": {
+    "$comment": "故事模式 7 屏（第 8 屏是总卡）用到的规则和文案，10-31。",
+    "guess_lines": {
+      "rule": "第 3 屏「对答案」：按 H/M、B/F、S/G、L/O 的顺序找第一个猜错的维度，出对应那句；四个全对出 all_right。用户在第 1 屏跳过了就不显示这一块。",
+      "M>H": "你以为你在盯，其实早撒手了。",
+      "H>M": "你以为你放手了，其实每一步都在看。",
+      "F>B": "你以为你在修老坑，其实一直在开新坑。",
+      "B>F": "你以为你在开新坑，其实大半时间在修老坑。",
+      "S>G": "你以为你只干一类活，团子们可不这么觉得。",
+      "G>S": "你以为你什么都干，其实主要就干一件事。",
+      "L>O": "你以为你是白天干活的人，团子们见过你的凌晨。",
+      "O>L": "你以为你是夜猫，其实活大多是白天干完的。",
+      "all_right": "四个全猜中，你很了解自己的团子。",
+      "key": "「猜的>测出来的」，比如 M>H = 猜 M、测出来是 H"
+    },
+    "advice": {
+      "rule": "第 6 屏医嘱：按下面的顺序检查，命中的取前 3 条；一条都没命中就用 fallback。{} 里换成真实数字。",
+      "items": [
+        {
+          "when": "night_shift > 0.15",
+          "zh": "凌晨回合占 {night_shift}%，建议早睡。团子不困，你会。",
+          "en": "{night_shift}% of your turns are in the small hours. Get some sleep. The dangos don't get tired, you do."
+        },
+        {
+          "when": "first_try_pass < 0.6 且 test_run ≥ 20",
+          "zh": "测试一次过只有 {first_try_pass}%，建议先让团子把测试跑一遍再交活。",
+          "en": "Only {first_try_pass}% of test runs pass first time. Have the dangos run the tests before they hand in."
+        },
+        {
+          "when": "max_subagents >= 5",
+          "zh": "最多同时带 {max_subagents} 个帮手，记得给团子们发加班费。",
+          "en": "Up to {max_subagents} helpers at once. Remember to pay the dangos overtime."
+        },
+        {
+          "when": "longest_streak >= 30",
+          "zh": "连续开工 {longest_streak} 天，该给自己放个假了，团子可以替你值班。",
+          "en": "{longest_streak} days straight. Take a day off; the dangos can cover for you."
+        },
+        {
+          "when": "margin >= 0.95",
+          "zh": "压榨率 {margin}%，团子们已经在茶水间议论你了，适当发点奖金。",
+          "en": "Margin {margin}%. The dangos are talking about you in the break room. A bonus would help."
+        },
+        {
+          "when": "first_try_pass >= 0.8 且 test_run ≥ 20",
+          "zh": "测试一次过 {first_try_pass}%，状态不错，保持。",
+          "en": "{first_try_pass}% of test runs pass first time. Good shape, keep it up."
+        }
+      ],
+      "fallback": "各项指标正常，继续让团子多干点。",
+      "fallback_en": "Everything looks normal. Keep the dangos busy."
+    },
+    "verdict": {
+      "rule": "第 6 屏「总评」：有夜班偏高 → night；有测试偏低 → tests；都没有 → fine。两个都有时用 night。",
+      "night": "底子很好，作息待改善。建议继续让团子多干点。",
+      "tests": "干得多，返工也多。建议先让团子把测试跑一遍。",
+      "fine": "各项指标都不错，继续让团子多干点。"
+    },
+    "relations": {
+      "rule": "第 7 屏：绝配的前两个字母一定相反，后两个一定相同，所以每对都是这四行。",
+      "H<>M": "一个撒手开工，一个盯着验收",
+      "B<>F": "一个开新坑，一个收尾",
+      "S=S": "都只盯一类活",
+      "G=G": "都是什么活都沾",
+      "L=L": "都是白天把活干完",
+      "O=O": "都是天黑才进状态"
+    },
+    "moments": {
+      "rule": "第 5 屏名场面，只写时间和数字，不写项目名。",
+      "latest_night": "最晚结束的回合的本地时间（只看 0–6 点，没有就用最晚的一次）和日期",
+      "best_day": "金额最高的一天：日期、金额、≈ 小时（这一天各职业计时分钟之和 ÷ 60）",
+      "longest_streak": "最长连续开工天数和起止日期",
+      "longest_turn": "AI 自己连续干的最长一回合，分钟"
+    },
+    "timing": {
+      "scan_ms": 3000,
+      "letter_stagger_ms": 350,
+      "letter_flip_ms": 500,
+      "scene_at_ms": 1600,
+      "answer_at_ms": 2100,
+      "reduced_motion": "系统开了「减少动态效果」时直接显示最终状态"
+    },
+    "guess_lines_en": {
+      "M>H": "You thought you were watching. You let go long ago.",
+      "H>M": "You thought you'd let go. You're watching every step.",
+      "F>B": "You thought you were patching old holes. You keep digging new ones.",
+      "B>F": "You thought you were breaking new ground. Mostly you're fixing old ground.",
+      "S>G": "You thought you did one kind of work. Your dangos disagree.",
+      "G>S": "You thought you did a bit of everything. Mostly it's one thing.",
+      "L>O": "You thought you were a day person. Your dangos have seen your 3 AMs.",
+      "O>L": "You thought you were a night owl. Most of it gets done by daylight.",
+      "all_right": "Four for four. You know your dangos well."
+    },
+    "verdict_en": {
+      "night": "Solid foundation, sleep needs work. Keep the dangos busy.",
+      "tests": "Lots done, lots redone. Have the dangos run the tests first.",
+      "fine": "All good. Keep the dangos busy."
+    },
+    "relations_en": {
+      "H<>M": "One lets go and builds, one watches and signs off",
+      "B<>F": "One digs new holes, one fills them in",
+      "S=S": "Both stick to one kind of work",
+      "G=G": "Both take a bit of everything",
+      "L=L": "Both get it done by daylight",
+      "O=O": "Both come alive after dark"
+    }
+  },
+  "heatmap": {
+    "colors": [
+      "#F2F2F3",
+      "#C9EBD2",
+      "#8ED3A3",
+      "#46B26B",
+      "#15803D"
+    ],
+    "rule": "0 = 没开工；有产出的天按这个人自己所有有产出天数的四分位分成 1–4 档（10-31 确认）。画布上的示例用的是固定金额分档，换成小用户会整片发白，所以实现时按自己的数据分。今天加 1.5pt 黑框，还没到的日子画虚线格。"
+  }
+}

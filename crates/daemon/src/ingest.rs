@@ -112,11 +112,17 @@ struct TurnAgg {
     test_run: bool,
     test_first: Option<bool>,
     test_last: Option<bool>,
+    /// Test commands that failed in this turn (three make the office fume).
+    test_fails: u32,
     test_fixed: bool,
     commit: bool,
     merge: bool,
     push: bool,
     agent_calls: u32,
+    /// Subagents set off and finished (transcripts give both; the hooks
+    /// give only the stops). Running = starts − stops, when there are starts.
+    #[serde(default)]
+    subagent_starts: u32,
     subagent_stops: u32,
     file_age_max: Option<u32>,
     migration: bool,
@@ -162,6 +168,9 @@ struct SessState {
     /// own ("继续") stays on it for a while (occupation::TOPIC_MEMORY_MINUTES).
     last_topic: Option<String>,
     last_topic_at: Option<i64>,
+    /// A permission prompt the user has not answered yet: the office shows
+    /// the turn's job waiting until the next event of the session.
+    waiting_since: Option<i64>,
 }
 
 struct TurnRow {
@@ -411,17 +420,33 @@ impl Processor {
             Kind::SessionStart => self.on_session_start(ev, ts)?,
             Kind::Prompt => self.on_prompt(ev, ts)?,
             Kind::Tool => self.on_tool(ev, ts)?,
+            Kind::SubagentStart => self.on_subagent_start(ev, ts)?,
             Kind::SubagentStop => self.on_subagent_stop(ev, ts)?,
             Kind::TurnEnd => self.on_turn_end(ev, ts)?,
             Kind::Notification => {
                 if ev.payload.notification_type.as_deref() == Some("permission_prompt") {
                     self.set_meta("last_permission_ms", &ts.to_string())?;
+                    if let Some(sid) = ev.session_id.as_deref() {
+                        let mut st = self.sess(sid)?;
+                        st.waiting_since = Some(ts);
+                        self.save_sess(sid, &st)?;
+                    }
                 }
             }
             Kind::SessionEnd => self.on_session_end(ev, ts)?,
             Kind::Commit => self.on_commit(ev, ts)?,
             Kind::PreCompact => {}
             Kind::Usage => self.on_usage(ev)?,
+        }
+        // Anything the session does next answers its permission prompt.
+        if matches!(ev.kind, Kind::Tool | Kind::TurnEnd | Kind::Prompt | Kind::SubagentStart | Kind::SubagentStop) {
+            if let Some(sid) = ev.session_id.as_deref() {
+                let mut st = self.sess(sid)?;
+                if st.waiting_since.is_some() {
+                    st.waiting_since = None;
+                    self.save_sess(sid, &st)?;
+                }
+            }
         }
         Ok(true)
     }
@@ -805,6 +830,9 @@ impl Processor {
             agg.test_run = true;
             agg.test_first.get_or_insert(passed);
             agg.test_last = Some(passed);
+            if !passed {
+                agg.test_fails += 1;
+            }
             if passed && st.last_test_failed {
                 agg.test_fixed = true;
             }
@@ -819,10 +847,10 @@ impl Processor {
         }
         agg.agent_calls += p.subagents.unwrap_or(0);
         if let (Some(o), Some(m)) = (&p.occupation, p.minutes) {
-            // Prose is a researcher's work, counted from its words at today's
-            // pace (older events say "writer", at an older pace).
-            let (o, m) = if o == "writer" || (o == "research" && p.words.is_some()) {
-                ("research".to_string(), p.words.map(occupation::prose_minutes).unwrap_or(m))
+            // Prose is counted from its words at today's pace (2,000 an
+            // hour); from 10-29 to 10-31 it was stored as research.
+            let (o, m) = if (o == "writer" || o == "research" || o == "pm") && p.words.is_some() {
+                (if o == "pm" { "pm" } else { "writer" }.to_string(), p.words.map(occupation::prose_minutes).unwrap_or(m))
             } else {
                 (o.clone(), m)
             };
@@ -867,6 +895,19 @@ impl Processor {
             params![fid, ts, kept + added as i64],
         )?;
         Ok(recent)
+    }
+
+    /// A subagent set off: counted toward the helpers at work, nothing
+    /// credited (its work is credited when it finishes).
+    fn on_subagent_start(&mut self, ev: &Event, ts: i64) -> Result<()> {
+        let Some(sid) = ev.session_id.as_deref() else { return Ok(()) };
+        self.ensure_session(sid, ts)?;
+        let tid = self.turn_for(ev, sid, ts)?;
+        let Some(row) = self.turn(&tid)? else { return Ok(()) };
+        let mut agg = row.agg;
+        agg.subagent_starts += 1;
+        agg.last_activity = agg.last_activity.max(ts);
+        self.save_agg(&tid, &agg)
     }
 
     fn on_subagent_stop(&mut self, ev: &Event, ts: i64) -> Result<()> {

@@ -32,6 +32,8 @@ pub enum Kind {
     SessionStart,
     Prompt,
     Tool,
+    /// A subagent set off (read from a transcript: its Task / Agent call).
+    SubagentStart,
     SubagentStop,
     TurnEnd,
     Notification,
@@ -48,6 +50,7 @@ impl Kind {
             Kind::SessionStart => "session_start",
             Kind::Prompt => "prompt",
             Kind::Tool => "tool",
+            Kind::SubagentStart => "subagent_start",
             Kind::SubagentStop => "subagent_stop",
             Kind::TurnEnd => "turn_end",
             Kind::Notification => "notification",

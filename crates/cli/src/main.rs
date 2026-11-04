@@ -34,8 +34,10 @@ const USAGE: &str = "dango（打工团子）— 你的 AI 替你干了多少活�
   dango report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
                                    日报 / 周报 / 月报（DATE = YYYY-MM-DD | today | yesterday，
                                    周报取 DATE 所在的周，月报取所在的月）
-  dango card [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
-                                   渲染分享卡到 ~/Pictures/Dango/ 并复制到剪贴板
+  dango card [--week|--month|--year] [--day DATE] [--out PNG] [--no-open]
+                                   导出 4:5 分享图（和报告窗口同一套设计）到 ~/Pictures/DONGO/ 并复制到剪贴板
+  dango abti [--json] | dango abti --report day|week|month|year|total [--day DATE]
+                                   老板人格测试的结果 / 报告窗口一页的数据（JSON）
   dango panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   dango backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
@@ -56,8 +58,10 @@ Usage:
   dango report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
                                    day / week / month / year report (DATE = YYYY-MM-DD | today | yesterday;
                                    the week, month or year that contains DATE)
-  dango card [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--out PNG] [--no-open]
-                                   render a share card to ~/Pictures/Dango/ and copy it
+  dango card [--week|--month|--year] [--day DATE] [--out PNG] [--no-open]
+                                   export the 4:5 share image (the report window's design) to ~/Pictures/DONGO/ and copy it
+  dango abti [--json] | dango abti --report day|week|month|year|total [--day DATE]
+                                   the AI boss type, or one report window page (JSON)
   dango backfill [--claude-dir DIR]
                                    import Claude Code and Codex history from before install
   dango daemon                run the daemon in the foreground
@@ -97,6 +101,7 @@ fn dispatch(cmd: &str, args: &[String], paths: &Paths) -> Result<i32> {
         "widget" => widget(paths),
         "lang" => lang(paths, args),
         "report" => report(paths, args),
+        "abti" => abti(paths, args),
         "card" => card(paths, args),
         "daemon" => server::run(paths).map(|_| 0),
         "replay" => replay(paths, args),
@@ -199,22 +204,58 @@ fn report(paths: &Paths, args: &[String]) -> Result<i32> {
     Ok(0)
 }
 
-/// The card renderer: Dango.app when installed, else the widget binary.
-fn renderer() -> Result<PathBuf> {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let candidates = [
-        PathBuf::from("/Applications/Dango.app/Contents/MacOS/Dango"),
-        PathBuf::from(format!("{home}/Applications/Dango.app/Contents/MacOS/Dango")),
-        std::env::current_exe()?.with_file_name("dango-widget"),
-    ];
-    candidates.into_iter().find(|p| p.exists()).ok_or_else(|| "没有找到 Dango.app，先运行 apps/widget/bundle.sh".into())
+/// `dango abti`: the boss type (老板人格) and what the card and the story
+/// show, as JSON with --json. `dango abti --report day|week|month|year|total
+/// [--day DATE]`: one report window page.
+fn abti(paths: &Paths, args: &[String]) -> Result<i32> {
+    let now = now_ms();
+    let tz = Tz::from_env();
+    let v = match flag(args, "--report") {
+        Some(kind) => {
+            let day = parse_day(args)?;
+            fresh_db(paths, |c, cfg| daemon::abti::report(c, tz, cfg, &claude_dir(), &kind, day, now))?
+        }
+        None => fresh_db(paths, |c, cfg| daemon::abti::result(c, tz, cfg, now))?,
+    };
+    if args.iter().any(|a| a == "--json") || v["kind"].is_string() {
+        println!("{}", serde_json::to_string_pretty(&v)?);
+    } else {
+        let pct = |x: &Value| format!("{:.0}%", x.as_f64().unwrap_or(0.0) * 100.0);
+        println!("{} {} — {}", v["code"].as_str().unwrap_or(""), v["type"]["name"].as_str().unwrap_or(""), v["type"]["roast"].as_str().unwrap_or(""));
+        for d in v["dims"].as_array().into_iter().flatten() {
+            let name = d["names"][d["winner"].as_u64().unwrap_or(0) as usize].as_str().unwrap_or("");
+            let shown = if d["id"] == "range" { format!("{} / 8", d["roles"]) } else { pct(&d["pct"]) };
+            println!("  {} {name} {shown}", d["letter"].as_str().unwrap_or(""));
+        }
+        println!("  {} · {} · {}", fmt_usd(v["usd"].as_f64().unwrap_or(0.0)), v["scale"]["name"].as_str().unwrap_or(""), v["margin_tier"]["name"].as_str().unwrap_or(""));
+    }
+    Ok(0)
 }
 
+/// The card renderer: the app this dango came in (Contents/Helpers/dango,
+/// apps/widget/package.sh), Dango.app when installed, else the widget binary.
+fn renderer() -> Result<PathBuf> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let exe = std::env::current_exe()?;
+    let candidates = [
+        exe.parent().and_then(Path::parent).map(|c| c.join("MacOS/Dango")).filter(|_| exe.parent().is_some_and(|d| d.ends_with("Contents/Helpers"))).unwrap_or_default(),
+        PathBuf::from("/Applications/Dango.app/Contents/MacOS/Dango"),
+        PathBuf::from(format!("{home}/Applications/Dango.app/Contents/MacOS/Dango")),
+        exe.with_file_name("dango-widget"),
+    ];
+    candidates.into_iter().find(|p| !p.as_os_str().is_empty() && p.exists()).ok_or_else(|| "没有找到 Dango.app，先运行 apps/widget/bundle.sh".into())
+}
+
+/// `dango card [--week|--month|--year] [--day DATE]`: the period's 4:5
+/// share image, drawn by the app in the report window's design, saved to
+/// ~/Pictures/DONGO and copied. Share images never carry project names or
+/// session titles.
 fn card(paths: &Paths, args: &[String]) -> Result<i32> {
-    let r = any_report(paths, args)?;
-    let kind = r["kind"].as_str().unwrap_or("day").to_string();
-    let tool = r["tool"].as_str().map(|t| format!("-{t}")).unwrap_or_default();
-    let date = format!("{kind}-{}{tool}", r["date"].as_str().unwrap_or(""));
+    let kind = ["week", "month", "year"].into_iter().find(|k| args.iter().any(|a| *a == format!("--{k}"))).unwrap_or("day");
+    let day = parse_day(args)?;
+    let (tz, now) = (Tz::from_env(), now_ms());
+    let r = fresh_db(paths, |c, cfg| daemon::abti::report(c, tz, cfg, &claude_dir(), kind, day, now))?;
+    let date = format!("{kind}-{}", r["from"].as_str().unwrap_or(""));
     let cards = paths.home.join("cards");
     fs::create_dir_all(&cards)?;
     let json_path = cards.join(format!("{date}.json"));
@@ -222,20 +263,20 @@ fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     let out = match flag(args, "--out") {
         Some(o) => PathBuf::from(o),
         None => {
-            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("Dango");
+            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("DONGO");
             fs::create_dir_all(&dir)?;
-            dir.join(format!("{date}.png"))
+            dir.join(format!("dongo-{date}.png"))
         }
     };
-    let status = std::process::Command::new(renderer()?).arg("--card").arg(&json_path).arg(&out).arg("--copy").status()?;
+    let status = std::process::Command::new(renderer()?).arg("--abti").arg(&json_path).arg(&out).args(["--page", "share", "--copy"]).status()?;
     if !status.success() {
         return Err("渲染失败".into());
     }
     if r["lang"] == "en" {
-        let what = match kind.as_str() { "week" => "Week card", "month" => "Month card", "year" => "Year card", _ => "Day card" };
+        let what = match kind { "week" => "Week image", "month" => "Month image", "year" => "Year image", _ => "Day image" };
         println!("{what}: {} (copied to the clipboard)", out.display());
     } else {
-        let what = match kind.as_str() { "week" => "周报卡", "month" => "月报卡", "year" => "年报卡", _ => "日报卡" };
+        let what = match kind { "week" => "周报图", "month" => "月报图", "year" => "年报图", _ => "日报图" };
         println!("{what}：{}（已复制到剪贴板）", out.display());
     }
     if !args.iter().any(|a| a == "--no-open") {

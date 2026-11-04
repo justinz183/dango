@@ -157,72 +157,122 @@ pub fn current_job(conn: &Connection, now: i64) -> Result<Option<String>> {
     Ok(last.and_then(|w| occupation::main(&work_of(&w))))
 }
 
+/// How many failed test commands in one turn make its job fume.
+pub const FUMING_FAILS: i64 = 3;
+/// How long a job stays happy after a turn that ended with tests green or
+/// a commit.
+pub const HAPPY_MS: i64 = 30 * MIN_MS;
+
+#[derive(Default)]
+struct Member {
+    minutes: f64,
+    last: i64,
+    working: bool,
+    helpers: i64,
+    /// An event-driven state (waiting, fuming, happy) and when it began;
+    /// the widget derives idle / sleeping / off from `last` itself.
+    status: Option<&'static str>,
+    status_since: i64,
+}
+
 /// Who is in the office: the occupations that did any work in the last
 /// seven days (eight at most, by what they earned; the room shows six at a
 /// time and takes the rest in turns). An occupation is at work
 /// when a turn in progress is mainly its job, or has given it 15 minutes
-/// already; its helpers are that turn's sub-agents. The rest slack off, by
-/// how long ago they last worked (the widget decides how).
+/// already; its helpers are that turn's sub-agents. The job of a turn whose
+/// session waits on a permission prompt is `waiting`; one whose turn has
+/// failed tests FUMING_FAILS times is `fuming`; one whose last turn ended
+/// within HAPPY_MS with tests green or a commit is `happy`. The rest slack
+/// off, by how long ago they last worked (the widget decides how).
 pub fn office(conn: &Connection, tz: Tz, now: i64) -> Result<Vec<Value>> {
     const WORKING_MS: i64 = 20 * MIN_MS;
     const STAFF_DAYS: i64 = 7;
     let t = Table::builtin();
     let from = tz.ms((tz.date(now) - Duration::days(STAFF_DAYS - 1)).and_hms_opt(0, 0, 0).unwrap());
-    // minutes this week, last worked at, at work now, helpers
-    let mut staff: BTreeMap<String, (f64, i64, bool, i64)> = BTreeMap::new();
+    let mut staff: BTreeMap<String, Member> = BTreeMap::new();
     let mut st = conn.prepare(
         "SELECT j.key, SUM(j.value), MAX(turns.ended_at) FROM turns, json_each(turns.work) j
          WHERE turns.ended_at >= ?1 AND j.value > 0 GROUP BY j.key",
     )?;
     for (o, m, last) in st.query_map([from], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)?)))?.flatten() {
-        let e = staff.entry(t.canon(&o).to_string()).or_insert((0.0, last, false, 0));
-        e.0 += m;
-        e.1 = e.1.max(last);
+        let e = staff.entry(t.canon(&o).to_string()).or_insert_with(|| Member { last, ..Default::default() });
+        e.minutes += m;
+        e.last = e.last.max(last);
     }
     let mut st = conn.prepare(
         "SELECT json_extract(t.agg, '$.work'), json_extract(t.agg, '$.last_activity'),
-                json_extract(t.agg, '$.agent_calls'), json_extract(t.agg, '$.subagent_stops')
+                json_extract(t.agg, '$.agent_calls'), json_extract(t.agg, '$.subagent_stops'),
+                json_extract(s.state, '$.waiting_since'), json_extract(t.agg, '$.test_fails'),
+                json_extract(t.agg, '$.subagent_starts')
          FROM sessions s JOIN turns t ON t.id = json_extract(s.state, '$.open_turn') WHERE t.ended_at IS NULL",
     )?;
-    let open: Vec<(Option<String>, Option<i64>, Option<i64>, Option<i64>)> =
-        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.flatten().collect();
+    type Open = (Option<String>, Option<i64>, Option<i64>, Option<i64>, Option<i64>, Option<i64>, Option<i64>);
+    let open: Vec<Open> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))?.flatten().collect();
     let mut any_open = false;
-    for (work, last, calls, stops) in open {
+    for (work, last, calls, stops, waiting, fails, starts) in open {
         let last = last.unwrap_or(0);
-        if now - last >= WORKING_MS {
+        // A prompt waits as long as it takes; work goes quiet after a while.
+        if waiting.is_none() && now - last >= WORKING_MS {
             continue;
         }
         any_open = true;
         let w = work_of(&work.unwrap_or_default());
-        let main = occupation::main(&w);
+        let main = occupation::main(&w).or_else(|| current_job(conn, now).ok().flatten());
         for (o, m) in &w {
             let is_main = main.as_deref() == Some(o.as_str());
             if is_main || *m >= 15.0 {
-                let e = staff.entry(o.clone()).or_insert((0.0, last, false, 0));
-                e.1 = e.1.max(last);
-                e.2 = true;
+                let e = staff.entry(o.clone()).or_insert_with(|| Member { last, ..Default::default() });
+                e.last = e.last.max(last);
+                e.working = true;
                 if is_main {
-                    e.3 += (calls.unwrap_or(0) - stops.unwrap_or(0)).max(0);
+                    e.helpers += snapshot::running_helpers(calls.unwrap_or(0), starts.unwrap_or(0), stops.unwrap_or(0));
                 }
+            }
+        }
+        if let Some(j) = main {
+            let e = staff.entry(j).or_insert_with(|| Member { last: now, ..Default::default() });
+            e.working = true;
+            if let Some(since) = waiting {
+                e.status = Some("waiting");
+                e.status_since = since;
+            } else if fails.unwrap_or(0) >= FUMING_FAILS {
+                e.status = Some("fuming");
+                e.status_since = last;
             }
         }
     }
     // A turn that has not done anything yet: whoever did the last one is on it.
-    if any_open && !staff.values().any(|v| v.2) {
+    if any_open && !staff.values().any(|v| v.working) {
         if let Some(j) = current_job(conn, now)? {
-            let e = staff.entry(j).or_insert((0.0, now, false, 0));
-            e.2 = true;
+            let e = staff.entry(j).or_insert_with(|| Member { last: now, ..Default::default() });
+            e.working = true;
         }
     }
-    let mut list: Vec<(String, f64, i64, bool, i64)> =
-        staff.into_iter().map(|(o, (m, last, w, h))| (o.clone(), m / 60.0 * t.rate(&o), last, w, h)).collect();
-    list.sort_by(|a, b| b.3.cmp(&a.3).then(b.1.total_cmp(&a.1)));
+    // Just done, and well: the job of a turn that ended within HAPPY_MS with
+    // its tests green or a commit is happy about it.
+    let mut st = conn.prepare("SELECT work, ended_at, test_passed, git_action FROM turns WHERE ended_at >= ?1 ORDER BY ended_at DESC")?;
+    for (work, ended, passed, git) in st
+        .query_map([now - HAPPY_MS], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<i64>>(2)?, r.get::<_, Option<String>>(3)?)))?
+        .flatten()
+    {
+        let Some(j) = occupation::main(&work_of(&work)) else { continue };
+        let well = passed == Some(1) || matches!(git.as_deref(), Some("commit") | Some("merge"));
+        if let Some(e) = staff.get_mut(&j) {
+            if well && !e.working && e.status.is_none() {
+                e.status = Some("happy");
+                e.status_since = ended;
+            }
+        }
+    }
+    let mut list: Vec<(String, f64, Member)> = staff.into_iter().map(|(o, m)| (o.clone(), m.minutes / 60.0 * t.rate(&o), m)).collect();
+    list.sort_by(|a, b| b.2.working.cmp(&a.2.working).then(b.1.total_cmp(&a.1)));
     Ok(list
         .into_iter()
         .take(8)
-        .map(|(o, usd, last, working, helpers)| {
+        .map(|(o, usd, m)| {
             json!({ "id": o, "name": t.name(&o), "color": t.get(&o).map(|x| x.color.as_str()), "scene": t.scene(&o),
-                    "working": working, "helpers": helpers, "since": last, "usd": usd })
+                    "working": m.working, "helpers": m.helpers, "since": m.last, "usd": usd,
+                    "status": m.status, "status_since": if m.status.is_some() { Some(m.status_since) } else { None } })
         })
         .collect())
 }
