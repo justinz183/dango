@@ -1,29 +1,11 @@
-// Themes (右键「主题 / Theme」): the classic dark glass look, and the two
-// v3 designs from the 2026-10-30 UI handoff (dango-ui-handoff, README and
-// tokens.json there): a white panel with
-//   A · a vector office — the room and the 团子 drawn from the design's SVG,
-//   B · an illustrated office — the design's room picture and role cut-outs,
-//       with the eyes drawn over them for each state.
-// Both share the rest of the panel and a card for the corner widget.
+// The panel and the corner card from the 2026-10-30 UI handoff
+// (dango-ui-handoff, README and tokens.json there): a white panel with the
+// illustrated office on top — the design's room picture and role cut-outs,
+// with the eyes drawn over them for each state; a job without a cut-out is
+// drawn as the vector 团子 from the design's SVG. (The classic theme went
+// on 2026-11-06, the vector office on 2026-11-07.)
 
 import AppKit
-
-enum Theme: String, CaseIterable {
-    case vector, illustrated
-
-    var title: String {
-        switch self {
-        case .vector: return L("A · 矢量办公室", "A · Vector office")
-        case .illustrated: return L("B · 插画办公室", "B · Illustrated office")
-        }
-    }
-}
-
-/// Snapshots set this instead of the saved choice.
-var themeOverride: Theme?
-/// The illustrated office unless the vector one was chosen (a saved
-/// "classic", from before that theme was removed, reads as illustrated).
-var theme: Theme { themeOverride ?? Theme(rawValue: UserDefaults.standard.string(forKey: "theme") ?? "") ?? .illustrated }
 
 // MARK: - Tokens (tokens.json; text greys at the accessible #6E6E73)
 
@@ -461,7 +443,7 @@ let roles: [String: Role] = [
     "research": Role(file: "R11", w: 289, h: 224, l: [112, 134, 42, 44], r: [200, 120, 40, 46]),
 ]
 
-/// A job's 团子 in design B at `box` (its feet on the box's bottom): the
+/// A job's 团子 at `box` (its feet on the box's bottom): the
 /// cut-out with the state's eyes drawn over it, or the vector one for jobs
 /// the design has not drawn.
 func drawRoleDango(_ box: NSRect, job: String, status: String) {
@@ -548,10 +530,10 @@ private func roleEyes(_ role: Role, _ status: String) {
     }
 }
 
-/// A job's 团子 in the current theme, fitted to `box`: the cut-out in B
-/// where there is one, else the vector one.
+/// A job's 团子 fitted to `box`: its cut-out where there is one, else the
+/// vector one.
 func themeDango(_ box: NSRect, job: String, status: String) {
-    if theme == .illustrated, let role = roles[job], themeImage(role.file) != nil {
+    if let role = roles[job], themeImage(role.file) != nil {
         let h = box.width * role.h / role.w
         let flipped = NSGraphicsContext.current?.isFlipped ?? false
         let r = NSRect(x: box.minX, y: flipped ? box.midY - h / 2 : box.midY - h / 2, width: box.width, height: h)
@@ -564,8 +546,8 @@ func themeDango(_ box: NSRect, job: String, status: String) {
 
 // MARK: - The v3 office
 
-/// The office cell of the v3 panel: the room (A drawn, B a picture), the
-/// 团子 in their places by state, walking between places in 0.9 s.
+/// The office cell of the panel: the room picture, the 团子 in their places
+/// by state, walking between places in 0.9 s.
 final class V3OfficeView: NSView {
     var occupants: [Occupant] = []
     var model: Model?
@@ -574,7 +556,7 @@ final class V3OfficeView: NSView {
     var instant = false
     override var isFlipped: Bool { true }
 
-    static var height: CGFloat { theme == .illustrated ? 178 : 210 }
+    static let height: CGFloat = 178
 
     /// Each one's place now and the walk to it: from, to, when it set off.
     private struct Walk { var from: NSRect; var to: NSRect; var start: Double }
@@ -582,28 +564,22 @@ final class V3OfficeView: NSView {
 
     func tick(_ dt: Double) { t += dt }
 
-    /// Where a 团子 stands in a place, `w` wide, top-left origin.
-    private func place(_ x: CGFloat, top: CGFloat, w: CGFloat) -> NSRect { NSRect(x: x, y: top, width: w, height: w * 110 / 120) }
+    /// Where a 团子 stands, `w` wide, its feet at `bottom`.
     private func feet(_ x: CGFloat, bottom: CGFloat, w: CGFloat) -> NSRect { NSRect(x: x, y: bottom - w * 110 / 120, width: w, height: w * 110 / 120) }
 
     /// Who goes where: two desks for working / happy / fuming, a place to
     /// stand for waiting, the sofa's three seats and then the door for idle
     /// and sleeping; off is outside.
     private func arrangement() -> [(Occupant, String, NSRect)] {
-        let a = theme != .illustrated
         let all = occupants.map { ($0, officeStatus($0, model)) }
         let desk = all.filter { ["working", "happy", "fuming"].contains($0.1) }.prefix(2)
         let stand = all.filter { $0.1 == "waiting" }.prefix(1)
-        let lounge = all.filter { ["idle", "sleeping"].contains($0.1) }.prefix(a ? 4 : 3)
+        let lounge = all.filter { ["idle", "sleeping"].contains($0.1) }.prefix(3)
         var out: [(Occupant, String, NSRect)] = []
-        let desks: [NSRect] = a
-            ? (desk.count == 1 ? [place(298, top: 64, w: 72)] : [place(266, top: 70, w: 60), place(326, top: 70, w: 60)])
-            : [feet(218, bottom: 126, w: 70), feet(318, bottom: 126, w: 70)]
+        let desks: [NSRect] = [feet(218, bottom: 126, w: 70), feet(318, bottom: 126, w: 70)]
         for (i, (o, s)) in desk.enumerated() { out.append((o, s, desks[i])) }
-        for (o, s) in stand { out.append((o, s, a ? place(218, top: 94, w: 60) : feet(268, bottom: 118, w: 74))) }
-        let seats: [NSRect] = a
-            ? [place(68, top: 78, w: 55), place(116, top: 78, w: 55), place(154, top: 76, w: 55), place(8, top: 108, w: 48)]
-            : [feet(16, bottom: 136, w: 74), feet(78, bottom: 138, w: 74), feet(138, bottom: 136, w: 74)]
+        for (o, s) in stand { out.append((o, s, feet(268, bottom: 118, w: 74))) }
+        let seats: [NSRect] = [feet(16, bottom: 136, w: 74), feet(78, bottom: 138, w: 74), feet(138, bottom: 136, w: 74)]
         for (i, (o, s)) in lounge.enumerated() { out.append((o, s, seats[i])) }
         return out
     }
@@ -632,94 +608,21 @@ final class V3OfficeView: NSView {
         NSBezierPath(roundedRect: bounds, xRadius: 24, yRadius: 24).addClip()
         let people = arrangement()
         walks = walks.filter { id, _ in people.contains { $0.0.job.id == id } }
-        if theme == .illustrated { drawRoomB(people) } else { drawRoomA(people) }
+        drawRoom(people)
         NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawDango(_ o: Occupant, _ s: String, _ box: NSRect, phase: Double) {
         let eyes = blinking(s, t + phase * 7) ? "sleeping" : s
         moving(s, t + phase, box) {
-            if theme == .illustrated {
-                drawRoleDango(box, job: o.job.id, status: eyes)
-            } else {
-                drawVectorDango(box, status: eyes, acc: vectorAccessory[o.job.id])
-            }
+            drawRoleDango(box, job: o.job.id, status: eyes)
         }
         stateExtras(s, t + phase, box)
     }
 
-    // A: the design's room, in its 392 × 210 drawing.
-    private func drawRoomA(_ people: [(Occupant, String, NSRect)]) {
-        func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ rad: CGFloat, _ c: String) { fill(rrect(x, y, w, h, rad), color(hex: c)) }
-        func o(_ cx: CGFloat, _ cy: CGFloat, _ rx: CGFloat, _ ry: CGFloat, _ c: String, _ a: CGFloat = 1) { fill(ellipse(cx, cy, rx, ry), color(hex: c).withAlphaComponent(a)) }
-        r(0, 0, 392, 210, 0, "#F4F0E9")
-        r(0, 150, 392, 60, 0, "#E8E0D4")
-        strokeLine(NSPoint(x: 0, y: 150), NSPoint(x: 392, y: 150), 1.5, color(hex: "#D9CFC0"))
-        strokeLine(NSPoint(x: 212, y: 0), NSPoint(x: 212, y: 150), 1.5, color(hex: "#D9CFC0"))
-        put(V3.sans(L("休息区", "Lounge"), 10, .regular, color(hex: "#9A948A")), 14, 8)
-        put(V3.sans(L("工作区", "Work"), 10, .regular, color(hex: "#9A948A")), 224, 8)
-        // Window, door, rug and the sofa's back.
-        fill(rrect(104, 28, 76, 54, 5), color(hex: "#DCEBF5"), stroke: .white, width: 4)
-        o(160, 46, 8, 8, "#F5D56B"); o(128, 66, 13, 6, "#FFFFFF"); o(136, 62, 8, 6, "#FFFFFF")
-        r(140, 28, 3, 54, 0, "#FFFFFF"); r(104, 54, 76, 3, 0, "#FFFFFF")
-        fill(rrect(10, 66, 26, 84, 3), color(hex: "#E2D6C4"), stroke: color(hex: "#CDBFA9"), width: 1.5)
-        o(30, 110, 2, 2, "#8A7B66")
-        r(50, 140, 166, 20, 10, "#DDD3C4")
-        r(64, 92, 140, 30, 10, "#C5CEC2")
-        // The work side: lamp light, notes board, plant.
-        o(334, 108, 56, 46, "#FFF3D6", 0.6)
-        r(236, 28, 70, 44, 4, "#E0CBAE")
-        r(244, 36, 13, 13, 2, "#F6E3A1"); r(264, 40, 13, 13, 2, "#F2C9D0"); r(284, 34, 13, 13, 2, "#C9DDF2"); r(268, 56, 13, 13, 2, "#CFE6CC")
-        r(372, 128, 16, 22, 3, "#D9A878")
-        o(380, 124, 12, 7, "#8FBF9A"); o(374, 112, 7, 11, "#9CCBA6"); o(386, 110, 6, 12, "#86B892")
-
-        let lounge = people.filter { $0.2.minX < 212 }
-        let work = people.filter { $0.2.minX >= 212 }
-        for (i, (o, s, place)) in lounge.enumerated() { drawDango(o, s, now(o.job.id, place), phase: Double(i) * 0.37) }
-        // The sofa's seat, arms and legs in front of whoever sits on it.
-        r(60, 118, 148, 24, 8, "#B4BFAF"); r(60, 104, 12, 38, 6, "#C5CEC2"); r(196, 104, 12, 38, 6, "#C5CEC2")
-        r(70, 142, 8, 8, 2, "#8A8A86"); r(190, 142, 8, 8, 2, "#8A8A86")
-        for (i, (o, s, place)) in work.enumerated() { drawDango(o, s, now(o.job.id, place), phase: Double(i) * 0.53) }
-        // The desk, and a laptop with hands for each one at it.
-        r(262, 128, 126, 12, 4, "#DED5C8"); r(270, 140, 8, 12, 2, "#C9BFB0"); r(372, 140, 8, 12, 2, "#C9BFB0")
-        for (_, s, place) in work where s != "waiting" {
-            let cx = place.midX
-            r(cx - 23, 106, 46, 22, 4, "#9AA0A8"); r(cx - 19, 110, 38, 14, 2, "#E9EEF2")
-            for (k, (h, c)) in [(4.0, "#5FBF84"), (7.0, "#5FBF84"), (5.0, "#5FBF84"), (10.0, "#2E8B57"), (8.0, "#5FBF84")].enumerated() {
-                r(cx - 14 + CGFloat(k) * 6, 122 - CGFloat(h), 3, CGFloat(h), 0, c)
-            }
-            o(cx - 15, 128, 6, 3, "#1E1E1E"); o(cx + 15, 128, 6, 3, "#1E1E1E")
-        }
-        floorLabels(lounge: lounge, work: work, y: 168, mid: 133)
-    }
-
-    /// Under the room: who is where and in what state.
-    private func floorLabels(lounge: [(Occupant, String, NSRect)], work: [(Occupant, String, NSRect)], y: CGFloat, mid: CGFloat) {
-        func two(_ title: String, _ sub: String, _ dot: NSColor?, x: CGFloat, w: CGFloat, ink: NSColor) {
-            let t = V3.sans(title, 10.5, .regular, ink)
-            let s = V3.mono(sub, 9.5, .regular, color(hex: "#8A8278"))
-            let tw = min(t.size().width, w - (dot == nil ? 0 : 9))
-            let x0 = x - (tw + (dot == nil ? 0 : 9)) / 2
-            if let dot { dot.setFill(); NSBezierPath(ovalIn: NSRect(x: x0, y: y + 5, width: 6, height: 6)).fill() }
-            t.draw(with: NSRect(x: x0 + (dot == nil ? 0 : 9), y: y, width: tw + 1, height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-            put(s, x, y + 15, align: 1)
-        }
-        if !lounge.isEmpty {
-            let names = lounge.map { $0.0.job.name }.joined(separator: " · ")
-            let sleeping = lounge.allSatisfy { $0.1 == "sleeping" }
-            two(names, statusName(sleeping ? "sleeping" : "idle"), nil, x: mid, w: 200, ink: color(hex: "#6B655C"))
-        }
-        if !work.isEmpty {
-            let names = work.map { $0.0.job.name }.joined(separator: " · ")
-            let s = work.first?.1 ?? "working"
-            let today = work.compactMap { w in model?.jobs1.first { $0.id == w.0.job.id }?.usd }.reduce(0, +)
-            two(names, statusName(s) + (today > 0 ? " · " + fmtUSD(today) + L(" 今天", " today") : ""), V3.dot(s), x: 302, w: 176, ink: V3.ink)
-        }
-    }
-
-    // B: the design's picture, the cut-outs, and the picture's sofa seat and
+    // The design's picture, the cut-outs, and the picture's sofa seat and
     // desk again in front of them.
-    private func drawRoomB(_ people: [(Occupant, String, NSRect)]) {
+    private func drawRoom(_ people: [(Occupant, String, NSRect)]) {
         let room = themeImage("room")
         if let room {
             room.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])

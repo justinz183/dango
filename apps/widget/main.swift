@@ -271,7 +271,7 @@ func put(_ s: NSAttributedString, _ x: CGFloat, _ y: CGFloat, align: Int = 0) {
 // MARK: - Dashboard
 
 /// The panel the pet opens into: the design handoff's layout (theme.swift
-/// `layoutV3`), with the vector or the illustrated office on top.
+/// `layoutV3`), with the illustrated office on top.
 final class DashboardView: NSView {
     var model: Model?
     /// Snapshots draw the panel's white back themselves.
@@ -541,7 +541,7 @@ final class App: NSObject, NSApplicationDelegate {
         petPanel.setFrameOrigin(savedOrigin() ?? defaultOrigin())
         petPanel.orderFrontRegardless()
         watchPointer()
-        applyTheme()
+        fitPanel()
 
         ensureDaemon()
         reload()
@@ -644,22 +644,12 @@ final class App: NSObject, NSApplicationDelegate {
 
     @objc func toggle() { isExpanded ? collapse() : expand() }
 
-    /// Redraws the panel and the pet in the current office.
-    func applyTheme() {
+    /// Sizes the panel to its content and draws the pet.
+    func fitPanel() {
         dashboard.frame.size.width = dashboardWidth
         dashboard.frame.size.height = dashboard.contentHeight()
         dashboard.needsDisplay = true
         pet?.needsDisplay = true
-    }
-
-    /// The theme menu.
-    @objc func setTheme(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String, id != theme.rawValue else { return }
-        let was = isExpanded
-        if was { collapse() }
-        UserDefaults.standard.set(id, forKey: "theme")
-        applyTheme()
-        if was { expand() }
     }
 
     /// Re-fits the open dashboard after its content changed height,
@@ -754,17 +744,6 @@ final class App: NSObject, NSApplicationDelegate {
         let langItem = NSMenuItem(title: "语言 / Language", action: nil, keyEquivalent: "")
         langItem.submenu = langs
         menu.addItem(langItem)
-        let themes = NSMenu()
-        for th in Theme.allCases {
-            let item = NSMenuItem(title: th.title, action: #selector(setTheme(_:)), keyEquivalent: "")
-            item.representedObject = th.rawValue
-            item.state = theme == th ? .on : .off
-            item.target = self
-            themes.addItem(item)
-        }
-        let themeItem = NSMenuItem(title: L("主题", "Theme"), action: nil, keyEquivalent: "")
-        themeItem.submenu = themes
-        menu.addItem(themeItem)
         let auto = NSMenuItem(title: L("登录时自动启动", "Start at login"), action: #selector(toggleAutostart), keyEquivalent: "")
         auto.state = FileManager.default.fileExists(atPath: agentPlist) ? .on : .off
         menu.addItem(auto)
@@ -967,10 +946,6 @@ func snapshot(_ v: NSView, _ size: NSSize, _ path: String) {
 }
 
 let args = CommandLine.arguments
-// Snapshots can pin the office: --theme a|b.
-if let i = args.firstIndex(of: "--theme"), args.count > i + 1 {
-    themeOverride = ["a": .vector, "vector": .vector, "b": .illustrated, "illustrated": .illustrated][args[i + 1]]
-}
 if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
     // --state working|waiting|happy|proud|sleepy|missing, --job ID, --helpers N, --receipt
     _ = NSApplication.shared
