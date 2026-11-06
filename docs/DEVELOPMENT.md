@@ -60,7 +60,17 @@ DANGO_HOME=/tmp/dango-mine ./target/release/dango abti
 ## 打包给别人
 
 ```bash
-apps/widget/package.sh
+DANGO_RELEASE_URL=https://<放安装包的地址> apps/widget/package.sh
+```
+
+除了下面说的 dmg，还出两个给一行命令安装用的文件：`Dango-<版本>.zip`（用 `ditto` 打包，签名保留）和 `install.sh`（从 `apps/widget/install.sh.in` 生成，写进版本号、zip 的 SHA-256 和 `DANGO_RELEASE_URL`）。两个一起传到那个地址，用户运行 `curl -fsSL <地址>/install.sh | sh`：下载、核对校验值（不对就停，什么都不装）、放进 /Applications（不能写就放 ~/Applications）、打开；再跑一次就是更新（先退出正在跑的 Dango）。用 curl 下载的文件没有「来自互联网」的标记，所以 Gatekeeper 不拦；浏览器下载的 dmg 会被拦。安装脚本认 `DANGO_URL`（换下载地址）、`DANGO_APP_DIR`（换安装目录）、`DANGO_NO_OPEN=1`（装完不打开），本机测试就用这三个：
+
+```bash
+python3 -m http.server 8790 --directory target/dist
+```
+
+```bash
+curl -fsSL http://localhost:8790/install.sh | DANGO_URL=http://localhost:8790 DANGO_APP_DIR=/tmp/dango-apps DANGO_NO_OPEN=1 sh
 ```
 
 出 `target/dist/Dango-<版本>.dmg`：Dango.app 里带着小部件和 `dango` 命令（放在 `Contents/Helpers/dango`，因为磁盘不分大小写，放进 `Contents/MacOS` 会和 App 自己的 `Dango` 撞成一个文件），Apple 芯片和 Intel 的通用二进制，macOS 13 起。只有 ad hoc 签名，没有公证，对方第一次打开要去「系统设置 → 隐私与安全性」点「仍要打开」。

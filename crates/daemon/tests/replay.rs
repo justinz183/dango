@@ -391,8 +391,9 @@ fn codex_history_backfills_and_splits_by_tool() {
     let w = daemon::widget::data(&p.conn, tz, &Config::default(), 1_793_200_000_000).unwrap();
     assert_eq!(w["tools_all"].as_array().unwrap().len(), 2);
 
-    // Every dashboard block, per agent: the two views add up to the whole.
-    let views = &w["views"];
+    // Every dashboard block, per agent: the two add up to the whole.
+    let one = |tool: &str| daemon::widget::view(&p.conn, tz, 1_793_200_000_000, Some(tool)).unwrap();
+    let views = &serde_json::json!({ "codex": one("codex"), "claude_code": one("claude_code") });
     let total = |v: &Value| v["total"]["usd"].as_f64().unwrap();
     assert!((total(&views["codex"]) - codex_usd).abs() < 1e-6);
     assert!((total(&views["codex"]) + total(&views["claude_code"]) - w["total"]["usd"].as_f64().unwrap()).abs() < 1e-6);

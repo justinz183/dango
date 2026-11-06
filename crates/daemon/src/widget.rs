@@ -461,11 +461,6 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
     let all = view(conn, tz, now, None)?;
     let today = tz.date(now);
     let midnight = |d: chrono::NaiveDate| tz.ms(d.and_hms_opt(0, 0, 0).unwrap());
-    let mut views = serde_json::Map::new();
-    let mut st = conn.prepare("SELECT DISTINCT source FROM sessions ORDER BY source")?;
-    for src in st.query_map([], |r| r.get::<_, String>(0))?.flatten().collect::<Vec<_>>() {
-        views.insert(src.clone(), view(conn, tz, now, Some(&src))?);
-    }
 
     let lang = cfg.lang();
     let mut out = json!({
@@ -491,7 +486,6 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         "tools_1d": tools(conn, midnight(today), i64::MAX)?,
         "tools_all": tools(conn, 0, i64::MAX)?,
         "turns": all["turns"],
-        "views": views,
         "activity": { "working": working, "subagents": subagents, "last_event": last_event, "job": job_json },
         "office": office(conn, tz, now)?,
     });

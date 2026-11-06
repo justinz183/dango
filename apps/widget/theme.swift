@@ -9,12 +9,10 @@
 import AppKit
 
 enum Theme: String, CaseIterable {
-    case classic, vector, illustrated
+    case vector, illustrated
 
-    var isV3: Bool { self != .classic }
     var title: String {
         switch self {
-        case .classic: return L("经典", "Classic")
         case .vector: return L("A · 矢量办公室", "A · Vector office")
         case .illustrated: return L("B · 插画办公室", "B · Illustrated office")
         }
@@ -23,7 +21,9 @@ enum Theme: String, CaseIterable {
 
 /// Snapshots set this instead of the saved choice.
 var themeOverride: Theme?
-var theme: Theme { themeOverride ?? Theme(rawValue: UserDefaults.standard.string(forKey: "theme") ?? "") ?? .classic }
+/// The illustrated office unless the vector one was chosen (a saved
+/// "classic", from before that theme was removed, reads as illustrated).
+var theme: Theme { themeOverride ?? Theme(rawValue: UserDefaults.standard.string(forKey: "theme") ?? "") ?? .illustrated }
 
 // MARK: - Tokens (tokens.json; text greys at the accessible #6E6E73)
 
@@ -707,13 +707,13 @@ final class V3OfficeView: NSView {
         if !lounge.isEmpty {
             let names = lounge.map { $0.0.job.name }.joined(separator: " · ")
             let sleeping = lounge.allSatisfy { $0.1 == "sleeping" }
-            two(names, sleeping ? "sleeping · " + statusName("sleeping") : "idle · " + statusName("idle"), nil, x: mid, w: 200, ink: color(hex: "#6B655C"))
+            two(names, statusName(sleeping ? "sleeping" : "idle"), nil, x: mid, w: 200, ink: color(hex: "#6B655C"))
         }
         if !work.isEmpty {
             let names = work.map { $0.0.job.name }.joined(separator: " · ")
             let s = work.first?.1 ?? "working"
             let today = work.compactMap { w in model?.jobs1.first { $0.id == w.0.job.id }?.usd }.reduce(0, +)
-            two(names, s + (today > 0 ? " · " + fmtUSD(today) + L(" 今天", " today") : ""), V3.dot(s), x: 302, w: 176, ink: V3.ink)
+            two(names, statusName(s) + (today > 0 ? " · " + fmtUSD(today) + L(" 今天", " today") : ""), V3.dot(s), x: 302, w: 176, ink: V3.ink)
         }
     }
 
@@ -754,7 +754,6 @@ final class V3OfficeView: NSView {
 extension DashboardView {
     /// The v3 panel (README 面板结构), 440 wide; returns its height.
     func layoutV3(draw: Bool) -> CGFloat {
-        office.isHidden = true
         if officeV3.superview == nil { addSubview(officeV3) }
         officeV3.isHidden = false
         let W = bounds.width, padX: CGFloat = 24, inner = W - padX * 2
