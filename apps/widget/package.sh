@@ -6,8 +6,13 @@
 # dango in Contents/Helpers), which imports their Claude Code and Codex history
 # and then follows both live, with nothing to install inside either tool.
 #
-# Usage: apps/widget/package.sh
-# Output: target/dist/Dango-<version>.dmg (and target/dist/Dango.app)
+# Usage: DANGO_RELEASE_URL=https://<where the files go> apps/widget/package.sh
+# Output in target/dist: Dango-<version>.dmg (to hand over), and for the
+# one-line install (curl -fsSL <url>/install.sh | sh) Dango-<version>.zip and
+# install.sh, which carries the version and the zip's SHA-256; upload both
+# to DANGO_RELEASE_URL. A curl download is not marked as coming from the
+# internet, so Gatekeeper does not stop the app the way it stops a dmg
+# downloaded in a browser.
 #
 # The app is signed ad hoc (there is no Developer ID here), so the first
 # open needs System Settings → Privacy & Security → Open Anyway; the read-me
@@ -83,3 +88,15 @@ rm -f "$dmg"
 hdiutil create -quiet -volname "Dango" -srcfolder "$stage" -ov -format UDZO "$dmg"
 rm -rf "$stage"
 echo "built $dmg"
+
+# The one-line install: the app zipped as macOS zips apps (signatures kept),
+# and the installer with this version, the zip's checksum and the address.
+url="${DANGO_RELEASE_URL:-https://dongo.app}"
+zip="$out/Dango-$version.zip"
+rm -f "$zip"
+ditto -c -k --keepParent "$app" "$zip"
+sum="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
+sed -e "s|@VERSION@|$version|g" -e "s|@SHA256@|$sum|g" -e "s|@BASE_URL@|${url%/}|g" apps/widget/install.sh.in > "$out/install.sh"
+chmod +x "$out/install.sh"
+echo "built $zip and $out/install.sh (for ${url%/})"
+[ -n "${DANGO_RELEASE_URL:-}" ] || echo "note: DANGO_RELEASE_URL is not set; install.sh points at $url"
