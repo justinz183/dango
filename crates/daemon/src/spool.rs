@@ -2,15 +2,14 @@
 //! `spool/events-YYYYMMDD.jsonl`, so retention never has to rename a file a
 //! hook may be appending to. Consumed files are kept 7 days for replay.
 
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{self, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use dango_core::event::Event;
 
-use crate::paths::Paths;
+use crate::paths::{private_options, Paths};
 
 pub const RETENTION_DAYS: i64 = 7;
 
@@ -24,7 +23,7 @@ pub fn append(paths: &Paths, ev: &Event) -> io::Result<()> {
     let mut line = serde_json::to_vec(ev).map_err(io::Error::other)?;
     line.push(b'\n');
     let path = file_for(paths, ev.ts_ms().unwrap_or(0));
-    let mut f = OpenOptions::new().create(true).append(true).mode(0o600).open(&path)?;
+    let mut f = private_options().create(true).append(true).open(&path)?;
     f.write_all(&line)
 }
 

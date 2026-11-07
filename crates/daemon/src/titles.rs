@@ -48,7 +48,7 @@ pub fn read(path: &Path) -> Meta {
     // The project is the folder the session spent most of its turns in; the
     // home folder (where sessions start by default) says nothing about the
     // work, so it never counts.
-    let home = std::env::var("HOME").ok().map(PathBuf::from);
+    let home = crate::paths::user_home();
     let mut cwds: HashMap<String, usize> = HashMap::new();
     for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
         let wants_title = line.contains("\"type\":\"ai-title\"") || line.contains("\"type\":\"custom-title\"");
@@ -99,7 +99,7 @@ pub fn codex(codex_dir: &Path, sid: &str) -> Meta {
     }
     let Some(path) = codex_rollout(codex_dir, sid) else { return m };
     let Ok(f) = fs::File::open(path) else { return m };
-    let home = std::env::var("HOME").ok().map(PathBuf::from);
+    let home = crate::paths::user_home();
     let mut cwds: HashMap<String, usize> = HashMap::new();
     for line in BufReader::new(f).lines().map_while(|l| l.ok()) {
         if !(line.contains("\"type\":\"turn_context\"") || line.contains("\"type\":\"session_meta\"")) {

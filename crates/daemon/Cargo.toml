@@ -12,6 +12,14 @@ toml.workspace = true
 chrono.workspace = true
 rusqlite.workspace = true
 sha2.workspace = true
-libc = "0.2"
 # DeepSeek Harness writes its session logs as zstd frames (dsh.rs); pure Rust.
 ruzstd = "0.9.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# AF_UNIX sockets on Windows 10 1803+, the same protocol as on macOS.
+uds_windows = "1.2.1"
+# Whether a Claude Code process is still running (claude_tail.rs).
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }

@@ -1,15 +1,20 @@
 //! The daemon: tails the spool and answers a JSON-lines protocol on a Unix
 //! socket (SPEC 3). Requests: {"op":"ping"|"flush"|"settle"|"status", "session_id"?}.
+//! On Windows the socket is the same AF_UNIX kind (Windows 10 1803 and
+//! later, via uds_windows); its file sits in the data directory, under the
+//! user's profile, which other users cannot open.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
 use serde_json::{json, Value};
+#[cfg(windows)]
+use uds_windows::{UnixListener, UnixStream};
 
 use crate::config::Config;
 use crate::db;
@@ -113,7 +118,7 @@ pub fn run(paths: &Paths) -> Result<()> {
     let shared = Arc::new(Mutex::new(open_processor(paths, Mode::Live)?));
     let _ = fs::remove_file(&paths.sock);
     let listener = UnixListener::bind(&paths.sock)?;
-    fs::set_permissions(&paths.sock, fs::Permissions::from_mode(0o600))?;
+    crate::paths::set_private(&paths.sock)?;
     {
         let shared = Arc::clone(&shared);
         let paths = paths.clone();
@@ -132,7 +137,7 @@ pub fn run(paths: &Paths) -> Result<()> {
             eprintln!("dango daemon: panel write failed: {e}");
         }
     }
-    let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    let home = crate::paths::user_home().unwrap_or_default();
     let (claude_dir, codex_dir, dsh_dir) = (home.join(".claude"), home.join(".codex"), home.join(".dsh"));
     {
         let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());

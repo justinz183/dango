@@ -3,6 +3,7 @@
 
 use std::fs;
 use std::io;
+#[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
@@ -50,7 +51,7 @@ impl Paths {
         if let Some(h) = set("DANGO_HOME").or_else(|| set("SHADOWCORP_HOME")) {
             return Paths::at(PathBuf::from(h));
         }
-        let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+        let home = user_home().unwrap_or_else(|| PathBuf::from("."));
         let (new, old) = (home.join(".dango"), home.join(".shadowcorp"));
         Paths::at(if !new.exists() && old.exists() { old } else { new })
     }
@@ -59,7 +60,11 @@ impl Paths {
     pub fn ensure(&self) -> io::Result<()> {
         for d in [&self.home, &self.spool, &self.state] {
             if !d.exists() {
-                fs::DirBuilder::new().recursive(true).mode(0o700).create(d)?;
+                let mut b = fs::DirBuilder::new();
+                b.recursive(true);
+                #[cfg(unix)]
+                b.mode(0o700);
+                b.create(d)?;
             }
         }
         Ok(())
@@ -69,13 +74,24 @@ impl Paths {
     /// "same prompt three times" check without keeping anything guessable.
     /// Created with O_EXCL so two first-ever hooks agree on one salt.
     pub fn salt(&self) -> String {
-        use std::io::{Read, Write};
+        use std::io::Write;
         let mut buf = [0u8; 16];
+        #[cfg(unix)]
         if let Ok(mut f) = fs::File::open("/dev/urandom") {
+            use std::io::Read;
             let _ = f.read_exact(&mut buf);
         }
+        // Windows has no /dev/urandom; std seeds RandomState from the OS's
+        // random source.
+        #[cfg(windows)]
+        for (i, chunk) in buf.chunks_mut(8).enumerate() {
+            use std::hash::{BuildHasher, Hasher};
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_usize(i);
+            chunk.copy_from_slice(&h.finish().to_le_bytes());
+        }
         let fresh = hex(&buf);
-        let created = fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&self.salt);
+        let created = private_options().write(true).create_new(true).open(&self.salt);
         if let Ok(mut f) = created {
             let _ = f.write_all(fresh.as_bytes());
             return fresh;
@@ -105,7 +121,41 @@ pub fn short_hash(s: &str) -> String {
 /// Writes a file readable only by the user (0600).
 pub fn write_private(path: &Path, data: &[u8]) -> io::Result<()> {
     use std::io::Write;
-    let mut f = fs::OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(path)?;
+    let mut f = private_options().create(true).write(true).truncate(true).open(path)?;
     f.write_all(data)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+    set_private(path)
+}
+
+/// Open options that create files readable only by the user (0600). On
+/// Windows there are no mode bits: files under the user's profile (where
+/// the data directory is) are already the user's alone.
+pub fn private_options() -> fs::OpenOptions {
+    #[allow(unused_mut)]
+    let mut o = fs::OpenOptions::new();
+    #[cfg(unix)]
+    o.mode(0o600);
+    o
+}
+
+/// Makes an existing file readable only by the user (0600); nothing to do
+/// on Windows (see `private_options`).
+pub fn set_private(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    return fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
+
+/// The user's home folder, where Claude Code, Codex, DeepSeek Harness and
+/// WorkBuddy keep theirs: $HOME; on Windows %USERPROFILE% (Windows does not
+/// set HOME; Git Bash does), else $HOME.
+pub fn user_home() -> Option<PathBuf> {
+    #[cfg(windows)]
+    if let Some(h) = std::env::var_os("USERPROFILE").filter(|h| !h.is_empty()) {
+        return Some(PathBuf::from(h));
+    }
+    std::env::var_os("HOME").map(PathBuf::from)
 }

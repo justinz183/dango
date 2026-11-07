@@ -82,9 +82,29 @@ pub fn live_sessions(claude_dir: &Path) -> HashMap<String, Live> {
 }
 
 /// Whether a process is still running.
+#[cfg(unix)]
 fn alive(pid: i32) -> bool {
     // SAFETY: signal 0 sends nothing; it only checks that the process exists.
     unsafe { libc::kill(pid, 0) == 0 }
+}
+
+/// Whether a process is still running: one that can be opened and has no
+/// exit code yet (like kill(pid, 0), one we may not open counts as gone).
+#[cfg(windows)]
+fn alive(pid: i32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    // SAFETY: the handle is checked before use and closed once.
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid as u32);
+        if h.is_null() {
+            return false;
+        }
+        let mut code = 0u32;
+        let running = GetExitCodeProcess(h, &mut code) != 0 && code == STILL_ACTIVE as u32;
+        CloseHandle(h);
+        running
+    }
 }
 
 impl ClaudeTail {

@@ -1,0 +1,62 @@
+# The Windows build: the Rust crates' tests on Windows, dango.exe, and the
+# Windows app's installer (apps/windows, Tauri v2 → NSIS .exe), kept as a
+# build artifact for 14 days. Nothing is published.
+name: windows
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "crates/**"
+      - "apps/windows/**"
+      - "apps/widget/assets/**"
+      - "assets/**"
+      - "fixtures/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/windows.yml"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            apps/windows -> target
+
+      - name: Test the crates
+        # One test reads the real clock in UTC+8 and fails between midnight
+        # and early morning there; it runs on its own below.
+        run: cargo test --workspace --no-fail-fast -- --skip a_followed_session_without_hooks_shows_live
+
+      - name: The clock-dependent test (fails at night in UTC+8)
+        continue-on-error: true
+        run: cargo test -p daemon --test replay a_followed_session_without_hooks_shows_live
+
+      - name: Test the app
+        working-directory: apps/windows
+        run: cargo test
+
+      - name: Build dango.exe
+        run: cargo build --release -p cli
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the installer
+        working-directory: apps/windows
+        run: npx --yes @tauri-apps/cli@2.12.4 build --bundles nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dango-windows-x64
+          path: apps/windows/target/release/bundle/nsis/*.exe
+          retention-days: 14

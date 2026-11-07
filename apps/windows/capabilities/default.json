@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The pet and the panel: events, and dragging the pet.",
+  "windows": ["pet", "panel"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}

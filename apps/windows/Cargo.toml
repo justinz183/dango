@@ -1,0 +1,28 @@
+[package]
+name = "dango-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "DANGO for Windows: the corner 团子, its panel and the tray icon (Tauri v2)."
+publish = false
+
+# Its own workspace: Tauri is not built by the root `cargo build --workspace`
+# (the macOS app is Swift; this one is built on Windows, see README.md).
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = ["tray-icon", "image-png", "macos-private-api"] }
+serde_json = "1"
+chrono = "0.4"
+daemon = { path = "../../crates/daemon" }
+dango-core = { path = "../../crates/core" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Registry", "Win32_System_Threading"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

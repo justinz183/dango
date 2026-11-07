@@ -1,8 +1,6 @@
 //! SQLite schema (SPEC 13). `events` is the only source of truth; every other
 //! table can be rebuilt from it with `dango rebuild`.
 
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
@@ -152,7 +150,7 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     init(&conn)?;
     for p in [path.to_path_buf(), path.with_extension("db-wal"), path.with_extension("db-shm")] {
         if p.exists() {
-            let _ = fs::set_permissions(&p, fs::Permissions::from_mode(0o600));
+            let _ = crate::paths::set_private(&p);
         }
     }
     Ok(conn)

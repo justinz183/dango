@@ -173,10 +173,21 @@ pub fn command_text(v: &Value) -> String {
     }
 }
 
+/// A path with Windows' "\\" separators written as "/"; unchanged elsewhere.
+fn slashes(path: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(windows) && path.contains('\\') {
+        path.replace('\\', "/").into()
+    } else {
+        path.into()
+    }
+}
+
 /// A Claude Code-shaped PostToolUse for one edited file, so edits made by
 /// Codex go through the same rules.
 pub fn edit_hook(cwd: &str, path: &str, new: bool, lines: Vec<String>) -> Value {
-    let abs = if path.starts_with('/') || cwd.is_empty() { path.to_string() } else { format!("{}/{path}", cwd.trim_end_matches('/')) };
+    // C:\… is absolute on Windows.
+    let absolute = path.starts_with('/') || (cfg!(windows) && Path::new(path).is_absolute());
+    let abs = if absolute || cwd.is_empty() { path.to_string() } else { format!("{}/{path}", cwd.trim_end_matches('/')) };
     let content: Vec<&str> = lines.iter().filter_map(|l| l.strip_prefix('+')).collect();
     json!({
         "hook_event_name": "PostToolUse", "cwd": cwd, "tool_name": if new { "Write" } else { "Edit" },
@@ -219,6 +230,10 @@ pub fn from_claude_hook(input: &Value, raw: &[u8], env: &CaptureEnv) -> Option<E
                         return None;
                     }
                     let path = s(&ti, "file_path")?;
+                    // Windows paths go by "/" too, so folder rules (tests/,
+                    // components/…) read them as on a Mac.
+                    let (path, cwd) = (slashes(path), slashes(cwd));
+                    let (path, cwd) = (&*path, &*cwd);
                     let (add, del) = edit_counts(tool, &ti, input.get("tool_response"));
                     let words = occupation::word_count(&added_text(tool, &ti, input.get("tool_response")));
                     let (occ, minutes) = occupation::for_edit(path, add + del, words);
