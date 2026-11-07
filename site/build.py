@@ -8,7 +8,10 @@ Run from the repo root:
     python3 -I site/build.py
 """
 import html
+import hashlib
 import json
+import os
+import re
 import shutil
 import site
 import sys
@@ -20,12 +23,19 @@ except ImportError:  # `python3 -I` skips the user site-packages, which is where
     sys.path.append(site.getusersitepackages())
     from PIL import Image
 
-SITE_URL = "https://dango.app"
-DOWNLOAD_URL = "#download"
+# Where the site is served: dangoai.org (the user's, 2026-11-07); dango.app
+# is not ours.
+SITE_URL = os.environ.get("DANGO_SITE_URL", "https://dangoai.org").rstrip("/")
 HERO_TYPE = "HBGO"  # the sample type used throughout the design handoff
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
+MEDIA = HERE / "media"
+VERSION = re.search(r'^version = "(.*)"', (REPO / "Cargo.toml").read_text(), re.M).group(1)
+# The installer, served from the site itself (copied from target/dist when built).
+DOWNLOAD_URL = f"/download/Dango-{VERSION}.dmg"
+sys.path.insert(0, str(HERE))
+import home as home_page  # noqa: E402  (site/home.py; -I leaves the script's folder off the path)
 DIST = HERE / "dist"
 ART = REPO / "apps" / "widget" / "assets" / "abti"
 CFG = json.loads((REPO / "assets" / "abti.json").read_text(encoding="utf-8"))
@@ -65,7 +75,7 @@ def save_og(src, rel):
 
 
 def save_icons():
-    art = Image.open(ART / "roles" / (CFG["roles"][0]["art"] + ".png")).convert("RGBA")
+    art = Image.open(REPO / "apps" / "widget" / "assets" / "theme-b" / "logo-dango.png").convert("RGBA")
     side = max(art.size)
     square = Image.new("RGBA", (side, side), (255, 255, 255, 0))
     square.paste(art, ((side - art.width) // 2, (side - art.height) // 2))
@@ -83,9 +93,27 @@ def build_images():
         save_webp(ART / "icon" / Path(t["icon"]).name, f"img/icon/{code}.webp", 240)
     for role in CFG["roles"]:
         for art in [role["art"]] + role["alt_art"]:
-            save_webp(ART / "roles" / f"{art}.png", f"img/roles/{art}.webp", 200)
+            save_webp(MEDIA / "role" / f"{art}.png", f"img/roles/{art}.webp", 200)
     for role in CFG["hidden_roles"]:
-        save_webp(ART / "hidden" / Path(role["art"]).name, f"img/hidden/{role['id']}.webp", 200)
+        save_webp(MEDIA / "job" / f"{role['id']}.png", f"img/hidden/{role['id']}.webp", 200)
+    # The home page's, rendered by the app (render_media.py).
+    for p in sorted((MEDIA / "job").glob("*.png")):
+        save_webp(p, f"img/job/{p.stem}.webp", 200)
+    save_webp(MEDIA / "office.png", "img/office.webp")
+    save_webp(MEDIA / "dango-working.png", "img/dango-working.webp", 260)
+    for lang in ("zh", "en"):
+        panel = Image.open(MEDIA / f"panel-{lang}.png")
+        tmp = DIST / f"panel-{lang}.png"
+        panel.crop((0, 0, panel.width, min(panel.height, round(panel.width * 1.9)))).save(tmp)
+        save_webp(tmp, f"img/panel-{lang}.webp", 880)
+        tmp.unlink()
+        pet = Image.open(MEDIA / f"pet-{lang}.png")
+        tmp = DIST / f"pet-{lang}.png"
+        pet.crop(pet.getbbox()).save(tmp)
+        save_webp(tmp, f"img/pet-{lang}.webp", 460)
+        tmp.unlink()
+        save_webp(MEDIA / f"card-{lang}.png", f"img/card-{lang}.webp", 1080)
+        save_webp(MEDIA / f"share-week-{lang}.png", f"img/share-week-{lang}.webp", 1080)
     save_icons()
 
 
@@ -190,6 +218,17 @@ COPY = dimension_copy()
 
 # ---------------------------------------------------------------- page context and shell
 
+_VER = {}
+
+
+def ver(rel):
+    """`rel` with a short hash of its content: browsers keep the site's
+    files for hours, so a changed file needs a new address to show up."""
+    if rel not in _VER:
+        _VER[rel] = hashlib.md5((DIST / rel).read_bytes()).hexdigest()[:10]
+    return f"{rel}?v={_VER[rel]}"
+
+
 class Ctx:
     """One output page: its language, its path below the language root, and the relative way back up."""
 
@@ -217,7 +256,7 @@ class Ctx:
         w, h = SIZES[rel]
         attrs = f' class="{cls}"' if cls else ""
         attrs += ' loading="lazy" decoding="async"' if lazy else ""
-        return f'<img src="{self.up}{rel}" alt="{e(alt)}" width="{w}" height="{h}"{attrs}>'
+        return f'<img src="{self.up}{ver(rel)}" alt="{e(alt)}" width="{w}" height="{h}"{attrs}>'
 
 
 def brand(c):
@@ -234,16 +273,20 @@ def header(c, current):
         f'<a href="{c.link(c.path, "zh")}" lang="zh-CN" hreflang="zh-CN">中文</a>'
     en_label = '<span aria-current="true">English</span>' if c.lang == "en" else \
         f'<a href="{c.link(c.path, "en")}" lang="en" hreflang="en">English</a>'
-    return f"""<header class="top">
-  {brand(c)}
-  <span class="kind">{c.t("AI 老板人格", "AI Boss Type")}</span>
-  <nav class="nav" aria-label="{c.t("主导航", "Main")}">{nav}<a class="btn btn-sm" href="{DOWNLOAD_URL}">{c.t("下载 Mac 版", "Get it for Mac")}</a></nav>
-  <span class="lang">{zh_label} / {en_label}</span>
+    return f"""<header class="gnav">
+  <div class="gnav-in">
+    {brand(c)}
+    <span class="kind">{c.t("打工团子", "AI at work")}</span>
+    <nav class="nav" aria-label="{c.t("主导航", "Main")}">{nav}</nav>
+    <span class="lang">{zh_label} / {en_label}</span>
+    <a class="btn btn-sm" href="{DOWNLOAD_URL}">{c.t("下载", "Download")}</a>
+  </div>
 </header>"""
 
 
 def footer(c):
     return f"""<footer class="foot">
+  <div class="foot-in">
   {brand(c)}
   <span>{c.t("全在本机算 · 不存代码和 prompt · 不上传", "Runs on your Mac · never stores code or prompts · nothing uploaded")}</span>
   <nav aria-label="{c.t("页脚", "Footer")}">
@@ -252,6 +295,7 @@ def footer(c):
     <a href="{c.link("how/")}">{c.t("怎么算", "How it works")}</a>
     <a href="{DOWNLOAD_URL}">{c.t("下载 Mac 版", "Get it for Mac")}</a>
   </nav>
+  </div>
 </footer>"""
 
 
@@ -291,16 +335,14 @@ def page(c, title, desc, body, current=None, og_title=None, image=f"img/og/{HERO
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="{FONT_CSS}" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="{FONT_CSS}"></noscript>
-<link rel="stylesheet" href="{c.up}assets/site.css">
+<link rel="stylesheet" href="{c.up}{ver("assets/site.css")}">
 </head>
 <body>
-<div class="wrap">
 {header(c, current)}
-<main>
+<main class="{"home" if current == "home" else "wrap"}">
 {body}
 </main>
 {footer(c)}
-</div>
 </body>
 </html>
 """
@@ -313,8 +355,8 @@ def write(c, text):
 
 
 def cta_dark(c, title, button):
-    parts = c.t(["支持 Claude Code 和 Codex", "全在本机算", "不上传"],
-                ["Works with Claude Code and Codex", "runs on your Mac", "nothing uploaded"])
+    parts = c.t(["支持 Claude Code、Codex、DeepSeek、WorkBuddy", "全在本机算", "不上传"],
+                ["Works with Claude Code, Codex, DeepSeek and WorkBuddy", "runs on your Mac", "nothing uploaded"])
     sub = " · ".join(f'<span class="nw">{e(p)}</span>' for p in parts)
     return f"""<section class="cta-wrap">
   <div class="cta-dark">
@@ -337,86 +379,19 @@ def letter_pair(c, key):
 
 # ---------------------------------------------------------------- pages
 
+APPLE = ('<svg class="apple" viewBox="0 0 17 20" aria-hidden="true"><path fill="currentColor" d="M14.1 10.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2.1-.9-3.4-.9C3.6 4.7 2 5.7 1.1 7.3c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-2.9-1.1-3-4.3zM11.5 3c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.2 1.1.1 2.3-.6 3-1.5z"/></svg>')
+
+
 def home(c):
-    pick = TYPES[HERO_TYPE]
-    dims = "\n".join(
-        f'<div class="dim"><p class="dim-pair">{letter_pair(c, key)}</p><p>{e(c.say(COPY[key]["home"]))}</p></div>'
-        for key in DIMS["order"]
-    )
-    grid = "\n".join(
-        f'<a class="mini" href="{c.link(f"t/{code}/")}">{c.img(f"img/icon/{code}.webp")}'
-        f'<span class="code mono">{code}</span><span class="name">{e(c.f(t, "name"))}</span></a>'
-        for code, t in TYPES.items()
-    )
-    privacy = [
-        (c.t("只记数字", "Numbers only"),
-         c.t("回合数、时长、改了几行、模型花了多少钱。", "Turns, minutes, lines changed, and what the models cost.")),
-        (c.t("不存内容", "No content kept"),
-         c.t("你的代码、prompt、文件路径和仓库名都不会存下来。", "Your code, prompts, file paths and repo names are never saved.")),
-        (c.t("不上传", "Nothing uploaded"),
-         c.t("结果在你的 Mac 上算出来。分享卡发不发，由你决定。", "Your result is worked out on your Mac. Sharing the card is up to you.")),
-    ]
-    priv = "\n".join(f'<div class="priv"><h3>{CHECK}{e(h)}</h3><p>{e(p)}</p></div>' for h, p in privacy)
-    lead = c.t(
-        "DANGO 是住在你 Mac 屏幕角落的一只团子。它看着你的 Claude Code / Codex 干活，把这些活算成<b>一种老板人格</b>、<b>一家公司的规模</b>和<b>一个压榨率</b>。全在本机算，什么都不上传。",
-        "DANGO is a desktop pet for your Mac. It watches what your Claude Code and Codex agents get done and turns it into <b>a boss personality</b>, <b>a company size</b> and <b>a margin</b>. Everything runs locally; nothing is uploaded.",
-    )
-    body = f"""<section class="hero">
-  <div>
-    <p class="kicker">{c.t("ABTI · 老板人格", "ABTI · AI Boss Type")}</p>
-    <h1>{c.t('<span class="nw">你是哪种</span> <span class="nw">AI 老板？</span>', "What kind of AI boss are you?")}</h1>
-    <p class="lead">{lead}</p>
-    <div class="cta-row">
-      <a class="btn" href="{DOWNLOAD_URL}">{c.t("下载 Mac 版", "Get it for Mac")}</a>
-      <a class="text-link" href="{c.link("types/")}">{c.t("看全部 16 型 →", "See all 16 types →")}</a>
-    </div>
-    <p class="fine">{c.t("装上就扫你本机已有的 Claude Code / Codex 记录，当场出结果。", "It scans the Claude Code and Codex history already on your Mac, so your result is ready right away.")}</p>
-  </div>
-  <a class="pick" href="{c.link(f"t/{HERO_TYPE}/")}">
-    {c.img(f"img/scene/{HERO_TYPE}.webp", c.f(pick, "name"), lazy=False)}
-    <span class="pick-cap"><span class="muted">{c.t("比如", "For example")}</span><span class="code mono">{HERO_TYPE}</span><span class="name">{e(c.f(pick, "name"))}</span></span>
-    <span class="pick-roast">{e(c.f(pick, "roast"))}</span>
-  </a>
-</section>
-
-<section class="sec" id="letters">
-  <div class="sec-head">
-    <h2>{c.t("四个字母，一种老板", "Four letters, one boss")}</h2>
-    <span class="note">{c.t("不用答题，按你的 AI 真干了什么来算", "No quiz. It's worked out from what your agents actually did.")}</span>
-  </div>
-  <div class="dims">
-{dims}
-  </div>
-  <p class="sec-foot"><a class="text-link" href="{c.link("how/")}">{c.t("规模、压榨率和完整规则 →", "Company size, margin and the exact rules →")}</a></p>
-</section>
-
-<section class="sec" id="types">
-  <div class="sec-head">
-    <h2>{c.t("16 种 AI 老板", "16 kinds of AI boss")}</h2>
-    <span class="note">{c.t("点开看吐槽、画像和绝配", "Tap one for its roast, portrait and perfect match")}</span>
-  </div>
-  <div class="grid16">
-{grid}
-  </div>
-  <p class="sec-foot"><a class="text-link" href="{c.link("types/")}">{c.t("按绝配排好的图鉴 →", "All 16, paired by perfect match →")}</a></p>
-</section>
-
-<section class="sec" id="privacy">
-  <div class="sec-head">
-    <h2>{c.t("全在你的 Mac 上", "It stays on your Mac")}</h2>
-  </div>
-  <div class="privacy">
-{priv}
-  </div>
-</section>
-
-{cta_dark(c, c.t("看看你是哪型 →", "Find your type →"), c.t("下载 Mac 版", "Get it for Mac"))}"""
-    title = c.t("你是哪种 AI 老板？· DANGO", "What kind of AI boss are you? · DANGO")
+    body = home_page.home(c, {"download": DOWNLOAD_URL, "check": CHECK, "apple": APPLE, "types": TYPES, "dims": DIMS,
+                              "copy": COPY, "letter_pair": letter_pair, "repo": REPO,
+                              "film": (HERE / "video" / f"promo-{c.lang}.mp4").exists(), "ver": ver})
+    title = c.t("DANGO · 你的 AI，在替你打工", "DANGO · Your AI is working for you")
     desc = c.t(
-        "DANGO 看着你的 Claude Code / Codex 干活，测出你是 16 种 AI 老板里的哪一种，再算出公司规模和压榨率。全在本机算，不上传。",
-        "DANGO watches your Claude Code and Codex work and tells you which of 16 AI bosses you are, plus your company size and margin. Runs locally; nothing is uploaded.",
+        "DANGO 把 AI 做的每一步，按美国真实中位时薪算成一个真人要拿的工钱。支持 Claude Code、Codex、DeepSeek、WorkBuddy，全在你的 Mac 上算，什么都不上传。",
+        "DANGO turns every step your AI takes into what a person would be paid at real U.S. median wages. Works with Claude Code, Codex, DeepSeek and WorkBuddy; runs on your Mac; nothing uploaded.",
     )
-    return page(c, title, desc, body)
+    return page(c, title, desc, body, current="home", image="img/og/home.png")
 
 
 def type_tile(c, code):
@@ -664,6 +639,21 @@ def main():
     (DIST / "assets").mkdir(parents=True)
     shutil.copyfile(HERE / "site.css", DIST / "assets" / "site.css")
     build_images()
+    save_og(MEDIA / "office.png", "img/og/home.png")
+    # The launch film (site/video, from ~/dango-promo-video): promo-<lang>.mp4,
+    # its captions and poster; a language without one gets no film section.
+    if (HERE / "video").exists():
+        shutil.copytree(HERE / "video", DIST / "video")
+    # The installer goes up only when asked (DANGO_SHIP_DMG=1); until then the
+    # download links point at where it will be (user, 2026-11-07: not yet).
+    dmg = REPO / "target" / "dist" / f"Dango-{VERSION}.dmg"
+    if os.environ.get("DANGO_SHIP_DMG") != "1":
+        print(f"note: {DOWNLOAD_URL} not included; set DANGO_SHIP_DMG=1 to ship it")
+    elif dmg.exists():
+        (DIST / "download").mkdir()
+        shutil.copyfile(dmg, DIST / "download" / dmg.name)
+    else:
+        print(f"note: no {dmg.relative_to(REPO)}; run apps/widget/package.sh so the download link works")
     for lang in ("zh", "en"):
         write(Ctx(lang, ""), home(Ctx(lang, "")))
         write(Ctx(lang, "types/"), types_page(Ctx(lang, "types/")))

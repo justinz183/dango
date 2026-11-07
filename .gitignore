@@ -3,3 +3,6 @@
 *.db-wal
 *.db-shm
 /site/dist
+/.wrangler
+/apps/windows/target
+/apps/windows/dist
