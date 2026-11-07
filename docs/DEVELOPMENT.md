@@ -1,13 +1,13 @@
 # 开发说明
 
-产品介绍在 [README](../README.md)。这里是开发者需要的：仓库结构、怎么构建和测试、怎么接 Claude Code 和 Codex、怎么打包，以及全部命令。设计和取舍在 [DESIGN.md](DESIGN.md)，待定的问题在 [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)，给 AI 助手看的项目规则在 [CLAUDE.md](../CLAUDE.md)。
+产品介绍在 [README](../README.md)。这里是开发者需要的：仓库结构、怎么构建和测试、怎么接 Claude Code、Codex 和 DeepSeek Harness、怎么打包，以及全部命令。设计和取舍在 [DESIGN.md](DESIGN.md)，待定的问题在 [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)，给 AI 助手看的项目规则在 [CLAUDE.md](../CLAUDE.md)。
 
 ## 仓库结构
 
 | 目录 | 内容 |
 | --- | --- |
 | `crates/core` | 纯逻辑，不做 IO：事件格式、话题分类、职业归类与时薪、计分、成就 |
-| `crates/daemon` | 守护进程：采集、spool、SQLite、入库、历史导入、跟读 Claude Code 和 Codex 的记录、老板人格（`abti.rs`）、报告 |
+| `crates/daemon` | 守护进程：采集、spool、SQLite、入库、历史导入、跟读 Claude Code、Codex 和 DeepSeek Harness 的记录（`dsh.rs`）、老板人格（`abti.rs`）、报告 |
 | `crates/cli` | 单个二进制 `dango` |
 | `apps/widget` | 桌面 App（Swift / AppKit）：宠物、面板、办公室、老板人格、报告窗口；`build.sh`、`bundle.sh`、`package.sh` |
 | `assets` | 职业表和时薪（`occupations.toml`）、模型单价（`model_prices.toml`）、老板人格的门槛和文案（`abti.json`）、计分单位 |
@@ -99,6 +99,10 @@ curl -fsSL http://localhost:8790/install.sh | DANGO_URL=http://localhost:8790 DA
 
 不用装，也不用在 Codex 里信任任何东西：守护进程每秒读一次 Codex 自己写的会话日志（`~/.codex/sessions/年/月/日/*.jsonl`，同样只读最近 36 小时、只读整行），和导入历史用同一个读法。Codex 的每一步按和 Claude Code 一样的规则归给职业：命令、`apply_patch`（按文件拆开）、MCP 工具、子 agent。以前装过的 `~/.codex/hooks.json` 可以删掉，`dango hook --codex` 现在什么都不做。
 
+## 接 DeepSeek Harness
+
+也不用装（`crates/daemon/src/dsh.rs`）。DeepSeek Harness 把每个会话记成一个只追加的事件日志 `~/.dsh/sessions/<项目>/session-<id>/session.v4.jsonl.zstd`：一个接一个的 zstd 帧，里面是一行行 JSON（`turn/start`、`user/message`、`tool/call`、`tool/result`、带 token 用量的 `assistant/message`、`turn/end` 等）。守护进程第一次见到它时把全部历史导一次（meta `history_imported:deepseek`），之后每秒读新写完的整帧（写到一半的帧等下次），事件 id 和导入时一样，所以只算一次。它的工具就是 Claude Code 那一套换成小写（`bash`、`read`、`write`、`edit`、`glob`、`grep`、`web_fetch`、`web_search`、`subagent`），参数同名，所以每一步走和 Claude Code 一样的归职业规则；它自己的杂务（`job_*`、`schedule_*`、目标、插件）不算谁的活。模型花费按 `assistant/message` 里的 token 和 DeepSeek 官方价格算（`assets/model_prices.toml`，按高峰价，非高峰时段实际只要一半）。DeepSeek 以子 agent 身份跑的会话（`delegationDepth` > 0）暂时不读：里面没写它属于父会话的哪个回合，父会话那边照样记「帮手出去 / 回来」。`config.toml` 里 `[sources] deepseek = false` 可以关掉。
+
 ## 数据在哪
 
 都在 `~/.dango`（`DANGO_HOME` 可改）：
@@ -111,7 +115,7 @@ curl -fsSL http://localhost:8790/install.sh | DANGO_URL=http://localhost:8790 DA
 | `config.toml` | 语言等设置（`dango lang zh|en`） |
 | `daemon.log` | 守护进程日志 |
 
-导出的图片存在 `~/Pictures/DONGO`。
+导出的图片存在 `~/Pictures/DANGO`。
 
 ## 命令
 
@@ -119,14 +123,14 @@ curl -fsSL http://localhost:8790/install.sh | DANGO_URL=http://localhost:8790 DA
 | --- | --- |
 | `dango widget` | 打开桌面 App |
 | `dango status [--claude]` | 一行状态（`--claude` 给 Claude Code 的状态栏用） |
-| `dango abti [--json]` | 老板人格测试的结果 |
+| `dango abti [--json]` | 老板人格的结果 |
 | `dango abti --report day\|week\|month\|year\|total [--day DATE]` | 报告窗口一页的数据（JSON） |
-| `dango card [--week\|--month\|--year] [--day DATE] [--out PNG] [--no-open]` | 导出 4:5 分享图到 `~/Pictures/DONGO` 并复制（会覆盖剪贴板） |
-| `dango report [--week\|--month\|--year] [--day DATE] [--names] [--tool claude\|codex] [--json]` | 文字版报告 |
+| `dango card [--week\|--month\|--year] [--day DATE] [--out PNG] [--no-open]` | 导出 4:5 分享图到 `~/Pictures/DANGO` 并复制（会覆盖剪贴板） |
+| `dango report [--week\|--month\|--year] [--day DATE] [--names] [--tool claude\|codex\|deepseek] [--json]` | 文字版报告 |
 | `dango lang [zh\|en]` | 查看或切换语言 |
 | `dango stats` / `dango badges` | 产出总览 / 旧的成就图鉴 |
 | `dango panel` | 旧的网页面板（`~/.dango/panel.html`） |
-| `dango backfill [--claude-dir DIR] [--codex-dir DIR]` | 导入历史（守护进程要先停；可以重复跑，不会重复计） |
+| `dango backfill [--claude-dir DIR] [--codex-dir DIR] [--dsh-dir DIR]` | 导入历史（守护进程要先停；可以重复跑，不会重复计） |
 | `dango daemon` | 前台跑守护进程 |
 | `dango hook [--codex]` | 插件钩子的入口：读 stdin，写 spool，永远 exit 0 |
 | `dango replay PATH…` | 回放 hook fixtures |
