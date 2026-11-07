@@ -153,9 +153,12 @@ pub fn cached(conn: &Connection, claude_dir: &Path, sid: &str, ended: bool) -> R
             return Ok(Meta { title, project });
         }
     }
-    let m = match transcript_for(claude_dir, sid) {
-        Some(p) => read(&p),
-        None => claude_dir.parent().map(|home| codex(&home.join(".codex"), sid)).unwrap_or_default(),
+    let m = match (transcript_for(claude_dir, sid), claude_dir.parent()) {
+        (Some(p), _) => read(&p),
+        (None, Some(home)) if sid.starts_with("session-") => crate::dsh::meta(&home.join(".dsh"), sid),
+        (None, Some(home)) if crate::workbuddy::session_file(home, sid).is_some() => crate::workbuddy::meta(home, sid),
+        (None, Some(home)) => codex(&home.join(".codex"), sid),
+        (None, None) => Meta::default(),
     };
     conn.execute(
         "INSERT INTO session_meta (session_id, project, title, looked_up_at) VALUES (?1, ?2, ?3, ?4)

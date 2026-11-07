@@ -227,14 +227,16 @@ fn m03_to_m07_milestones() {
 #[test]
 fn l01_light_touch_needs_session_leverage() {
     let mut s = Sim::new();
-    // Three video renders (3 × 15) + the 5-minute turn base = 50 human minutes.
+    // Three video renders (15, then 15/√2 and 15/√3: repeats count less)
+    // + the 5-minute turn base = 39.27 human minutes.
     let cut = "ffmpeg -i a.mp4 b.mp4";
-    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(11.0).stop().end();
-    assert_eq!(s.tier("L01"), 0, "50 / 11 = 4.5x");
-    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(10.0).stop().end();
-    assert_eq!(s.tier("L01"), 1, "5x");
-    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(5.0).stop().end();
-    assert_eq!(s.tier("L01"), 2, "10x");
+    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(8.0).stop().end();
+    assert_eq!(s.tier("L01"), 0, "39.27 / 8 = 4.9x");
+    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).adv(7.8).stop().end();
+    assert_eq!(s.tier("L01"), 1, "5.03x");
+    // Five renders (53.5 human minutes) in the 5 minutes a session needs to count.
+    s.start().prompt("cut the video").bash(cut, true).bash(cut, true).bash(cut, true).bash(cut, true).bash(cut, true).adv(5.0).stop().end();
+    assert_eq!(s.tier("L01"), 2, "10.7x");
 }
 
 #[test]
@@ -789,14 +791,16 @@ fn turns_are_priced_by_who_would_have_done_them() {
     let sid = s.sid.clone();
     let b = s.p.settlements.remove(&sid).expect("a box");
     assert_eq!(b.jobs, vec!["视频剪辑".to_string()]);
-    // 2 × 15 minutes of editing + the 5-minute turn base, at $36.26/h.
-    assert!((b.usd - 35.0 / 60.0 * 36.26).abs() < 1e-9, "{}", b.usd);
+    // 15 + 15/√2 minutes of editing (the second render counts less) + the
+    // 5-minute turn base, at $36.26/h.
+    assert!((b.usd - (20.0 + 15.0 / 2f64.sqrt()) / 60.0 * 36.26).abs() < 1e-9, "{}", b.usd);
     assert!((b.today_usd - b.usd).abs() < 1e-9);
     // A tool result that lands after Stop adds to the same turn.
     let before = s.p.ctr("usd", "all");
     s.adv(0.1).bash("ffmpeg -i c.mp4 d.mp4", true);
     let after = s.p.ctr("usd", "all");
-    assert!((after - before - 15.0 / 60.0 * 36.26).abs() < 1e-9, "{before} → {after}");
+    assert!((after - before - 15.0 / 3f64.sqrt() / 60.0 * 36.26).abs() < 1e-9, "{before} → {after}");
     let (usd, work): (f64, String) = s.p.conn.query_row("SELECT usd, work FROM turns", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
-    assert!((usd - after).abs() < 1e-9 && work.contains("\"video\":50"), "{work}");
+    let work: std::collections::BTreeMap<String, f64> = serde_json::from_str(&work).unwrap();
+    assert!((usd - after).abs() < 1e-9 && (work["video"] - (20.0 + 15.0 / 2f64.sqrt() + 15.0 / 3f64.sqrt())).abs() < 1e-9, "{work:?}");
 }

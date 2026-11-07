@@ -88,7 +88,7 @@ pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String
             .take(4)
             .map(|j| format!("{} {}", j["name"].as_str().unwrap_or(""), fmt_usd(j["usd"].as_f64().unwrap_or(0.0))))
             .collect();
-        out.push(row(if id == "codex" { "└ Codex" } else { "└ Claude" }, top.join(" · ")));
+        out.push(row(&format!("└ {}", daemon::widget::tool_label(id).0), top.join(" · ")));
     }
     out.push(row("今日", format!("{} · 本周 {}", fmt_usd(o.today_usd), fmt_usd(o.week_usd))));
     out.push(row(

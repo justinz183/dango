@@ -145,10 +145,43 @@ fn codex(files: &[PathBuf], turns: &[&Pending], out: &mut [BTreeMap<String, Toke
     }
 }
 
+/// DeepSeek Harness: every model reply (`assistant/message`) logs its model
+/// and usage; its input is what missed the cache.
+fn dsh(dsh_dir: &Path, sid: &str, turns: &[&Pending], out: &mut [BTreeMap<String, Tokens>]) {
+    let Some(path) = crate::dsh::session_file(dsh_dir, sid) else { return };
+    for line in crate::dsh::read_frames(&path, 0).0.lines().filter(|l| l.contains("assistant/message")) {
+        let Ok(e) = serde_json::from_str::<Value>(line) else { continue };
+        if e.get("type").and_then(Value::as_str) != Some("assistant/message") {
+            continue;
+        }
+        let (Some(u), Some(model)) = (e.pointer("/data/usage"), e.pointer("/data/message/source/model").and_then(Value::as_str)) else { continue };
+        let Some(i) = e.get("time").and_then(Value::as_i64).and_then(|ts| window(turns, ts)) else { continue };
+        let t = Tokens { input: n(u, "inputTokens"), cache_write: n(u, "cacheWriteTokens"), cache_write_long: 0, cache_read: n(u, "cacheReadTokens"), output: n(u, "outputTokens") };
+        out[i].entry(price_key(model, t.input + t.cache_write + t.cache_read)).or_default().add(&t);
+    }
+}
+
+/// WorkBuddy: each model step's first item carries the step's usage
+/// (`providerData.rawUsage`, OpenAI-style, with the cache hits apart). Its
+/// model is WorkBuddy's own routing ("Auto"), which has no published per-token
+/// price: the tokens count, unpriced.
+fn workbuddy(root: &Path, sid: &str, turns: &[&Pending], out: &mut [BTreeMap<String, Tokens>]) {
+    let Some(path) = crate::workbuddy::session_file(root, sid) else { return };
+    for line in lines(&path).filter(|l| l.contains("rawUsage")) {
+        let Ok(e) = serde_json::from_str::<Value>(&line) else { continue };
+        let (Some(u), Some(ts)) = (e.pointer("/providerData/rawUsage"), e.get("timestamp").and_then(Value::as_i64)) else { continue };
+        let Some(i) = window(turns, ts) else { continue };
+        let name = e.pointer("/providerData/requestModelName").or_else(|| e.pointer("/providerData/model")).and_then(Value::as_str).unwrap_or("auto");
+        let (hit, prompt) = (n(u, "prompt_cache_hit_tokens"), n(u, "prompt_tokens"));
+        let t = Tokens { input: prompt.saturating_sub(hit), cache_write: 0, cache_write_long: 0, cache_read: hit, output: n(u, "completion_tokens") };
+        out[i].entry(format!("workbuddy/{}", name.to_lowercase())).or_default().add(&t);
+    }
+}
+
 /// One `usage` event per pending turn, from the logs (no database access,
 /// so the daemon can read while it serves requests). A turn whose logs are
 /// gone gets an empty event, so it is not looked at again.
-pub fn read(claude_dir: &Path, codex_dir: &Path, pending: &[Pending]) -> Vec<Event> {
+pub fn read(claude_dir: &Path, codex_dir: &Path, dsh_dir: &Path, wb_root: &Path, pending: &[Pending]) -> Vec<Event> {
     let mut by_session: BTreeMap<(&str, &str), Vec<&Pending>> = BTreeMap::new();
     for p in pending {
         by_session.entry((p.session.as_str(), p.source.as_str())).or_default().push(p);
@@ -157,16 +190,22 @@ pub fn read(claude_dir: &Path, codex_dir: &Path, pending: &[Pending]) -> Vec<Eve
     let mut events = Vec::new();
     for ((sid, source), turns) in by_session {
         let mut out = vec![BTreeMap::new(); turns.len()];
-        if source == "codex" {
-            codex(index.get(sid).map(Vec::as_slice).unwrap_or(&[]), &turns, &mut out);
-        } else {
-            claude(claude_dir, sid, &turns, &mut out);
+        match source {
+            "codex" => codex(index.get(sid).map(Vec::as_slice).unwrap_or(&[]), &turns, &mut out),
+            "deepseek" => dsh(dsh_dir, sid, &turns, &mut out),
+            "workbuddy" => workbuddy(wb_root, sid, &turns, &mut out),
+            _ => claude(claude_dir, sid, &turns, &mut out),
         }
         for (t, tokens) in turns.into_iter().zip(out) {
             let mut ev = Event::new(format!("use_{}", short_hash(&t.turn)), t.end, Source::Backfill, Kind::Usage);
             ev.session_id = Some(t.session.clone());
             ev.turn_id = Some(t.turn.clone());
-            ev.payload.origin = Some(if source == "codex" { Source::Codex } else { Source::ClaudeCode });
+            ev.payload.origin = Some(match source {
+                "codex" => Source::Codex,
+                "deepseek" => Source::DeepSeek,
+                "workbuddy" => Source::WorkBuddy,
+                _ => Source::ClaudeCode,
+            });
             ev.payload.tokens = tokens;
             events.push(ev);
         }
@@ -175,9 +214,9 @@ pub fn read(claude_dir: &Path, codex_dir: &Path, pending: &[Pending]) -> Vec<Eve
 }
 
 /// Prices every turn that ended before `before` and has no usage yet.
-pub fn fill(p: &mut Processor, claude_dir: &Path, codex_dir: &Path, before: i64, limit: usize) -> Result<usize> {
+pub fn fill(p: &mut Processor, claude_dir: &Path, codex_dir: &Path, dsh_dir: &Path, wb_root: &Path, before: i64, limit: usize) -> Result<usize> {
     let todo = pending(&p.conn, before, limit)?;
-    let events = read(claude_dir, codex_dir, &todo);
+    let events = read(claude_dir, codex_dir, dsh_dir, wb_root, &todo);
     apply(p, &events)
 }
 

@@ -31,13 +31,13 @@ const USAGE: &str = "dango（打工团子）— 你的 AI 替你干了多少活�
   dango stats                 公司页
   dango badges                成就与职业图鉴
   dango widget                启动桌面小部件（屏幕右下角）
-  dango report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
+  dango report [--week|--month|--year] [--day DATE] [--tool claude|codex|deepseek|workbuddy] [--names] [--json]
                                    日报 / 周报 / 月报（DATE = YYYY-MM-DD | today | yesterday，
                                    周报取 DATE 所在的周，月报取所在的月）
   dango card [--week|--month|--year] [--day DATE] [--out PNG] [--no-open]
-                                   导出 4:5 分享图（和报告窗口同一套设计）到 ~/Pictures/DONGO/ 并复制到剪贴板
+                                   导出 4:5 分享图（和报告窗口同一套设计）到 ~/Pictures/DANGO/ 并复制到剪贴板
   dango abti [--json] | dango abti --report day|week|month|year|total [--day DATE]
-                                   老板人格测试的结果 / 报告窗口一页的数据（JSON）
+                                   老板人格的结果 / 报告窗口一页的数据（JSON）
   dango panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   dango backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
@@ -55,11 +55,11 @@ Usage:
   dango stats                 output page
   dango widget                start the desktop pet (bottom-right corner)
   dango lang [zh|en]          show or set the language
-  dango report [--week|--month|--year] [--day DATE] [--tool claude|codex] [--names] [--json]
+  dango report [--week|--month|--year] [--day DATE] [--tool claude|codex|deepseek|workbuddy] [--names] [--json]
                                    day / week / month / year report (DATE = YYYY-MM-DD | today | yesterday;
                                    the week, month or year that contains DATE)
   dango card [--week|--month|--year] [--day DATE] [--out PNG] [--no-open]
-                                   export the 4:5 share image (the report window's design) to ~/Pictures/DONGO/ and copy it
+                                   export the 4:5 share image (the report window's design) to ~/Pictures/DANGO/ and copy it
   dango abti [--json] | dango abti --report day|week|month|year|total [--day DATE]
                                    the AI boss type, or one report window page (JSON)
   dango backfill [--claude-dir DIR]
@@ -163,13 +163,15 @@ fn parse_day(args: &[String]) -> Result<chrono::NaiveDate> {
     })
 }
 
-/// `--tool claude|codex`: one agent's work only (sessions.source).
+/// `--tool claude|codex|deepseek|workbuddy`: one agent's work only (sessions.source).
 fn parse_tool(args: &[String]) -> Result<Option<&'static str>> {
     Ok(match flag(args, "--tool").as_deref() {
         None | Some("all") => None,
         Some("claude" | "claude_code" | "claude-code") => Some("claude_code"),
         Some("codex") => Some("codex"),
-        Some(t) => return Err(format!("--tool 只接 claude 或 codex，收到 {t:?}").into()),
+        Some("deepseek" | "dsh") => Some("deepseek"),
+        Some("workbuddy" | "wb") => Some("workbuddy"),
+        Some(t) => return Err(format!("--tool 只接 claude、codex、deepseek 或 workbuddy，收到 {t:?}").into()),
     })
 }
 
@@ -248,7 +250,7 @@ fn renderer() -> Result<PathBuf> {
 
 /// `dango card [--week|--month|--year] [--day DATE]`: the period's 4:5
 /// share image, drawn by the app in the report window's design, saved to
-/// ~/Pictures/DONGO and copied. Share images never carry project names or
+/// ~/Pictures/DANGO and copied. Share images never carry project names or
 /// session titles.
 fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     let kind = ["week", "month", "year"].into_iter().find(|k| args.iter().any(|a| *a == format!("--{k}"))).unwrap_or("day");
@@ -263,9 +265,9 @@ fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     let out = match flag(args, "--out") {
         Some(o) => PathBuf::from(o),
         None => {
-            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("DONGO");
+            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("DANGO");
             fs::create_dir_all(&dir)?;
-            dir.join(format!("dongo-{date}.png"))
+            dir.join(format!("dango-{date}.png"))
         }
     };
     let status = std::process::Command::new(renderer()?).arg("--abti").arg(&json_path).arg(&out).args(["--page", "share", "--copy"]).status()?;
@@ -373,7 +375,7 @@ fn run_backfill(paths: &Paths, args: &[String]) -> Result<i32> {
             None => PathBuf::from(std::env::var("HOME")?).join(default),
         })
     };
-    let (claude_dir, codex_dir) = (dir("--claude-dir", ".claude")?, dir("--codex-dir", ".codex")?);
+    let (claude_dir, codex_dir, dsh_dir) = (dir("--claude-dir", ".claude")?, dir("--codex-dir", ".codex")?, dir("--dsh-dir", ".dsh")?);
     let codex = Config::load(paths).sources.codex && codex_dir.join("sessions").is_dir();
     if !claude_dir.join("projects").is_dir() && !codex {
         println!("没有找到 {}/projects 或 {}/sessions，跳过回填。", claude_dir.display(), codex_dir.display());
@@ -385,7 +387,16 @@ fn run_backfill(paths: &Paths, args: &[String]) -> Result<i32> {
     let (cutoff, codex_cutoff) = (since("live_since")?, now_ms());
     println!("正在整理 Claude Code{} 的历史…", if codex { " 和 Codex" } else { "" });
     let r = backfill::run(&mut p, paths, &claude_dir, cutoff, codex.then_some((codex_dir.as_path(), codex_cutoff)))?;
-    daemon::usage::fill(&mut p, &claude_dir, &codex_dir, now_ms(), usize::MAX)?;
+    // DeepSeek Harness, like Codex, from its own logs: all of it.
+    if Config::load(paths).sources.deepseek {
+        daemon::dsh::import(&mut p, paths, &dsh_dir, now_ms())?;
+    }
+    // WorkBuddy too, from ~/.workbuddy-ai or ~/.workbuddy (or --wb-root).
+    let wb_root = dir("--wb-root", "")?;
+    if Config::load(paths).sources.workbuddy {
+        daemon::workbuddy::import(&mut p, paths, &wb_root, now_ms())?;
+    }
+    daemon::usage::fill(&mut p, &claude_dir, &codex_dir, &dsh_dir, &wb_root, now_ms(), usize::MAX)?;
     let total = snapshot::counter(&p.conn, "person_days", "all");
     let unlocked: i64 = p.conn.query_row("SELECT COUNT(DISTINCT achievement_id) FROM unlocks", [], |r| r.get(0))?;
     p.conn.execute("UPDATE unlocks SET celebrated = 1 WHERE backfilled = 1", [])?;

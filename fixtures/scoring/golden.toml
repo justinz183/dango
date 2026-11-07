@@ -1,10 +1,12 @@
 # Golden turns for the occupation model (docs/DESIGN.md §3). Each step
-# goes through occupation::for_edit / for_command / for_tool; the turn
-# then gets remap + finish (5 min base and 12 min per subagent on the main
-# occupation; prose at 2,000 words an hour is a writer's; no cap since
-# 2026-10-29). Values computed by an independent model
-# (scratchpad golden_occ.py) and priced with assets/occupations.toml.
-
+# goes through occupation::for_edit / for_command / for_tool and is priced
+# as ingest does since 2026-11-07 (occupation::TurnSteps): a file counts once
+# a turn (its lines or words summed), the k-th command or lookup of one
+# occupation is worth 1/√k; the turn then gets remap + finish (5 min base and
+# 12 min per subagent shared out by each occupation's part; prose at 2,000
+# words an hour is a writer's; no cap since 2026-10-29). Values computed by
+# an independent model (scratchpad golden/model.py) and priced with
+# assets/occupations.toml.
 [[case]]
 name = "talk only"
 main = "research"
@@ -19,7 +21,7 @@ steps = [
 ]
 main = "qa"
 minutes = 19.39
-usd = 17.32
+usd = 17.70
 
 [[case]]
 name = "feature with tests and commit"
@@ -33,8 +35,8 @@ steps = [
 ]
 subagents = 1
 main = "swe"
-minutes = 112.12
-usd = 113.43
+minutes = 109.19
+usd = 109.51
 
 [[case]]
 name = "landing page"
@@ -45,7 +47,7 @@ steps = [
 ]
 main = "web"
 minutes = 81.25
-usd = 55.70
+usd = 55.13
 
 [[case]]
 name = "blog post"
@@ -79,8 +81,8 @@ steps = [
 ]
 topic = "fin"
 main = "fin"
-minutes = 64.00
-usd = 52.69
+minutes = 46.97
+usd = 38.67
 
 [[case]]
 name = "video explainer"
@@ -92,8 +94,8 @@ steps = [
   { cmd = "python3 render.py zh" },
 ]
 main = "video"
-minutes = 87.69
-usd = 70.78
+minutes = 76.96
+usd = 65.53
 
 [[case]]
 name = "scanned book OCR"
@@ -105,8 +107,8 @@ steps = [
   { edit = "ocr.swift", lines = 70 },
 ]
 main = "entry"
-minutes = 80.97
-usd = 38.94
+minutes = 62.73
+usd = 33.94
 
 [[case]]
 name = "server setup"
@@ -116,8 +118,8 @@ steps = [
   { cmd = "launchctl bootstrap gui/501 x.plist" },
 ]
 main = "ops"
-minutes = 20.00
-usd = 15.89
+minutes = 18.54
+usd = 14.72
 
 [[case]]
 name = "research with subagents"
@@ -143,5 +145,5 @@ steps = [
   { edit = "src/big.rs", lines = 2000 },
 ]
 main = "swe"
-minutes = 2396.66
-usd = 2611.56
+minutes = 1444.25
+usd = 1573.75

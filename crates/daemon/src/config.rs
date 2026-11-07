@@ -16,6 +16,8 @@ autostart = true
 [sources]
 claude_code = true
 codex = true
+deepseek = true
+workbuddy = true
 git_hook = false
 
 [scoring]
@@ -70,6 +72,10 @@ pub struct General {
 pub struct Sources {
     pub claude_code: bool,
     pub codex: bool,
+    /// DeepSeek Harness, read from ~/.dsh (dsh.rs).
+    pub deepseek: bool,
+    /// WorkBuddy, read from ~/.workbuddy-ai or ~/.workbuddy (workbuddy.rs).
+    pub workbuddy: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -95,7 +101,7 @@ impl Default for General {
 }
 impl Default for Sources {
     fn default() -> Sources {
-        Sources { claude_code: true, codex: true }
+        Sources { claude_code: true, codex: true, deepseek: true, workbuddy: true }
     }
 }
 impl Default for Ceremony {

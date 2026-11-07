@@ -64,6 +64,8 @@ pub fn localize(v: &mut Value, lang: Lang) {
 pub fn tool_label(source: &str) -> (&'static str, &'static str) {
     match source {
         "codex" => ("Codex", "#5b6b7a"),
+        "deepseek" => ("DeepSeek", "#4d6bfe"),
+        "workbuddy" => ("WorkBuddy", "#7b61ff"),
         _ => ("Claude Code", "#d97757"),
     }
 }

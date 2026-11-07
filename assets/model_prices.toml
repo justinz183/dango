@@ -9,7 +9,7 @@
 # is "cache hits and refreshes" / "cached input". An id ending in "@long" is
 # the price for a request over the model's long-context threshold. A model
 # not listed here is unpriced: its tokens are counted, its cost is not.
-source = "Anthropic and OpenAI API pricing pages, standard tier"
+source = "Anthropic, OpenAI and DeepSeek API pricing pages, standard tier"
 as_of = "2026-10-29"
 
 [[model]]
@@ -143,3 +143,26 @@ id = "gpt-5.3-codex"
 input = 1.75
 cache_read = 0.175
 output = 14.0
+
+# DeepSeek, fetched 2026-11-07 from https://api-docs.deepseek.com/quick_start/pricing
+# (for DeepSeek Harness, dsh.rs). Peak rates: off-peak, every hour except
+# 01:00–04:00 and 06:00–10:00 UTC on weekdays, is half. Nothing is charged
+# for writing the cache: what misses it is input. "deepseek-v4-flash" is the
+# retired name, served and billed as deepseek-flash.
+[[model]]
+id = "deepseek-v4-pro"
+input = 1.32
+cache_read = 0.044
+output = 3.96
+
+[[model]]
+id = "deepseek-flash"
+input = 0.3
+cache_read = 0.006
+output = 1.2
+
+[[model]]
+id = "deepseek-v4-flash"
+input = 0.3
+cache_read = 0.006
+output = 1.2

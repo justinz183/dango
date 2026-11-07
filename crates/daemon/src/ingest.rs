@@ -130,6 +130,9 @@ struct TurnAgg {
     last_activity: i64,
     /// Minutes per occupation from the turn's steps.
     work: BTreeMap<String, f64>,
+    /// What the steps so far add up to (files touched, commands run), so a
+    /// file counts once and repeats count less (occupation::TurnSteps).
+    steps: occupation::TurnSteps,
     /// What the turn is about (an occupation id), from the prompt or a connector.
     topic: Option<String>,
 }
@@ -848,11 +851,28 @@ impl Processor {
         agg.agent_calls += p.subagents.unwrap_or(0);
         if let (Some(o), Some(m)) = (&p.occupation, p.minutes) {
             // Prose is counted from its words at today's pace (2,000 an
-            // hour); from 10-29 to 10-31 it was stored as research.
-            let (o, m) = if (o == "writer" || o == "research" || o == "pm") && p.words.is_some() {
-                (if o == "pm" { "pm" } else { "writer" }.to_string(), p.words.map(occupation::prose_minutes).unwrap_or(m))
-            } else {
-                (o.clone(), m)
+            // hour); from 10-29 to 10-31 it was stored as research. Shell
+            // scripts are ops' since 2026-11-07 (stored as the software
+            // engineer's before).
+            let prose = (o == "writer" || o == "research" || o == "pm") && p.words.is_some();
+            let shell = o == "swe" && p.languages.iter().any(|l| l == "shell");
+            let o = if prose { if o == "pm" { "pm" } else { "writer" } } else if shell { "ops" } else { o.as_str() }.to_string();
+            let m = match (p.tool.as_deref(), p.file_ids.first()) {
+                // An edit: its file counts once a turn (code by lines, prose
+                // by words, a config or an image flat).
+                (Some("edit" | "write"), Some(f)) => {
+                    let price = if prose {
+                        occupation::EditPrice::Prose(p.words.unwrap_or(0))
+                    } else if matches!(o.as_str(), "swe" | "web" | "qa") || shell {
+                        occupation::EditPrice::Code(added + removed)
+                    } else {
+                        occupation::EditPrice::Flat(m)
+                    };
+                    agg.steps.edit(f, price)
+                }
+                // A command or a lookup: repeats count less.
+                (Some("bash" | "web" | "mcp"), _) => agg.steps.run(&o, m),
+                _ => m,
             };
             *agg.work.entry(o).or_default() += m;
         }

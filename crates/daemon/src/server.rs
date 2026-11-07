@@ -26,6 +26,8 @@ const USAGE_EVERY: u64 = 40;
 const USAGE_SETTLE_MS: i64 = 15_000;
 /// Codex's rollout files are followed every this many polls (~1 s).
 const CODEX_EVERY: u64 = 4;
+/// DeepSeek Harness's session logs (~1 s), like Codex's.
+const DSH_EVERY: u64 = 4;
 /// Claude Code's transcripts, when its hooks are not installed (~2 s).
 const CLAUDE_EVERY: u64 = 8;
 
@@ -131,14 +133,16 @@ pub fn run(paths: &Paths) -> Result<()> {
         }
     }
     let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
-    let (claude_dir, codex_dir) = (home.join(".claude"), home.join(".codex"));
+    let (claude_dir, codex_dir, dsh_dir) = (home.join(".claude"), home.join(".codex"), home.join(".dsh"));
     {
         let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
-        if let Err(e) = import_history(&mut p, paths, &claude_dir, &codex_dir) {
+        if let Err(e) = import_history(&mut p, paths, &claude_dir, &codex_dir, &dsh_dir) {
             eprintln!("dango daemon: history import failed: {e}");
         }
     }
     let mut codex = crate::codex_tail::CodexTail::new(&codex_dir);
+    let mut dsh = crate::dsh::DshTail::new(&dsh_dir);
+    let mut wb = crate::workbuddy::WbTail::new(&home);
     let mut claude = crate::claude_tail::ClaudeTail::new(&claude_dir);
     let mut tick: u64 = 0;
     let modified = |p: &Paths| fs::metadata(&p.config).and_then(|m| m.modified()).ok();
@@ -172,6 +176,28 @@ pub fn run(paths: &Paths) -> Result<()> {
                 }
             }
         }
+        // Every second, what DeepSeek Harness has written, the same way.
+        if tick % DSH_EVERY == 0 {
+            let on = shared.lock().unwrap_or_else(|e| e.into_inner()).cfg.sources.deepseek;
+            let events = if on { dsh.poll(paths, now_ms()) } else { Vec::new() };
+            if !events.is_empty() {
+                let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+                if let Err(e) = take_followed(&mut p, paths, &events) {
+                    dsh = crate::dsh::DshTail::new(&dsh_dir);
+                    eprintln!("dango daemon: deepseek failed: {e}");
+                }
+            }
+            // And what WorkBuddy has written.
+            let on = shared.lock().unwrap_or_else(|e| e.into_inner()).cfg.sources.workbuddy;
+            let events = if on { wb.poll(paths, now_ms()) } else { Vec::new() };
+            if !events.is_empty() {
+                let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
+                if let Err(e) = take_followed(&mut p, paths, &events) {
+                    wb = crate::workbuddy::WbTail::new(&home);
+                    eprintln!("dango daemon: workbuddy failed: {e}");
+                }
+            }
+        }
         // Every ~2 s, what Claude Code has written, unless Dango's hooks are
         // installed and report it themselves.
         if tick % CLAUDE_EVERY == 0 && !claude.hooks_installed() {
@@ -193,7 +219,7 @@ pub fn run(paths: &Paths) -> Result<()> {
                 crate::usage::pending(&p.conn, now_ms() - USAGE_SETTLE_MS, 200).unwrap_or_default()
             };
             if !todo.is_empty() {
-                let events = crate::usage::read(&claude_dir, &codex_dir, &todo);
+                let events = crate::usage::read(&claude_dir, &codex_dir, &dsh_dir, &home, &todo);
                 let mut p = shared.lock().unwrap_or_else(|e| e.into_inner());
                 match crate::usage::apply(&mut p, &events) {
                     Ok(n) if n > 0 => {
@@ -253,11 +279,35 @@ fn drop_hooked_sessions(conn: &rusqlite::Connection, events: &mut Vec<dango_core
 }
 
 /// The first start on a Mac: imports the history (Claude Code before its
-/// hooks first reported, all of Codex) the way `dango backfill` does, so a
-/// fresh install has its boss type at once. Done once (meta
-/// `history_imported`); afterwards the followers and hooks keep it current,
-/// and running it again would only find what is already counted.
-pub fn import_history(p: &mut Processor, paths: &Paths, claude_dir: &std::path::Path, codex_dir: &std::path::Path) -> Result<()> {
+/// hooks first reported, all of Codex and DeepSeek Harness) the way `dango
+/// backfill` does, so a fresh install has its boss type at once. Done once
+/// (meta `history_imported`; DeepSeek Harness, which came later, has its
+/// own `history_imported:deepseek`, WorkBuddy `history_imported:workbuddy`);
+/// afterwards the followers and hooks keep it current, and running it again
+/// would only find what is already counted. WorkBuddy's folders are looked
+/// for next to `claude_dir` (both in the home folder).
+pub fn import_history(p: &mut Processor, paths: &Paths, claude_dir: &std::path::Path, codex_dir: &std::path::Path, dsh_dir: &std::path::Path) -> Result<()> {
+    let wb_root = claude_dir.parent().unwrap_or(claude_dir);
+    if p.cfg.sources.deepseek && db::get_meta(&p.conn, "history_imported:deepseek")?.is_none() {
+        let now = now_ms();
+        let mode = p.mode;
+        p.mode = Mode::Backfill;
+        let r = crate::dsh::import(p, paths, dsh_dir, now).and_then(|_| crate::usage::fill(p, claude_dir, codex_dir, dsh_dir, wb_root, now, usize::MAX));
+        p.mode = mode;
+        r?;
+        p.conn.execute("UPDATE unlocks SET celebrated = 1 WHERE backfilled = 1", [])?;
+        db::set_meta(&p.conn, "history_imported:deepseek", &now.to_string())?;
+    }
+    if p.cfg.sources.workbuddy && db::get_meta(&p.conn, "history_imported:workbuddy")?.is_none() {
+        let now = now_ms();
+        let mode = p.mode;
+        p.mode = Mode::Backfill;
+        let r = crate::workbuddy::import(p, paths, wb_root, now).and_then(|_| crate::usage::fill(p, claude_dir, codex_dir, dsh_dir, wb_root, now, usize::MAX));
+        p.mode = mode;
+        r?;
+        p.conn.execute("UPDATE unlocks SET celebrated = 1 WHERE backfilled = 1", [])?;
+        db::set_meta(&p.conn, "history_imported:workbuddy", &now.to_string())?;
+    }
     if db::get_meta(&p.conn, "history_imported")?.is_some() {
         return Ok(());
     }
@@ -268,7 +318,7 @@ pub fn import_history(p: &mut Processor, paths: &Paths, claude_dir: &std::path::
     let mode = p.mode;
     p.mode = Mode::Backfill;
     let r = crate::backfill::run(p, paths, claude_dir, cutoff, codex.then_some((codex_dir, now)))
-        .and_then(|_| crate::usage::fill(p, claude_dir, codex_dir, now, usize::MAX).map(|_| ()));
+        .and_then(|_| crate::usage::fill(p, claude_dir, codex_dir, dsh_dir, wb_root, now, usize::MAX).map(|_| ()));
     p.mode = mode;
     r?;
     // As `dango backfill`: badges earned in the past are not celebrated now.

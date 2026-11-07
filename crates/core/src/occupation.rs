@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub const BUILTIN_TOML: &str = include_str!("../../../assets/occupations.toml");
 
@@ -240,14 +240,20 @@ pub fn for_edit(path: &str, lines: u32, words: u32) -> (&'static str, f64) {
         "toml" | "yaml" | "yml" | "json" | "plist" | "ini" | "env" | "conf" | "lock" => ("ops", 5.0),
         "svg" | "png" | "jpg" | "jpeg" | "webp" | "gif" | "psd" | "ai" | "fig" => ("designer", 30.0),
         _ => {
-            // The code part of SPEC §5.3: a file touched plus lines changed.
-            let m = 2.5 + 0.45 * (lines.max(1) as f64).powf(0.8);
+            let m = code_minutes(lines);
             let test = ["/test/", "/tests/", "/spec/", "__tests__", "_test.", ".test.", ".spec."].iter().any(|t| low.contains(t))
                 || low.rsplit('/').next().is_some_and(|n| n.starts_with("test_"));
+            // Script in a UI folder is the front end's (2026-11-07).
+            let ui = ["/components/", "/pages/", "/views/", "/ui/", "/public/", "/static/", "/frontend/", "/client/", "/www/"].iter().any(|d| low.contains(d));
             if test {
                 ("qa", m)
-            } else if matches!(e.as_str(), "html" | "htm" | "css" | "scss" | "sass" | "less" | "tsx" | "jsx" | "vue" | "svelte") {
+            } else if matches!(e.as_str(), "html" | "htm" | "css" | "scss" | "sass" | "less" | "tsx" | "jsx" | "vue" | "svelte")
+                || (ui && matches!(e.as_str(), "js" | "mjs" | "cjs" | "ts"))
+            {
                 ("web", m)
+            } else if matches!(e.as_str(), "sh" | "bash" | "zsh") {
+                // Shell scripts run machines: an ops engineer's (2026-11-07).
+                ("ops", m)
             } else {
                 ("swe", m)
             }
@@ -347,17 +353,85 @@ pub fn main(work: &BTreeMap<String, f64>) -> Option<String> {
 }
 
 /// A finished turn's minutes per occupation: its steps, plus subagents and
-/// the per-turn base on the main occupation. A turn with no steps is a
-/// consult with the topic's occupation (a researcher when there is none).
+/// the per-turn base shared out by each occupation's part of the steps
+/// (until 2026-11-07 all on the main one, which made the catch-all software
+/// engineer outgrow the rest). A turn with no steps is a consult with the
+/// topic's occupation (a researcher when there is none).
 pub fn finish(mut work: BTreeMap<String, f64>, subagents: u32, topic: Option<&str>) -> BTreeMap<String, f64> {
     work.retain(|_, m| *m > 0.0);
     if work.is_empty() {
         let who = topic.unwrap_or(CONSULT.0);
         work.insert(who.to_string(), Table::builtin().consult(who) + SUBAGENT_MINUTES * subagents as f64);
-    } else if let Some(m) = main(&work) {
-        *work.get_mut(&m).unwrap() += TURN_BASE_MINUTES + SUBAGENT_MINUTES * subagents as f64;
+    } else {
+        let total: f64 = work.values().sum();
+        let extra = TURN_BASE_MINUTES + SUBAGENT_MINUTES * subagents as f64;
+        for m in work.values_mut() {
+            *m += extra * *m / total;
+        }
     }
     work
+}
+
+/// Minutes for a file's code change: a file touched plus lines changed
+/// (SPEC §5.3), concave so a long change is not paid by the line.
+pub fn code_minutes(lines: u32) -> f64 {
+    2.5 + 0.45 * (lines.max(1) as f64).powf(0.8)
+}
+
+/// How an edit is priced: code by its lines, prose by its words, or a flat
+/// price for the file (a config, an image).
+#[derive(Debug, Clone, Copy)]
+pub enum EditPrice {
+    Code(u32),
+    Prose(u32),
+    Flat(f64),
+}
+
+/// What a turn's steps have added up to so far, so the next step adds only
+/// what is new (2026-11-07, user: 「记分太通货膨胀了」): a person does a
+/// turn's work once, not as many times as the agent tried.
+/// - A file is one piece of work per turn: its lines (or words) are summed
+///   and priced once, so ten small edits cost what one edit of them all
+///   does; a flat-priced file counts once.
+/// - The k-th command or lookup of one occupation in a turn is worth 1/√k
+///   of its price: the twentieth render of the evening is not another
+///   fifteen minutes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct TurnSteps {
+    /// Per file: lines or words so far this turn.
+    pub files: BTreeMap<String, u32>,
+    /// Per occupation: commands and lookups so far this turn.
+    pub runs: BTreeMap<String, u32>,
+}
+
+impl TurnSteps {
+    /// Minutes an edit of `file` adds.
+    pub fn edit(&mut self, file: &str, price: EditPrice) -> f64 {
+        let before = self.files.get(file).copied();
+        let n = |x: u32| before.unwrap_or(0) + x;
+        match price {
+            EditPrice::Code(lines) => {
+                self.files.insert(file.to_string(), n(lines));
+                code_minutes(n(lines)) - before.map(code_minutes).unwrap_or(0.0)
+            }
+            EditPrice::Prose(words) => {
+                self.files.insert(file.to_string(), n(words));
+                prose_minutes(n(words)) - before.map(prose_minutes).unwrap_or(0.0)
+            }
+            EditPrice::Flat(m) => {
+                self.files.insert(file.to_string(), 0);
+                if before.is_some() { 0.0 } else { m }
+            }
+        }
+    }
+
+    /// Minutes a command or lookup worth `minutes` adds for `occupation`.
+    pub fn run(&mut self, occupation: &str, minutes: f64) -> f64 {
+        let k = self.runs.entry(occupation.to_string()).or_default();
+        *k += 1;
+        minutes / (*k as f64).sqrt()
+    }
 }
 
 #[cfg(test)]
@@ -370,12 +444,12 @@ mod tests {
     #[test]
     fn table_is_complete_and_sourced() {
         let t = Table::builtin();
-        assert_eq!(t.occupation.len(), 23, "one representative per field, the programmer's three step roles, writer and product manager");
+        assert_eq!(t.occupation.len(), 20, "one representative per field (the sciences one scientist), the programmer's three step roles, writer and product manager");
         assert!(t.occupation.iter().all(|o| !o.scene.is_empty() && o.consult > 0.0 && (!o.strong.is_empty() || STEP_ONLY.contains(&o.id.as_str()))));
         assert_eq!(t.scene("doctor"), "clinic");
         // Families: every occupation in one, every default a member of its
         // own family with no tells, every other member with some.
-        assert!(t.family.len() >= 14);
+        assert!(t.family.len() >= 13);
         for f in &t.family {
             let d = t.get(&f.default).unwrap_or_else(|| panic!("{}: default {}", f.id, f.default));
             assert_eq!(d.family, f.id, "{}", f.id);
@@ -562,14 +636,14 @@ mod tests {
             ("面试穿什么合适，衬衫配什么裤子", "research"), ("圆脸适合什么发型，妆容怎么画", "research"),
             // education and science
             ("帮我制定一个雅思备考计划", "research"), ("孩子的数学作业，这道应用题怎么讲", "research"),
-            ("这个微分方程怎么解，求导过程写一下", "mathematician"), ("证明一下这个矩阵可逆", "mathematician"),
-            ("量子纠缠到底是什么，通俗讲讲", "physicist"), ("为什么相对论说时间会变慢", "physicist"),
-            ("这个化学反应的方程式怎么配平", "chemist"), ("细胞分裂时 DNA 是怎么复制的", "biologist"),
+            ("这个微分方程怎么解，求导过程写一下", "scientist"), ("证明一下这个矩阵可逆", "scientist"),
+            ("量子纠缠到底是什么，通俗讲讲", "scientist"), ("为什么相对论说时间会变慢", "scientist"),
+            ("这个化学反应的方程式怎么配平", "scientist"), ("细胞分裂时 DNA 是怎么复制的", "scientist"),
             // home and engineering
             ("家里突然跳闸了，是不是插座短路", "research"), ("灯不亮了，电线怎么接", "research"),
             ("水管漏了，水压也小", "research"), ("马桶堵了怎么疏通", "research"),
             ("想自己做个书架，木板怎么选，用什么钉子", "research"), ("多肉黄叶烂根了，浇水是不是太多", "research"),
-            ("自建房的户型图和承重墙怎么设计", "architect"), ("齿轮传动的扭矩怎么算", "physicist"), ("stm32 的 pcb 电路图怎么画", "physicist"),
+            ("自建房的户型图和承重墙怎么设计", "architect"), ("齿轮传动的扭矩怎么算", "scientist"), ("stm32 的 pcb 电路图怎么画", "scientist"),
             // life
             ("番茄炒蛋怎么做才嫩", "chef"), ("红烧肉的做法，火候怎么掌握", "chef"),
             ("宝宝八个月了，辅食怎么加", "research"), ("孩子上幼儿园分离焦虑哭闹怎么办", "research"),
@@ -635,12 +709,29 @@ mod tests {
         let g: Golden = toml::from_str(include_str!("../../../fixtures/scoring/golden.toml")).unwrap();
         assert!(g.case.len() >= 12);
         for c in g.case {
+            // Priced as ingest does: a file once a turn, repeats less.
             let mut work = BTreeMap::new();
+            let mut steps = TurnSteps::default();
             for s in &c.steps {
                 let (occ, m) = match (&s.edit, &s.cmd, &s.tool) {
-                    (Some(path), _, _) => for_edit(path, s.lines, s.words),
-                    (_, Some(cmd), _) => for_command(cmd).unwrap_or_else(|| panic!("{}: {cmd} counts", c.name)),
-                    (_, _, Some(tool)) => for_tool(tool).unwrap_or_else(|| panic!("{}: {tool} counts", c.name)),
+                    (Some(path), _, _) => {
+                        let (occ, m) = for_edit(path, s.lines, s.words);
+                        let price = match occ {
+                            "writer" | "pm" => EditPrice::Prose(s.words),
+                            "swe" | "web" | "qa" => EditPrice::Code(s.lines),
+                            "ops" if path.ends_with(".sh") => EditPrice::Code(s.lines),
+                            _ => EditPrice::Flat(m),
+                        };
+                        (occ, steps.edit(path, price))
+                    }
+                    (_, Some(cmd), _) => {
+                        let (occ, m) = for_command(cmd).unwrap_or_else(|| panic!("{}: {cmd} counts", c.name));
+                        (occ, steps.run(occ, m))
+                    }
+                    (_, _, Some(tool)) => {
+                        let (occ, m) = for_tool(tool).unwrap_or_else(|| panic!("{}: {tool} counts", c.name));
+                        (occ, steps.run(occ, m))
+                    }
                     _ => panic!("{}: empty step", c.name),
                 };
                 *work.entry(occ.to_string()).or_insert(0.0) += m;
@@ -656,6 +747,21 @@ mod tests {
     }
 
     #[test]
+    fn a_turn_prices_a_file_once_and_repeats_less() {
+        let mut t = TurnSteps::default();
+        // Ten 10-line edits of one file cost what one 100-line edit does.
+        let ten: f64 = (0..10).map(|_| t.edit("a", EditPrice::Code(10))).sum();
+        assert!((ten - code_minutes(100)).abs() < 1e-9, "{ten}");
+        assert!((t.edit("b", EditPrice::Code(10)) - code_minutes(10)).abs() < 1e-9, "another file starts afresh");
+        assert_eq!((t.edit("c", EditPrice::Flat(5.0)), t.edit("c", EditPrice::Flat(5.0))), (5.0, 0.0), "a config once");
+        assert!((t.edit("d", EditPrice::Prose(500)) + t.edit("d", EditPrice::Prose(500)) - prose_minutes(1000)).abs() < 1e-9);
+        // The k-th run of one occupation is worth 1/√k.
+        let runs: Vec<f64> = (0..4).map(|_| t.run("video", 16.0)).collect();
+        assert_eq!(runs, vec![16.0, 16.0 / 2f64.sqrt(), 16.0 / 3f64.sqrt(), 8.0]);
+        assert_eq!(t.run("qa", 10.0), 10.0, "each occupation counts its own");
+    }
+
+    #[test]
     fn finishing_a_turn() {
         let w = finish(BTreeMap::new(), 0, None);
         assert_eq!(w.get("research"), Some(&5.0), "talk-only turn");
@@ -666,11 +772,12 @@ mod tests {
         let mut w: BTreeMap<String, f64> = [("research".into(), 10.0), ("data".into(), 4.0)].into();
         remap(&mut w, Some("doctor"));
         assert_eq!((w.get("doctor"), w.get("data")), (Some(&10.0), Some(&4.0)), "a doctor does not absorb data steps");
+        // The base and the subagents are shared out by each one's part.
         let w = finish([("video".into(), 30.0), ("swe".into(), 10.0)].into(), 2, None);
-        assert_eq!(w.get("video"), Some(&(30.0 + 5.0 + 24.0)));
-        assert_eq!(w.get("swe"), Some(&10.0));
+        assert_eq!(w.get("video"), Some(&(30.0 + 29.0 * 0.75)));
+        assert_eq!(w.get("swe"), Some(&(10.0 + 29.0 * 0.25)));
         let w = finish([("swe".into(), 600.0), ("qa".into(), 200.0)].into(), 0, None);
-        assert_eq!((w["swe"], w["qa"]), (605.0, 200.0), "no cap: a long turn counts in full");
+        assert_eq!((w["swe"], w["qa"]), (603.75, 201.25), "no cap: a long turn counts in full");
         let t = Table::builtin();
         let usd = t.usd(&[("swe".to_string(), 60.0), ("video".to_string(), 30.0)].into());
         assert!((usd - (65.38 + 36.26 / 2.0)).abs() < 1e-9);

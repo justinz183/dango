@@ -237,16 +237,18 @@ fn hhmm(tz: Tz, ms: i64) -> String {
 }
 
 /// The boss type and everything on the card and in the story.
-pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> {
-    let c = config();
-    let en = cfg.lang().en();
-    let all = turns(conn, 0, i64::MAX)?;
-    let today = tz.date(now);
-    let days = day_usd(conn, "usd")?;
-    let first = all.first().map(|t| tz.date(t.start)).unwrap_or(today);
-    let scan_days = (today - first).num_days() + 1;
-    let sessions: i64 = conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0)).unwrap_or(0);
-    let d = &c["dimensions"];
+/// The four letters of a run of turns (H/M B/F S/G L/O), each dimension's
+/// detail, and the crew they were measured on.
+struct Letters {
+    code: String,
+    dims: Vec<Value>,
+    crew: Vec<Value>,
+    wide: bool,
+    owl: bool,
+}
+
+fn letters(all: &[Turn], tz: Tz, en: bool) -> Letters {
+    let d = &config()["dimensions"];
     let n = all.len().max(1) as f64;
 
     // H / M: hands-off turns (≥ min_tool_calls tool calls, or sub-agents).
@@ -283,7 +285,20 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
     let r_letter = d["range"]["letters"][if g { 1 } else { 0 }].as_str().unwrap_or("S").to_string();
     let dr = json!({ "id": "range", "letters": d["range"]["letters"], "names": (0..2).map(|i| d["range"][if en { "name_en" } else { "name_zh" }][i].clone()).collect::<Vec<_>>(),
                      "letter": r_letter, "winner": if g { 1 } else { 0 }, "roles": wide, "min_roles": min_roles, "cells": 8 });
-    let code = format!("{h}{b}{r_letter}{o}");
+    Letters { code: format!("{h}{b}{r_letter}{o}"), dims: vec![dh, db, dr, dho], crew: crew_all, wide: g, owl: o == "O" }
+}
+
+pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> {
+    let c = config();
+    let en = cfg.lang().en();
+    let all = turns(conn, 0, i64::MAX)?;
+    let today = tz.date(now);
+    let days = day_usd(conn, "usd")?;
+    let first = all.first().map(|t| tz.date(t.start)).unwrap_or(today);
+    let scan_days = (today - first).num_days() + 1;
+    let sessions: i64 = conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0)).unwrap_or(0);
+    let n = all.len().max(1) as f64;
+    let Letters { code, dims, crew: crew_all, wide: g, owl } = letters(&all, tz, en);
     let ty = &c["types"][&code];
     let mcode = s(ty, "match").to_string();
     let mt = &c["types"][&mcode];
@@ -365,7 +380,7 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
         s(rel, "H<>M").to_string(),
         s(rel, "B<>F").to_string(),
         s(rel, if g { "G=G" } else { "S=S" }).to_string(),
-        s(rel, if o == "O" { "O=O" } else { "L=L" }).to_string(),
+        s(rel, if owl { "O=O" } else { "L=L" }).to_string(),
     ];
 
     Ok(json!({
@@ -377,7 +392,7 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
         "turns": all.len(),
         "code": code,
         "type": { "code": code, "name": txt(ty, "name", en), "roast": txt(ty, "roast", en), "portrait": txt(ty, "portrait", en) },
-        "dims": [dh, db, dr, dho],
+        "dims": dims,
         "usd": usd, "cost": cost, "leverage": if cost > 0.0 { Some(usd / cost) } else { None }, "margin": margin,
         "scale": { "id": s(&scales[si], "id"), "index": si, "name": txt(&scales[si], "name", en), "line": txt(&scales[si], "line", en),
                    "next": next.map(|x| txt(x, "name", en)), "next_need": next.and_then(|x| x["min_usd"].as_f64()).map(|m| m - usd) },
@@ -398,7 +413,6 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
             "advice": advice,
             "verdict": s(&st[if en { "verdict_en" } else { "verdict" }], verdict),
             "relations": relations,
-            "guess_lines": st[if en { "guess_lines_en" } else { "guess_lines" }],
             // Only the numbers: the config's notes beside them are for people.
             "timing": st["timing"].as_object().map(|m| m.iter().filter(|(_, v)| v.is_number()).map(|(k, v)| (k.clone(), v.clone())).collect::<serde_json::Map<_, _>>()),
         },
@@ -450,7 +464,7 @@ fn named_work(conn: &Connection, claude_dir: &Path, from: i64, to: i64, en: bool
     )?;
     let rows: Vec<(String, String, Option<i64>, f64, f64, i64, i64)> =
         st.query_map([from, to], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))?.flatten().collect();
-    let tool = |src: &str| if src == "codex" { "Codex" } else { "Claude Code" };
+    let tool = |src: &str| crate::widget::tool_label(src).0;
     let mut sessions = Vec::new();
     let mut projects: Vec<(String, f64, f64, usize)> = Vec::new();
     for (k, (sid, src, ended, usd, minutes, turns, last)) in rows.iter().enumerate() {
@@ -534,6 +548,13 @@ pub fn report(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, kind: 
         "sessions": sessions,
         "projects": projects,
     });
+    // The period's own boss type, from its turns alone (the total's is the
+    // boss card's, below).
+    if !ts.is_empty() {
+        let code = letters(&ts, tz, en).code;
+        let ty = &config()["types"][&code];
+        out["boss"] = json!({ "code": code, "name": txt(ty, "name", en), "roast": txt(ty, "roast", en) });
+    }
     match kind {
         "day" => {
             let mut hours = [0.0f64; 24];

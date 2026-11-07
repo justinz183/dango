@@ -364,9 +364,13 @@ fn codex_history_backfills_and_splits_by_tool() {
     for job in ["swe", "writer", "data"] {
         assert!(work.contains_key(job), "{job} missing from {work:?}");
     }
-    // ffmpeg 15 + whisper 20 + turn base 5 + one sub-agent 12, plus the web
-    // search (5): in a turn about a video, research is the editor's work.
-    assert!(!work.contains_key("research") && (work["video"] - 57.0).abs() < 1e-9, "{work:?}");
+    // ffmpeg 15 + whisper 20/√2 (the turn's second video step) + the web
+    // search 5 (in a turn about a video, research is the editor's work); the
+    // turn base 5 and one sub-agent 12 are shared out by each job's part of
+    // the steps (a 2-line edit, 3 minutes of prose, a 4-minute script).
+    let video = 15.0 + 20.0 / 2f64.sqrt() + 5.0;
+    let all = video + dango_core::occupation::code_minutes(2) + 3.0 + 4.0;
+    assert!(!work.contains_key("research") && (work["video"] - video * (1.0 + 17.0 / all)).abs() < 1e-9, "{work:?}");
     let failed: String = q("SELECT test_passed || '' FROM turns WHERE id = 't2'");
     assert_eq!(failed, "0", "cargo test exited 101");
 
@@ -581,6 +585,40 @@ fn codex_rollouts_are_followed_without_hooks() {
     assert!((p.ctr("usd:codex", "all") - usd).abs() < 1e-9, "counted once");
 }
 
+/// A Codex conversation picked up again later keeps writing to its rollout
+/// in the folder of the day it started; the daemon follows that too, not
+/// only the last few days' folders (2026-11-07: resumed sessions went
+/// uncounted until history was imported again).
+#[test]
+fn a_resumed_codex_session_in_an_old_folder_is_followed() {
+    let paths = home("codexresumed");
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/codex/sessions/2026/10/27/rollout-2026-10-27T11-00-00-th-main.jsonl");
+    let lines: Vec<String> = fs::read_to_string(fixture).unwrap().lines().map(str::to_string).collect();
+    let codex = paths.home.join("codex");
+    let old = codex.join("sessions/2026/01/05");
+    fs::create_dir_all(&old).unwrap();
+    let file = old.join("rollout-th-main.jsonl");
+    let cut = lines.len() / 2;
+    fs::write(&file, lines[..cut].join("\n") + "\n").unwrap();
+    let now = DateTime::parse_from_rfc3339("2026-10-27T03:30:00Z").unwrap().timestamp_millis();
+    let mut tail = daemon::codex_tail::CodexTail::new(&codex);
+    let first = tail.poll(&paths, now);
+    assert!(!first.is_empty(), "written just now, in January's folder");
+    // The rest of the conversation, appended later.
+    let mut f = fs::OpenOptions::new().append(true).open(&file).unwrap();
+    std::io::Write::write_all(&mut f, (lines[cut..].join("\n") + "\n").as_bytes()).unwrap();
+    let second = tail.poll(&paths, now);
+    let mut followed: Vec<String> = first.iter().chain(&second).map(|e| e.id.clone()).collect();
+    let mut whole: Vec<String> = daemon::backfill::codex_file_events(&file, i64::MAX, &paths)
+        .into_iter()
+        .filter(|e| e.kind != dango_core::event::Kind::SessionEnd)
+        .map(|e| e.id)
+        .collect();
+    followed.sort();
+    whole.sort();
+    assert_eq!(followed, whole);
+}
+
 /// Claude Code with no hooks: the daemon follows a transcript and its
 /// subagent's while Claude Code writes them (a half-written line waits),
 /// with the same ids as backfill, so running both counts every turn once.
@@ -772,13 +810,13 @@ fn the_first_start_imports_history_once() {
     let paths = home("firststart");
     let fx = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
     let mut p = processor(&paths);
-    daemon::server::import_history(&mut p, &paths, &fx.join("claude"), &fx.join("codex")).unwrap();
+    daemon::server::import_history(&mut p, &paths, &fx.join("claude"), &fx.join("codex"), &fx.join("dsh")).unwrap();
     assert!(db::get_meta(&p.conn, "history_imported").unwrap().is_some());
     assert_eq!(p.mode, Mode::Live, "back to live after the import");
     let (cc, cx) = (p.ctr("usd:claude_code", "all"), p.ctr("usd:codex", "all"));
     assert!(cc > 0.0 && cx > 0.0, "{cc} {cx}");
     let events: i64 = p.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0)).unwrap();
-    daemon::server::import_history(&mut p, &paths, &fx.join("claude"), &fx.join("codex")).unwrap();
+    daemon::server::import_history(&mut p, &paths, &fx.join("claude"), &fx.join("codex"), &fx.join("dsh")).unwrap();
     let again: i64 = p.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0)).unwrap();
     assert_eq!(events, again);
 }
@@ -809,7 +847,7 @@ fn model_usage_prices_turns_once() {
     let fx = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
     let (claude, codex) = (fx.join("claude"), fx.join("codex"));
     daemon::backfill::run(&mut p, &paths, &claude, i64::MAX, Some((&codex, i64::MAX))).unwrap();
-    let priced = daemon::usage::fill(&mut p, &claude, &codex, i64::MAX, usize::MAX).unwrap();
+    let priced = daemon::usage::fill(&mut p, &claude, &codex, &claude.join("no-dsh"), &claude.join("no-wb"), i64::MAX, usize::MAX).unwrap();
     assert!(priced >= 4, "{priced}");
     let cost = |tid: &str| -> f64 { p.conn.query_row("SELECT cost_usd FROM turns WHERE id = ?1", [tid], |r| r.get(0)).unwrap() };
     // Opus 5.5: 10 in·$4 + 1000 5m·$5 + 2000 1h·$8 + 100k read·$0.20 + 500 out·$20, counted once
@@ -829,7 +867,7 @@ fn model_usage_prices_turns_once() {
     let total = p.ctr("cost", "all");
     assert!((total - c_pd1 - c_t1).abs() < 1e-9);
     assert!((p.ctr("cost:codex", "all") - c_t1).abs() < 1e-9);
-    assert_eq!(daemon::usage::fill(&mut p, &claude, &codex, i64::MAX, usize::MAX).unwrap(), 0, "each turn once");
+    assert_eq!(daemon::usage::fill(&mut p, &claude, &codex, &claude.join("no-dsh"), &claude.join("no-wb"), i64::MAX, usize::MAX).unwrap(), 0, "each turn once");
 
     let day = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, None).unwrap();
     let lev = day["usd"].as_f64().unwrap() / total;
@@ -931,4 +969,175 @@ fn merged_occupations_count_as_their_representative() {
     let jobs = daemon::widget::jobs(&p.conn, 0, i64::MAX, None).unwrap();
     let ids: Vec<&str> = jobs.iter().map(|j| j["id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["doctor", "research"]);
+}
+
+/// One DeepSeek Harness session log, as the harness writes it: one zstd
+/// frame per line, appended. `upto` lines; the next one half written when
+/// `torn`.
+fn dsh_log(path: &std::path::Path, lines: &[String], upto: usize, torn: bool) {
+    use ruzstd::encoding::{compress_to_vec, CompressionLevel};
+    let mut bytes = Vec::new();
+    for l in &lines[..upto] {
+        bytes.extend(compress_to_vec(format!("{l}\n").as_bytes(), CompressionLevel::Fastest));
+    }
+    if torn && upto < lines.len() {
+        let next = compress_to_vec(format!("{}\n", lines[upto]).as_bytes(), CompressionLevel::Fastest);
+        bytes.extend(&next[..next.len() / 2]);
+    }
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, bytes).unwrap();
+}
+
+fn dsh_lines(t0: i64) -> Vec<String> {
+    let ev = |seq: i64, dt: i64, ty: &str, data: &str| format!(r#"{{"seq":{seq},"time":{},"type":"{ty}","data":{data}}}"#, t0 + dt);
+    let call = |seq: i64, dt: i64, id: &str, name: &str, args: &str| {
+        ev(seq, dt, "tool/call", &format!(r#"{{"callId":"{id}","name":"{name}","arguments":{},"step":1,"turn":1}}"#, serde_json::to_string(args).unwrap()))
+    };
+    let result = |seq: i64, dt: i64, id: &str| ev(seq, dt, "tool/result", &format!(r#"{{"message":{{"toolCallId":"{id}","isError":false,"content":[{{"type":"text","text":"ok"}}]}},"turn":1}}"#));
+    vec![
+        format!(r#"{{"type":"session","id":"session-11111111-2222-3333-4444-555555555555","cwd":"/tmp/demo","createdAt":{t0},"delegationDepth":0,"version":4}}"#),
+        ev(0, 0, "turn/start", r#"{"turn":1}"#),
+        ev(1, 10, "user/message", r#"{"source":{"kind":"runtime-context"},"content":[{"type":"text","text":"cwd"}]}"#),
+        ev(2, 20, "user/message", r#"{"source":{"kind":"user"},"content":[{"type":"text","text":"Add a remember-me checkbox to the login page"}]}"#),
+        ev(3, 60_000, "assistant/message", r#"{"turn":1,"usage":{"inputTokens":12000,"cacheReadTokens":30000,"cacheWriteTokens":0,"outputTokens":2000},"message":{"source":{"model":"deepseek-v4-pro"}}}"#),
+        call(4, 60_001, "c1", "edit", r#"{"file_path":"/tmp/demo/src/login.ts","old_string":"a\nb","new_string":"a\nb\nc\nd\ne\nf"}"#),
+        result(5, 60_100, "c1"),
+        call(6, 61_000, "c2", "subagent", r#"{"description":"check","prompt":"look"}"#),
+        result(7, 200_000, "c2"),
+        call(8, 201_000, "c3", "bash", r#"{"command":"npm test","description":"tests"}"#),
+        result(9, 230_000, "c3"),
+        call(10, 231_000, "c4", "job_list", "{}"),
+        result(11, 231_100, "c4"),
+        ev(12, 240_000, "turn/end", r#"{"turn":1,"reason":{"kind":"completed"}}"#),
+    ]
+}
+
+/// DeepSeek Harness without hooks: its session logs are imported once with
+/// their token usage priced, and followed frame by frame while written,
+/// with the same ids, so nothing counts twice.
+#[test]
+fn deepseek_harness_logs_are_read_and_followed() {
+    let paths = home("dsh");
+    let dir = paths.home.join("dsh");
+    let log = dir.join("sessions/--tmp-demo--/session-11111111-2222-3333-4444-555555555555/session.v4.jsonl.zstd");
+    let t0 = 1_790_000_000_000;
+    let lines = dsh_lines(t0);
+    // Followed while written: a torn frame waits until it is whole.
+    dsh_log(&log, &lines, 6, true);
+    let mut tail = daemon::dsh::DshTail::new(&dir);
+    let kinds = |evs: &[dango_core::event::Event]| evs.iter().map(|e| e.kind.as_str()).collect::<Vec<_>>();
+    let first = tail.poll(&paths, t0 + 70_000);
+    assert_eq!(kinds(&first), ["session_start", "prompt"], "the edit's result is in the torn frame");
+    dsh_log(&log, &lines, lines.len(), false);
+    let rest = tail.poll(&paths, t0 + 250_000);
+    assert_eq!(kinds(&rest), ["tool", "subagent_start", "subagent_stop", "tool", "tool", "turn_end"], "job_list is no one's work");
+    assert!(rest.iter().all(|e| e.payload.origin == Some(dango_core::event::Source::DeepSeek)));
+
+    // Imported whole: the same events, then priced from the same log.
+    let mut p = processor(&paths);
+    let none = paths.home.join("none");
+    let r = daemon::dsh::import(&mut p, &paths, &dir, i64::MAX).unwrap();
+    assert_eq!((r.files, r.new_events), (1, first.len() + rest.len() + 1), "and the session's end, quiet since");
+    assert_eq!(daemon::usage::fill(&mut p, &none, &none, &dir, &none, i64::MAX, usize::MAX).unwrap(), 1);
+    let (src, usd, cost): (String, f64, f64) = p
+        .conn
+        .query_row("SELECT s.source, t.usd, t.cost_usd FROM turns t JOIN sessions s ON s.id = t.session_id", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap();
+    assert_eq!(src, "deepseek");
+    assert!(usd > 0.0 && (p.ctr("usd:deepseek", "all") - usd).abs() < 1e-9, "{usd}");
+    // deepseek-v4-pro: 12k missed × $1.32 + 30k hit × $0.044 + 2k out × $3.96 per million.
+    assert!((cost - (12_000.0 * 1.32 + 30_000.0 * 0.044 + 2_000.0 * 3.96) / 1e6).abs() < 1e-9, "{cost}");
+    // Again, and followed again from the top: nothing new.
+    assert_eq!(daemon::dsh::import(&mut p, &paths, &dir, i64::MAX).unwrap().new_events, 0);
+    let again = daemon::dsh::DshTail::new(&dir).poll(&paths, i64::MAX);
+    p.begin().unwrap();
+    assert!(again.iter().all(|e| !p.handle(e).unwrap()));
+    p.commit().unwrap();
+    assert_eq!(daemon::dsh::meta(&dir, "session-11111111-2222-3333-4444-555555555555").project.as_deref(), Some("demo"));
+}
+
+/// A synthetic WorkBuddy transcript (OpenAI-Agents-style items, Claude
+/// Code's tool names): a search and a new file in the first request, a
+/// script run in the second; usage on each model step's first item.
+fn wb_lines(t0: i64) -> Vec<String> {
+    let sid = "7f000000-0000-4000-8000-000000000001";
+    let cwd = "/tmp/demo";
+    let usage = |hit: u64, miss: u64, out: u64| serde_json::json!({ "rawUsage": { "prompt_tokens": hit + miss, "prompt_cache_hit_tokens": hit, "prompt_cache_miss_tokens": miss, "completion_tokens": out, "credit": 1.5 }, "model": "default-model", "requestModelName": "Auto" });
+    let item = |v: serde_json::Value| {
+        let mut v = v;
+        v["sessionId"] = serde_json::json!(sid);
+        v["cwd"] = serde_json::json!(cwd);
+        v.to_string()
+    };
+    vec![
+        serde_json::json!({ "type": "session-meta", "id": "m1", "sessionId": sid, "timestamp": t0 }).to_string(),
+        item(serde_json::json!({ "type": "message", "role": "user", "id": "u1", "timestamp": t0, "content": [{ "type": "input_text", "text": "帮我查一下这个库怎么用，然后写个例子" }], "providerData": { "startsNewUserRequest": true } })),
+        item(serde_json::json!({ "type": "ai-title", "id": "t1", "timestamp": t0 + 1_000, "aiTitle": "库的用法" })),
+        item(serde_json::json!({ "type": "function_call", "id": "c1", "timestamp": t0 + 5_000, "name": "WebSearch", "callId": "k1", "arguments": "{\"query\":\"demo library usage\"}", "providerData": usage(1_000, 9_000, 50) })),
+        item(serde_json::json!({ "type": "function_call_result", "id": "r1", "timestamp": t0 + 9_000, "name": "WebSearch", "callId": "k1", "status": "completed", "output": { "type": "text", "text": "…" } })),
+        item(serde_json::json!({ "type": "function_call", "id": "c2", "timestamp": t0 + 20_000, "name": "Write", "callId": "k2", "arguments": "{\"file_path\":\"/tmp/demo/example.py\",\"content\":\"a = 1\\nb = 2\\nprint(a + b)\\n\"}", "providerData": usage(9_000, 1_000, 200) })),
+        item(serde_json::json!({ "type": "function_call_result", "id": "r2", "timestamp": t0 + 21_000, "name": "Write", "callId": "k2", "status": "completed", "output": { "type": "text", "text": "ok" } })),
+        item(serde_json::json!({ "type": "function_call", "id": "c3", "timestamp": t0 + 22_000, "name": "set_title", "callId": "k3", "arguments": "{}" })),
+        item(serde_json::json!({ "type": "function_call_result", "id": "r3", "timestamp": t0 + 22_500, "name": "set_title", "callId": "k3", "status": "completed" })),
+        item(serde_json::json!({ "type": "message", "role": "assistant", "id": "a1", "timestamp": t0 + 30_000, "status": "completed", "content": [{ "type": "output_text", "text": "…" }], "providerData": usage(10_000, 500, 800) })),
+        item(serde_json::json!({ "type": "message", "role": "user", "id": "u2", "timestamp": t0 + 120_000, "content": [{ "type": "input_text", "text": "跑一下" }], "providerData": { "startsNewUserRequest": true } })),
+        item(serde_json::json!({ "type": "function_call", "id": "c4", "timestamp": t0 + 125_000, "name": "Bash", "callId": "k4", "arguments": "{\"command\":\"python3 example.py\"}", "providerData": usage(11_000, 300, 40) })),
+        item(serde_json::json!({ "type": "function_call_result", "id": "r4", "timestamp": t0 + 127_000, "name": "Bash", "callId": "k4", "status": "completed", "output": { "type": "text", "text": "3" } })),
+        item(serde_json::json!({ "type": "message", "role": "assistant", "id": "a2", "timestamp": t0 + 130_000, "status": "completed", "content": [{ "type": "output_text", "text": "…" }], "providerData": usage(11_000, 200, 100) })),
+    ]
+}
+
+/// WorkBuddy without hooks: its transcripts are imported and followed with
+/// the same ids, so nothing counts twice; a turn ends with the next request,
+/// or 20 s after an answer; the tokens count, unpriced (no published price
+/// for its "Auto" model); its title is found for the report window.
+#[test]
+fn workbuddy_transcripts_are_read_and_followed() {
+    let paths = home("workbuddy");
+    let root = paths.home.join("home");
+    let dir = root.join(".workbuddy-ai/projects/-tmp-demo");
+    fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("7f000000-0000-4000-8000-000000000001.jsonl");
+    let t0 = 1_790_000_000_000;
+    let lines = wb_lines(t0);
+    // Followed while written: the first request, then the second.
+    fs::write(&file, lines[..10].join("\n") + "\n").unwrap();
+    let mut tail = daemon::workbuddy::WbTail::new(&root);
+    let kinds = |evs: &[dango_core::event::Event]| evs.iter().map(|e| e.kind.as_str()).collect::<Vec<_>>();
+    let first = tail.poll(&paths, t0 + 35_000);
+    assert_eq!(kinds(&first), ["session_start", "prompt", "tool", "tool"], "set_title is no one's work; the answer is 5 s old");
+    let settled = tail.poll(&paths, t0 + 60_000);
+    assert_eq!(kinds(&settled), ["turn_end"], "20 s after the answer");
+    let mut f = fs::OpenOptions::new().append(true).open(&file).unwrap();
+    std::io::Write::write_all(&mut f, (lines[10..].join("\n") + "\n").as_bytes()).unwrap();
+    let rest = tail.poll(&paths, t0 + 200_000);
+    assert_eq!(kinds(&rest), ["prompt", "tool", "turn_end"]);
+    assert!(first.iter().chain(&settled).chain(&rest).all(|e| e.payload.origin == Some(dango_core::event::Source::WorkBuddy)));
+
+    // Imported whole: the same events, then the tokens from the same file.
+    let mut p = processor(&paths);
+    let none = paths.home.join("none");
+    let r = daemon::workbuddy::import(&mut p, &paths, &root, i64::MAX).unwrap();
+    assert_eq!((r.files, r.new_events), (1, first.len() + settled.len() + rest.len() + 1), "and the session's end, quiet since");
+    assert_eq!(daemon::usage::fill(&mut p, &none, &none, &none, &root, i64::MAX, usize::MAX).unwrap(), 2);
+    let rows: Vec<(String, f64, f64, String)> = p
+        .conn
+        .prepare("SELECT s.source, t.usd, t.cost_usd, t.tokens FROM turns t JOIN sessions s ON s.id = t.session_id ORDER BY t.started_at")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.0 == "workbuddy" && r.1 > 0.0 && r.2 == 0.0), "{rows:?}");
+    assert!(rows[0].3.contains("workbuddy/auto"), "{}", rows[0].3);
+    assert!((p.ctr("usd:workbuddy", "all") - rows.iter().map(|r| r.1).sum::<f64>()).abs() < 1e-9);
+    // Again, and followed again from the top: nothing new.
+    assert_eq!(daemon::workbuddy::import(&mut p, &paths, &root, i64::MAX).unwrap().new_events, 0);
+    let again = daemon::workbuddy::WbTail::new(&root).poll(&paths, i64::MAX);
+    p.begin().unwrap();
+    assert!(again.iter().all(|e| !p.handle(e).unwrap()));
+    p.commit().unwrap();
+    let m = daemon::workbuddy::meta(&root, "7f000000-0000-4000-8000-000000000001");
+    assert_eq!((m.project.as_deref(), m.title.as_deref()), (Some("demo"), Some("库的用法")));
 }

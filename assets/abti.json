@@ -1,5 +1,5 @@
 {
-  "$comment": "DONGO ABTI 老板人格：所有门槛和文案。门槛是 Dango 自定的固定标准，不和别人比；上线后按真实结果调这个文件，不改代码。10-31 产品已确认全部取值。",
+  "$comment": "DANGO ABTI 老板人格：所有门槛和文案。门槛是 Dango 自定的固定标准，不和别人比；上线后按真实结果调这个文件，不改代码。10-31 产品已确认全部取值。",
   "version": "2026-10-31",
   "dimensions": {
     "order": [
@@ -424,10 +424,7 @@
       "covers_en": "Look things up, read docs, learn",
       "occupations": [
         "research",
-        "mathematician",
-        "physicist",
-        "chemist",
-        "biologist"
+        "scientist"
       ]
     },
     {
@@ -601,7 +598,7 @@
   "hidden_rule": "隐藏款照样按各自职业的 BLS 时薪算钱；某一个占比 ≥ 10% 时，才在团子构成里单独出现，算一个工种；不到 10% 时并进「其他」。构成条上隐藏款用灰色 #B5B5BA 加一个小星标，不占新颜色。",
   "money_rule": "团子替你打的工 = Σ 各职业计时分钟 / 60 × 该职业 BLS 中位时薪（occupations.toml 里已有）。角色金额 = 该角色下所有职业金额之和。卡上的「≈ N 小时」= 该角色下各职业计时分钟之和 ÷ 60（等于金额 ÷ 时薪），≥ 10 小时取整，< 10 小时保留一位小数。",
   "checkup": {
-    "$comment": "总卡和故事第 6 屏「体检单」的分档（10-31 确认）。每档 [门槛, 中文, English, 文字色(可选)]，取最后一个门槛 ≤ 数值的档。",
+    "$comment": "总卡和故事第 5 屏「体检单」的分档（10-31 确认）。每档 [门槛, 中文, English, 文字色(可选)]，取最后一个门槛 ≤ 数值的档。",
     "tokens_total": {
       "label_zh": "累计 token",
       "label_en": "Lifetime tokens",
@@ -753,22 +750,9 @@
     }
   },
   "story": {
-    "$comment": "故事模式 7 屏（第 8 屏是总卡）用到的规则和文案，10-31。",
-    "guess_lines": {
-      "rule": "第 3 屏「对答案」：按 H/M、B/F、S/G、L/O 的顺序找第一个猜错的维度，出对应那句；四个全对出 all_right。用户在第 1 屏跳过了就不显示这一块。",
-      "M>H": "你以为你在盯，其实早撒手了。",
-      "H>M": "你以为你放手了，其实每一步都在看。",
-      "F>B": "你以为你在修老坑，其实一直在开新坑。",
-      "B>F": "你以为你在开新坑，其实大半时间在修老坑。",
-      "S>G": "你以为你只干一类活，团子们可不这么觉得。",
-      "G>S": "你以为你什么都干，其实主要就干一件事。",
-      "L>O": "你以为你是白天干活的人，团子们见过你的凌晨。",
-      "O>L": "你以为你是夜猫，其实活大多是白天干完的。",
-      "all_right": "四个全猜中，你很了解自己的团子。",
-      "key": "「猜的>测出来的」，比如 M>H = 猜 M、测出来是 H"
-    },
+    "$comment": "故事模式 6 屏（第 7 屏是总卡）用到的规则和文案，10-31；11-07 去掉了第 1 屏「先猜」和对答案。",
     "advice": {
-      "rule": "第 6 屏医嘱：按下面的顺序检查，命中的取前 3 条；一条都没命中就用 fallback。{} 里换成真实数字。",
+      "rule": "第 5 屏医嘱：按下面的顺序检查，命中的取前 3 条；一条都没命中就用 fallback。{} 里换成真实数字。",
       "items": [
         {
           "when": "night_shift > 0.15",
@@ -805,13 +789,13 @@
       "fallback_en": "Everything looks normal. Keep the dangos busy."
     },
     "verdict": {
-      "rule": "第 6 屏「总评」：有夜班偏高 → night；有测试偏低 → tests；都没有 → fine。两个都有时用 night。",
+      "rule": "第 5 屏「总评」：有夜班偏高 → night；有测试偏低 → tests；都没有 → fine。两个都有时用 night。",
       "night": "底子很好，作息待改善。建议继续让团子多干点。",
       "tests": "干得多，返工也多。建议先让团子把测试跑一遍。",
       "fine": "各项指标都不错，继续让团子多干点。"
     },
     "relations": {
-      "rule": "第 7 屏：绝配的前两个字母一定相反，后两个一定相同，所以每对都是这四行。",
+      "rule": "第 6 屏：绝配的前两个字母一定相反，后两个一定相同，所以每对都是这四行。",
       "H<>M": "一个撒手开工，一个盯着验收",
       "B<>F": "一个开新坑，一个收尾",
       "S=S": "都只盯一类活",
@@ -820,7 +804,7 @@
       "O=O": "都是天黑才进状态"
     },
     "moments": {
-      "rule": "第 5 屏名场面，只写时间和数字，不写项目名。",
+      "rule": "第 4 屏名场面，只写时间和数字，不写项目名。",
       "latest_night": "最晚结束的回合的本地时间（只看 0–6 点，没有就用最晚的一次）和日期",
       "best_day": "金额最高的一天：日期、金额、≈ 小时（这一天各职业计时分钟之和 ÷ 60）",
       "longest_streak": "最长连续开工天数和起止日期",
@@ -831,19 +815,7 @@
       "letter_stagger_ms": 350,
       "letter_flip_ms": 500,
       "scene_at_ms": 1600,
-      "answer_at_ms": 2100,
       "reduced_motion": "系统开了「减少动态效果」时直接显示最终状态"
-    },
-    "guess_lines_en": {
-      "M>H": "You thought you were watching. You let go long ago.",
-      "H>M": "You thought you'd let go. You're watching every step.",
-      "F>B": "You thought you were patching old holes. You keep digging new ones.",
-      "B>F": "You thought you were breaking new ground. Mostly you're fixing old ground.",
-      "S>G": "You thought you did one kind of work. Your dangos disagree.",
-      "G>S": "You thought you did a bit of everything. Mostly it's one thing.",
-      "L>O": "You thought you were a day person. Your dangos have seen your 3 AMs.",
-      "O>L": "You thought you were a night owl. Most of it gets done by daylight.",
-      "all_right": "Four for four. You know your dangos well."
     },
     "verdict_en": {
       "night": "Solid foundation, sleep needs work. Keep the dangos busy.",

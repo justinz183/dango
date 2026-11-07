@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use chrono::{Days, Local};
 use dango_core::event::Event;
@@ -21,15 +21,23 @@ use crate::paths::Paths;
 /// overnight, or picked up again the next day.
 const RECENT: Duration = Duration::from_secs(36 * 3600);
 
+/// How often every day's folder is looked through, not only the last few:
+/// a conversation picked up again keeps writing to its rollout in the
+/// folder of the day it started (2026-11-07: resumed sessions went
+/// uncounted until history was imported again).
+const WALK_EVERY: Duration = Duration::from_secs(30);
+
 pub struct CodexTail {
     sessions: PathBuf,
     /// Each followed file: how far it has been read, and its reader.
     files: HashMap<PathBuf, (u64, Rollout)>,
+    /// When every day's folder was last looked through.
+    walked: Option<Instant>,
 }
 
 impl CodexTail {
     pub fn new(codex_dir: &Path) -> CodexTail {
-        CodexTail { sessions: codex_dir.join("sessions"), files: HashMap::new() }
+        CodexTail { sessions: codex_dir.join("sessions"), files: HashMap::new(), walked: None }
     }
 
     /// The events in every line Codex has finished writing since the last
@@ -38,11 +46,18 @@ impl CodexTail {
     pub fn poll(&mut self, paths: &Paths, now_ms: i64) -> Vec<Event> {
         let horizon = SystemTime::now() - RECENT;
         let recent = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).is_ok_and(|t| t >= horizon);
-        // Rollouts are filed by the day they started (local time).
+        // Rollouts are filed by the day they started (local time): the last
+        // few days' folders every poll, every day's now and then.
         let today = Local::now().date_naive();
-        for back in 0..3 {
-            let Some(day) = today.checked_sub_days(Days::new(back)) else { continue };
-            let Ok(entries) = fs::read_dir(self.sessions.join(day.format("%Y/%m/%d").to_string())) else { continue };
+        let mut days: Vec<PathBuf> =
+            (0..3).filter_map(|back| today.checked_sub_days(Days::new(back))).map(|d| self.sessions.join(d.format("%Y/%m/%d").to_string())).collect();
+        if self.walked.is_none_or(|t| t.elapsed() >= WALK_EVERY) {
+            self.walked = Some(Instant::now());
+            let subdirs = |d: &Path| -> Vec<PathBuf> { fs::read_dir(d).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect()).unwrap_or_default() };
+            days.extend(subdirs(&self.sessions).iter().flat_map(|y| subdirs(y)).flat_map(|m| subdirs(&m)));
+        }
+        for dir in days {
+            let Ok(entries) = fs::read_dir(dir) else { continue };
             for p in entries.flatten().map(|e| e.path()) {
                 if p.extension().and_then(|e| e.to_str()) == Some("jsonl") && !self.files.contains_key(&p) && recent(&p) {
                     let r = Rollout::new(&p);

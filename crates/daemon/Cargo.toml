@@ -13,3 +13,5 @@ chrono.workspace = true
 rusqlite.workspace = true
 sha2.workspace = true
 libc = "0.2"
+# DeepSeek Harness writes its session logs as zstd frames (dsh.rs); pure Rust.
+ruzstd = "0.9.1"

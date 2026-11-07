@@ -11,6 +11,12 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub enum Source {
     ClaudeCode,
     Codex,
+    /// DeepSeek Harness (dsh.rs).
+    #[serde(rename = "deepseek")]
+    DeepSeek,
+    /// WorkBuddy (workbuddy.rs).
+    #[serde(rename = "workbuddy")]
+    WorkBuddy,
     Git,
     Backfill,
 }
@@ -20,6 +26,8 @@ impl Source {
         match self {
             Source::ClaudeCode => "claude_code",
             Source::Codex => "codex",
+            Source::DeepSeek => "deepseek",
+            Source::WorkBuddy => "workbuddy",
             Source::Git => "git",
             Source::Backfill => "backfill",
         }
