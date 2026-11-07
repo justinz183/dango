@@ -490,9 +490,22 @@ pub fn data(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> 
         "turns": all["turns"],
         "activity": { "working": working, "subagents": subagents, "last_event": last_event, "job": job_json },
         "office": office(conn, tz, now)?,
+        "boss": boss(conn, tz, cfg, now)?,
     });
     localize(&mut out, lang);
     Ok(out)
+}
+
+/// Who the user is as a boss over all their history, for the panel's card
+/// (user, 2026-11-07: 「加到主页面去，能显眼一些」); null before any turn.
+fn boss(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> {
+    let turns: i64 = conn.query_row("SELECT COUNT(*) FROM turns WHERE ended_at IS NOT NULL", [], |r| r.get(0))?;
+    if turns == 0 {
+        return Ok(Value::Null);
+    }
+    let r = crate::abti::result(conn, tz, cfg, now)?;
+    Ok(json!({ "code": r["code"], "name": r["type"]["name"], "roast": r["type"]["roast"], "scale": r["scale"]["name"],
+               "margin": r["margin"], "margin_tier": r["margin_tier"]["name"] }))
 }
 
 /// Writes widget.json through a temp file and a rename so the widget never

@@ -145,7 +145,11 @@ struct Model {
     var tools7: [ToolShare] = []
     var tools1: [ToolShare] = []
     var turns: [TurnRow] = []
+    /// Who the user is as a boss (widget.json `boss`).
+    var boss: Boss?
 }
+
+struct Boss { var code = "", name = "", roast = "", scale = "", margin = 0.0, marginTier = "" }
 
 /// Reads the dashboard numbers (tiles, 30 days, jobs, turns) from widget.json.
 func applyBoard(_ m: inout Model, _ j: [String: Any]) {
@@ -233,6 +237,10 @@ func loadModel() -> Model? {
     m.tools = toolShares(list("tools"))
     m.tools7 = toolShares(list("tools_7d"))
     m.tools1 = toolShares(list("tools_1d"))
+    if let b = j["boss"] as? [String: Any], let code = b["code"] as? String {
+        m.boss = Boss(code: code, name: b["name"] as? String ?? "", roast: b["roast"] as? String ?? "", scale: b["scale"] as? String ?? "",
+                      margin: b["margin"] as? Double ?? 0, marginTier: b["margin_tier"] as? String ?? "")
+    }
     return m
 }
 

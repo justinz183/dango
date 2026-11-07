@@ -695,7 +695,30 @@ extension DashboardView {
                 put(V3.mono(lev, 10, .regular, V3.secondary), x0 + 16, strip.minY + 46)
             }
         }
-        y += strip.height + 14
+        y += strip.height + 12
+
+        // 3b. Who you are as a boss, the way the total report shows it,
+        //     right under the numbers; it opens the boss card (2026-11-07,
+        //     user: 「加到主页面去，能显眼一些」).
+        if let b = m.boss {
+            let box = NSRect(x: padX, y: y, width: inner, height: 116)
+            if draw {
+                AB.round(box, 20, AB.tile)
+                AB.fit(abtiImage("scene/T-" + b.code), NSRect(x: box.minX + 10, y: box.minY + 12, width: 116, height: 92))
+                let tx = box.minX + 136, right = box.maxX - 14
+                put(AB.join([AB.mono(b.code + " ", 16, .semibold), AB.sans(b.name, 16, .semibold)]), tx, box.minY + 14)
+                put(V3.mono(L("老板人格 ›", "Boss type ›"), 10, .regular, V3.secondary), right, box.minY + 10, align: 2)
+                let p1 = AB.pill(lang == "en" ? b.scale + " tier" : b.scale + "级", tx, box.minY + 42, dark: true, size: 11)
+                // The margin's tier name too when it fits on the line.
+                let margin = L("压榨率 ", "Margin ") + String(format: "%.1f%%", b.margin * 100)
+                let full = margin + (b.marginTier.isEmpty ? "" : " · " + b.marginTier)
+                let fits = p1.maxX + 6 + AB.sans(full, 11, .medium).size().width + 24 <= right
+                AB.pill(fits ? full : margin, p1.maxX + 6, box.minY + 42, dark: false, size: 11)
+                AB.para(AB.sans(b.roast, 12, .regular, AB.gray), tx, box.minY + 70, right - tx, lineHeight: 16)
+            }
+            v3Hits.append(("boss", box))
+            y += box.height + 14
+        }
 
         // 4. 1D · 7D · 30D: the window of what follows.
         let labels = [(1, L("1 天", "1D")), (7, L("7 天", "7D")), (30, L("30 天", "30D"))]
@@ -947,6 +970,8 @@ extension DashboardView {
             if let e = NSApp.currentEvent { (NSApp.delegate as? App)?.popMenu(e, in: self) }
         case "reports":
             ReportWindow.show()
+        case "boss":
+            StoryWindow.show()
         case "export":
             (NSApp.delegate as? App)?.makeCard(kind: "day", shareFrom: exportButton.map { (self, $0) })
         default:
