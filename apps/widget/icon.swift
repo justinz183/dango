@@ -1,58 +1,54 @@
-// Renders the app icon (1024×1024 PNG) for bundle.sh: three 团子 on a
-// bamboo skewer, sakura, plain and matcha, on a dark rounded square.
-// Usage: icon <out.png>
+// Renders the app icon (1024×1024 PNG) for bundle.sh: the 团子 of the word
+// mark (assets/theme-b/logo-dango.png: the design pack's body with its idle
+// eyes) on a white rounded square, like the corner card, with the word
+// mark's blue mark above it, looking up at it.
+// Usage: icon <out.png> <logo-dango.png>
 
 import AppKit
 
-let size = 1024
-let img = NSImage(size: NSSize(width: size, height: size))
-img.lockFocus()
-let bg = NSRect(x: 102, y: 102, width: 820, height: 820)
-NSGradient(starting: NSColor(calibratedRed: 0.16, green: 0.15, blue: 0.19, alpha: 1),
-           ending: NSColor(calibratedRed: 0.10, green: 0.10, blue: 0.12, alpha: 1))?
-    .draw(in: NSBezierPath(roundedRect: bg, xRadius: 184, yRadius: 184), angle: -90)
-
-// The skewer, behind the dango.
-let stick = NSBezierPath(roundedRect: NSRect(x: 497, y: 150, width: 30, height: 740), xRadius: 15, yRadius: 15)
-NSColor(calibratedRed: 0.80, green: 0.64, blue: 0.40, alpha: 1).setFill()
-stick.fill()
-
-let r: CGFloat = 132
-let balls: [(CGFloat, NSColor)] = [
-    (676, NSColor(calibratedRed: 0.97, green: 0.73, blue: 0.78, alpha: 1)),
-    (482, NSColor(calibratedRed: 0.97, green: 0.95, blue: 0.91, alpha: 1)),
-    (288, NSColor(calibratedRed: 0.62, green: 0.76, blue: 0.47, alpha: 1)),
-]
-let bead = NSColor(calibratedWhite: 0.08, alpha: 1)
-for (k, (cy, body)) in balls.enumerated() {
-    let c = NSPoint(x: 512, y: cy)
-    let shade = body.blended(withFraction: 0.32, of: .black) ?? body
-    shade.setFill()
-    NSBezierPath(ovalIn: NSRect(x: c.x - r - 7, y: c.y - r - 7, width: 2 * r + 14, height: 2 * r + 14)).fill()
-    body.setFill()
-    NSBezierPath(ovalIn: NSRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)).fill()
-    NSColor.white.withAlphaComponent(0.5).setFill()
-    NSBezierPath(ovalIn: NSRect(x: c.x - r * 0.62, y: c.y + r * 0.42, width: r * 0.5, height: r * 0.26)).fill()
-    // Cheeks, bead eyes with a glint, a small smile (the top one grins).
-    NSColor(calibratedRed: 0.95, green: 0.5, blue: 0.55, alpha: 0.5).setFill()
-    for dx: CGFloat in [-0.62, 0.38] { NSBezierPath(ovalIn: NSRect(x: c.x + dx * r, y: c.y - r * 0.3, width: r * 0.26, height: r * 0.15)).fill() }
-    for dx: CGFloat in [-0.36, 0.2] {
-        bead.setFill()
-        NSBezierPath(ovalIn: NSRect(x: c.x + dx * r, y: c.y - r * 0.02, width: r * 0.17, height: r * 0.24)).fill()
-        NSColor.white.setFill()
-        NSBezierPath(ovalIn: NSRect(x: c.x + dx * r + r * 0.08, y: c.y + r * 0.12, width: r * 0.06, height: r * 0.07)).fill()
-    }
-    bead.setStroke()
-    let m = NSBezierPath()
-    m.lineWidth = 9
-    m.lineCapStyle = .round
-    m.move(to: NSPoint(x: c.x - r * 0.12, y: c.y - r * 0.16))
-    m.curve(to: NSPoint(x: c.x + r * 0.12, y: c.y - r * 0.16),
-            controlPoint1: NSPoint(x: c.x - r * 0.06, y: c.y - r * (k == 0 ? 0.36 : 0.26)), controlPoint2: NSPoint(x: c.x + r * 0.06, y: c.y - r * (k == 0 ? 0.36 : 0.26)))
-    m.stroke()
+let args = CommandLine.arguments
+guard args.count == 3, let dango = NSImage(contentsOfFile: args[2]) else {
+    FileHandle.standardError.write("usage: icon OUT.png logo-dango.png\n".data(using: .utf8)!)
+    exit(1)
 }
-img.unlockFocus()
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1024, pixelsHigh: 1024, bitsPerSample: 8, samplesPerPixel: 4,
+                           hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+rep.size = NSSize(width: 1024, height: 1024)
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+NSGraphicsContext.current?.imageInterpolation = .high
 
-guard let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
-      let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
-try png.write(to: URL(fileURLWithPath: CommandLine.arguments[1]))
+// The plate: macOS's 824-point square on the 1024 grid, with its shadow.
+let plate = NSBezierPath(roundedRect: NSRect(x: 100, y: 100, width: 824, height: 824), xRadius: 186, yRadius: 186)
+NSGraphicsContext.saveGraphicsState()
+let shadow = NSShadow()
+shadow.shadowColor = NSColor.black.withAlphaComponent(0.22)
+shadow.shadowBlurRadius = 24
+shadow.shadowOffset = NSSize(width: 0, height: -10)
+shadow.set()
+NSColor.white.setFill()
+plate.fill()
+NSGraphicsContext.restoreGraphicsState()
+NSColor.black.withAlphaComponent(0.06).setStroke()
+plate.lineWidth = 3
+plate.stroke()
+
+// The 团子, 600 wide, a little below the middle (y up).
+let w: CGFloat = 600, h = w * dango.size.height / dango.size.width
+dango.draw(in: NSRect(x: 512 - w / 2, y: 1024 - 330 - h, width: w, height: h))
+
+// The blue mark (AB.wordmark's "M3 3l4 3M2 8h5M3 13l4-3" on a 16 grid), up right.
+let k: CGFloat = 150 / 16, ox: CGFloat = 700, oy: CGFloat = 1024 - 196
+let p = NSBezierPath()
+for (a, b) in [((3, 3), (7, 6)), ((2, 8), (7, 8)), ((3, 13), (7, 10))] as [((CGFloat, CGFloat), (CGFloat, CGFloat))] {
+    p.move(to: NSPoint(x: ox + a.0 * k, y: oy - a.1 * k))
+    p.line(to: NSPoint(x: ox + b.0 * k, y: oy - b.1 * k))
+}
+p.lineWidth = 2.6 * k
+p.lineCapStyle = .round
+NSColor(srgbRed: 0x2F / 255.0, green: 0x7B / 255.0, blue: 0xF5 / 255.0, alpha: 1).setStroke()
+p.stroke()
+NSGraphicsContext.restoreGraphicsState()
+
+guard let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
+try png.write(to: URL(fileURLWithPath: args[1]))

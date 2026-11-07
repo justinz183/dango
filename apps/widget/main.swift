@@ -319,7 +319,12 @@ final class DashboardView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        (NSApp.delegate as? App)?.popMenu(event, in: self)
+        guard let app = NSApp.delegate as? App else { return }
+        if let r = exportButton, r.contains(convert(event.locationInWindow, from: nil)) {
+            NSMenu.popUpContextMenu(app.exportButtonMenu(), with: event, for: self)
+        } else {
+            app.popMenu(event, in: self)
+        }
     }
 }
 
@@ -370,7 +375,7 @@ struct Receipt { var usd: Double; var name: String; var color: NSColor; var born
 /// finished turn (theme.swift `drawCard`). Lives in a transparent panel;
 /// only the card takes clicks.
 final class PetView: NSView {
-    static let size = NSSize(width: 300, height: 100)
+    static let size = NSSize(width: 230, height: 140)
     var model: Model?
     var drawBackground = false
     /// Seconds since launch, advanced by the app's frame timer.
@@ -667,8 +672,10 @@ final class App: NSObject, NSApplicationDelegate {
     }
 
     /// Exports a period's 4:5 share image (the report window's design) to
-    /// ~/Pictures/DONGO and the clipboard. `back` counts periods back.
-    func makeCard(kind: String, back: Int = 0) {
+    /// ~/Pictures/DANGO. `back` counts periods back. With `shareFrom` (a view
+    /// and a spot in it) the system share menu opens there; without, the
+    /// image goes on the clipboard and the panel closes.
+    func makeCard(kind: String, back: Int = 0, shareFrom: (NSView, NSRect)? = nil) {
         let name = ReportText.kindName(kind, share: true)
         let unit: Calendar.Component = ["week": .weekOfYear, "month": .month, "year": .year][kind] ?? .day
         let day = ReportView.fmt.string(from: Calendar.current.date(byAdding: unit, value: -back, to: Date()) ?? Date())
@@ -683,23 +690,30 @@ final class App: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let j else { return self.pet?.flash(failed) ?? () }
                 try? FileManager.default.createDirectory(atPath: exportDir, withIntermediateDirectories: true)
-                let path = exportDir + "/dongo-\(kind)-\(j["from"].s).png"
-                let ok = exportPage(ShareView(size: NSSize(width: 540, height: 675), data: j), path, copy: true)
-                self.pet?.flash(ok ? L("\(name)已导出并复制", "\(name) image saved and copied") : failed)
+                let path = exportDir + "/dango-\(kind)-\(j["from"].s).png"
+                guard exportPage(ShareView(size: NSSize(width: 540, height: 675), data: j), path, copy: shareFrom == nil) else {
+                    return self.pet?.flash(failed) ?? ()
+                }
+                if let (view, spot) = shareFrom, view.window?.isVisible == true {
+                    NSSharingServicePicker(items: [URL(fileURLWithPath: path)]).show(relativeTo: spot, of: view, preferredEdge: .minY)
+                } else {
+                    self.pet?.flash(L("\(name)已导出并复制", "\(name) image saved and copied"))
+                }
             }
         }
-        collapse()
+        if shareFrom == nil { collapse() }
     }
 
     /// Day, week, month and year: this one and the last one of each.
-    func exportMenu() -> NSMenu {
+    /// `share` opens the share menu at the panel's share button, else copies.
+    func exportMenu(share: Bool = false) -> NSMenu {
         let export = NSMenu()
         for (i, (kind, now, before)) in [("day", L("今日日报", "Today"), L("昨日日报", "Yesterday")), ("week", L("本周周报", "This week"), L("上周周报", "Last week")),
                                          ("month", L("本月月报", "This month"), L("上月月报", "Last month")), ("year", L("今年年报", "This year"), L("去年年报", "Last year"))].enumerated() {
             if i > 0 { export.addItem(.separator()) }
             for (back, title) in [(0, now), (1, before)] {
                 let item = NSMenuItem(title: title, action: #selector(exportFromMenu(_:)), keyEquivalent: "")
-                item.representedObject = "\(kind):\(back)"
+                item.representedObject = "\(kind):\(back):\(share ? "share" : "copy")"
                 item.target = self
                 export.addItem(item)
             }
@@ -707,10 +721,37 @@ final class App: NSObject, NSApplicationDelegate {
         return export
     }
 
-    /// From the menu: "week:1" is last week's card.
+    /// From the menu: "week:1:copy" copies last week's card.
     @objc func exportFromMenu(_ sender: NSMenuItem) {
         let parts = (sender.representedObject as? String ?? "day:0").split(separator: ":")
-        makeCard(kind: String(parts[0]), back: parts.count > 1 ? Int(parts[1]) ?? 0 : 0)
+        let share = parts.count > 2 && parts[2] == "share" ? dashboard.exportButton.map { (dashboard as NSView, $0) } : nil
+        makeCard(kind: String(parts[0]), back: parts.count > 1 ? Int(parts[1]) ?? 0 : 0, shareFrom: share)
+    }
+
+    /// Right-click on the panel's share button: copy instead, the other
+    /// periods, and the folder the images go to.
+    func exportButtonMenu() -> NSMenu {
+        let menu = NSMenu()
+        let copy = NSMenuItem(title: L("复制今日日报", "Copy today's report"), action: #selector(exportFromMenu(_:)), keyEquivalent: "")
+        copy.representedObject = "day:0:copy"
+        copy.target = self
+        menu.addItem(copy)
+        menu.addItem(.separator())
+        for (title, share) in [(L("分享其他报告", "Share another report"), true), (L("复制其他报告", "Copy another report"), false)] {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.submenu = exportMenu(share: share)
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let folder = NSMenuItem(title: L("打开 ~/Pictures/DANGO", "Open ~/Pictures/DANGO"), action: #selector(openExportFolder), keyEquivalent: "")
+        folder.target = self
+        menu.addItem(folder)
+        return menu
+    }
+
+    @objc func openExportFolder() {
+        try? FileManager.default.createDirectory(atPath: exportDir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(URL(fileURLWithPath: exportDir))
     }
 
     // MARK: menu
@@ -719,14 +760,14 @@ final class App: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: isExpanded ? L("收起仪表盘", "Close dashboard") : L("打开仪表盘", "Open dashboard"), action: #selector(toggle), keyEquivalent: ""))
         let boss = NSMenu()
-        for (id, title) in [("story", L("看测试结果", "See my result")), ("types", L("16 型图鉴", "All 16 types")),
+        for (id, title) in [("story", L("我的老板人格", "My boss type")), ("types", L("16 型图鉴", "All 16 types")),
                             ("scale", L("规模和压榨率怎么算", "How scale and margin work")), ("roles", L("团子构成怎么算", "How the crew works"))] {
             let item = NSMenuItem(title: title, action: #selector(openBoss(_:)), keyEquivalent: "")
             item.representedObject = id
             item.target = self
             boss.addItem(item)
         }
-        let bossItem = NSMenuItem(title: L("老板人格测试", "AI Boss Type"), action: nil, keyEquivalent: "")
+        let bossItem = NSMenuItem(title: L("老板人格", "AI Boss Type"), action: nil, keyEquivalent: "")
         bossItem.submenu = boss
         menu.addItem(bossItem)
         menu.addItem(NSMenuItem(title: L("报告", "Reports"), action: #selector(openReports), keyEquivalent: ""))
@@ -838,10 +879,20 @@ final class App: NSObject, NSApplicationDelegate {
         guard Bundle.main.bundleURL.pathExtension == "app", fm.isExecutableFile(atPath: cli) else { return }
         let uid = getuid()
         let current = (NSDictionary(contentsOfFile: daemonPlist)?["ProgramArguments"] as? [String])?.first
-        if let current, current != cli, fm.isExecutableFile(atPath: current) { return }
+        // launchd loads the agent at login, except when "Allow in the
+        // Background" is off for it in System Settings; then nothing
+        // records until the app, opened by hand, loads it here.
+        let loaded = run("/bin/launchctl", ["print", "gui/\(uid)/\(daemonLabel)"]) == 0
+        if let current, current != cli, fm.isExecutableFile(atPath: current) {
+            if !loaded { run("/bin/launchctl", ["bootstrap", "gui/\(uid)", daemonPlist]) }
+            return
+        }
         let stamp = ((try? fm.attributesOfItem(atPath: cli))?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
         if current == cli {
-            if UserDefaults.standard.double(forKey: "daemonStamp") != stamp {
+            if !loaded {
+                run("/bin/launchctl", ["bootstrap", "gui/\(uid)", daemonPlist])
+                UserDefaults.standard.set(stamp, forKey: "daemonStamp")
+            } else if UserDefaults.standard.double(forKey: "daemonStamp") != stamp {
                 run("/bin/launchctl", ["kickstart", "-k", "gui/\(uid)/\(daemonLabel)"])
                 UserDefaults.standard.set(stamp, forKey: "daemonStamp")
             }
@@ -856,18 +907,21 @@ final class App: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(stamp, forKey: "daemonStamp")
         if !fm.fileExists(atPath: agentPlist) { toggleAutostart() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            self?.pet?.flash(L("团子们在翻你的 Claude Code 和 Codex 历史…", "Your dangos are reading your Claude Code and Codex history…"))
+            self?.pet?.flash(L("团子们在翻你的 Claude Code、Codex 和 DeepSeek 历史…", "Your dangos are reading your Claude Code, Codex and DeepSeek history…"))
         }
     }
 
-    private func run(_ path: String, _ args: [String]) {
+    /// Runs a command to the end; its exit status, -1 if it could not start.
+    @discardableResult
+    private func run(_ path: String, _ args: [String]) -> Int32 {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
-        try? p.run()
+        guard (try? p.run()) != nil else { return -1 }
         p.waitUntilExit()
+        return p.terminationStatus
     }
 
     // MARK: data
@@ -979,13 +1033,10 @@ if let i = args.firstIndex(of: "--abti"), args.count > i + 2 {
     let flagv = { (f: String) -> String? in args.firstIndex(of: f).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
     lang = flagv("--lang") ?? (d["lang"].s.isEmpty ? lang : d["lang"].s)
     if flagv("--page") == "story" {
-        // --screen N (1–8) [--guess HMSL|skip] [--t SEC] [--bare]: one story screen.
+        // --screen N (1–7) [--t SEC] [--bare]: one story screen.
         let s = StoryView(frame: NSRect(x: 0, y: 0, width: 540, height: 960))
         s.data = d
         s.screen = flagv("--screen").flatMap { Int($0) } ?? 1
-        if let g = flagv("--guess") {
-            if g == "skip" { s.skipped = true } else { s.guess = (0..<4).map { k in k < g.count ? String(Array(g)[k]) : nil } }
-        }
         s.t = flagv("--t").flatMap { Double($0) } ?? 10
         s.bare = args.contains("--bare")
         exit(exportPage(s, args[i + 2]) ? 0 : 1)
@@ -1051,6 +1102,37 @@ if let i = args.firstIndex(of: "--snapshot-office"), args.count > i + 1 {
     v.instant = true
     // --t SEC: the moment to render (4.35 catches the first one's blink).
     v.tick(flagv("--t").flatMap { Double($0) } ?? 0.9)
+    snapshot(v, size, args[i + 1])
+    exit(0)
+}
+
+if let i = args.firstIndex(of: "--snapshot-roles"), args.count > i + 1 {
+    // [--statuses s,s,…]: every role in dango.json (the pack's R01–R12 and
+    // the ones drawn for other jobs, R13–R21), then the plain 团子, in each
+    // state, one row each, for checking the art.
+    _ = NSApplication.shared
+    let flagv = { (f: String) -> String? in args.firstIndex(of: f).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
+    let states = (flagv("--statuses") ?? "idle,working,waiting,happy,fuming,sleeping").split(separator: ",").map(String.init)
+    let roles: [String?] = ((packLayoutJSON["roles"] as? [String: Any])?.keys.sorted() ?? []).map { Optional($0) } + [nil]
+    let cell = NSSize(width: 120, height: 104)
+    let size = NSSize(width: 44 + cell.width * CGFloat(states.count), height: cell.height * CGFloat(roles.count))
+    final class Sheet: NSView {
+        var paint: () -> Void = {}
+        override var isFlipped: Bool { true }
+        override func draw(_ r: NSRect) { paint() }
+    }
+    let v = Sheet(frame: NSRect(origin: .zero, size: size))
+    v.paint = {
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        for (r, role) in roles.enumerated() {
+            put(V3.mono(role ?? "—", 11, .regular, V3.secondary), 6, CGFloat(r) * cell.height + cell.height / 2 - 7)
+            for (c, st) in states.enumerated() {
+                let box = NSRect(x: 44 + CGFloat(c) * cell.width + 10, y: CGFloat(r) * cell.height + 8, width: cell.width - 20, height: cell.height - 16)
+                drawFittedDango(box, role: role, status: st)
+            }
+        }
+    }
     snapshot(v, size, args[i + 1])
     exit(0)
 }

@@ -7,7 +7,6 @@
 // design's point sizes and exported at 2×.
 
 import AppKit
-import CoreImage
 
 // MARK: - JSON
 
@@ -56,7 +55,7 @@ let abtiConfig: JV = {
 
 private var abtiImages: [String: NSImage] = [:]
 
-/// "scene/T-HBGO", "icon/T-MFGO", "roles/R06", "hidden/H1-doctor".
+/// "scene/T-HBGO", "icon/T-MFGO", "hidden/H1-doctor".
 func abtiImage(_ name: String) -> NSImage? {
     if let i = abtiImages[name] { return i }
     guard !name.isEmpty, let url = abtiAssets?.appendingPathComponent(name + ".png"), let i = NSImage(contentsOf: url) else { return nil }
@@ -64,9 +63,11 @@ func abtiImage(_ name: String) -> NSImage? {
     return i
 }
 
-/// A crew entry's little 团子: a role cut-out or a hidden one's.
+/// A crew entry's little 团子: a hidden one's picture, or the role ("R06")
+/// put together from the design pack like everywhere else (theme.swift).
 func roleArt(_ art: String) -> NSImage? {
-    art.hasPrefix("H") ? abtiImage("hidden/" + art) : abtiImage("roles/" + art)
+    if art.hasPrefix("H") { return abtiImage("hidden/" + art) }
+    return art.hasPrefix("R") ? packPicture(art) : nil
 }
 
 /// A config entry's words in the language.
@@ -147,7 +148,7 @@ enum AB {
     static let heat = ["#F2F2F3", "#C9EBD2", "#8ED3A3", "#46B26B", "#15803D"].map { color(hex: $0) }
 
     static func mono(_ s: String, _ size: CGFloat, _ w: NSFont.Weight = .regular, _ c: NSColor = ink, kern: CGFloat = 0) -> NSAttributedString {
-        var a: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: size, weight: w), .foregroundColor: c]
+        var a: [NSAttributedString.Key: Any] = [.font: V3.monoFont(size, w), .foregroundColor: c]
         if kern != 0 { a[.kern] = kern }
         return NSAttributedString(string: s, attributes: a)
     }
@@ -191,14 +192,36 @@ enum AB {
         p.stroke()
     }
 
-    /// DONGO and its blue mark; returns the width.
+    /// The word mark: D, the 团子 as its A (theme-b/logo-dango.png, the app
+    /// icon's), NGO, and the blue mark; returns the width. On a dark ground
+    /// (`c` light) the 团子 gets a white edge so it does not vanish.
     @discardableResult
     static func wordmark(_ x: CGFloat, _ y: CGFloat, size: CGFloat = 18, color c: NSColor = ink) -> CGFloat {
-        let w = sans("DONGO", size, .heavy, c, kern: -size * 0.02)
-        put(w, x, y)
-        let mx = x + w.size().width + size * 0.28
+        let font = NSFont.systemFont(ofSize: size, weight: .heavy)
+        let d = sans("D", size, .heavy, c, kern: -size * 0.02), rest = sans("NGO", size, .heavy, c, kern: -size * 0.02)
+        put(d, x, y)
+        let baseline = y + font.ascender
+        // About as tall as the capitals, sitting on the line.
+        let ow = font.capHeight * 1.42, oh = ow * 240 / 352
+        let o = NSRect(x: x + d.size().width + size * 0.04, y: baseline - oh + size * 0.02, width: ow, height: oh)
+        if let img = themeImage("logo-dango") {
+            if (c.usingColorSpace(.sRGB)?.brightnessComponent ?? 0) > 0.5 {
+                let rim = NSImage(size: img.size, flipped: false) { b in
+                    img.draw(in: b)
+                    NSColor.white.set()
+                    b.fill(using: .sourceAtop)
+                    return true
+                }
+                rim.draw(in: o.insetBy(dx: -size * 0.06, dy: -size * 0.06), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
+            img.draw(in: o, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        } else {
+            put(sans("A", size, .heavy, c), o.minX, y)
+        }
+        put(rest, o.maxX + size * 0.05, y)
+        let mx = o.maxX + size * 0.05 + rest.size().width + size * 0.28
         let ms = size * 0.67
-        inDrawing(NSRect(x: mx, y: y + w.size().height / 2 - ms / 2, width: ms, height: ms), 16, 16) {
+        inDrawing(NSRect(x: mx, y: y + d.size().height / 2 - ms / 2, width: ms, height: ms), 16, 16) {
             let p = svgPath("M3 3l4 3M2 8h5M3 13l4-3")
             p.lineWidth = 2.4
             p.lineCapStyle = .round
@@ -237,33 +260,6 @@ enum AB {
         let out = NSRect(x: x, y: r.midY - sz.height / 2, width: sz.width, height: sz.height)
         img.draw(in: out, from: .zero, operation: .sourceOver, fraction: alpha, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
         return out
-    }
-
-    /// A QR code for the link (the domain is the design's placeholder).
-    /// The site page a shared image or invite points to, in the reader's
-    /// language: a type's own page when there is one, else the home page.
-    static func site(_ code: String? = nil, ref: String) -> String {
-        "https://dongo.app" + (lang == "en" ? "/en" : "") + (code.map { "/t/\($0)/" } ?? "/") + "?ref=" + ref
-    }
-
-    static func qr(_ text: String, _ r: NSRect, ink c: NSColor = ink) {
-        guard let f = CIFilter(name: "CIQRCodeGenerator") else { return }
-        f.setValue(text.data(using: .utf8), forKey: "inputMessage")
-        f.setValue("M", forKey: "inputCorrectionLevel")
-        guard let out = f.outputImage else { return }
-        let n = Int(out.extent.width)
-        let ctx = CIContext()
-        guard let cg = ctx.createCGImage(out, from: out.extent) else { return }
-        let rep = NSBitmapImageRep(cgImage: cg)
-        let cell = r.width / CGFloat(n)
-        c.setFill()
-        for yy in 0..<n {
-            for xx in 0..<n {
-                if let px = rep.colorAt(x: xx, y: yy), px.brightnessComponent < 0.5 {
-                    NSRect(x: r.minX + CGFloat(xx) * cell, y: r.minY + CGFloat(yy) * cell, width: cell + 0.3, height: cell + 0.3).fill()
-                }
-            }
-        }
     }
 
     /// A section title with an optional note on the right; returns its height.
@@ -409,7 +405,7 @@ final class BossCardView: ABPage {
         var y: CGFloat = 28
         // 1. Top: the word mark, what this is, the date.
         let mw = AB.wordmark(x0, y)
-        put(AB.sans(L("老板人格测试", "AI Boss Type"), 14, .medium, AB.gray), x0 + mw + 10, y + 3)
+        put(AB.sans(L("老板人格", "AI Boss Type"), 14, .medium, AB.gray), x0 + mw + 10, y + 3)
         put(AB.mono("ABTI · " + d["date"].s, 12, .regular, AB.gray), x0 + W, y + 4, align: 2)
         y += 22 + 10
 
@@ -547,18 +543,16 @@ final class BossCardView: ABPage {
         let mcode = d["match"]["code"].s
         put(AB.join([AB.sans(L("你的绝配：", "Your perfect match: "), 13.5, .semibold), AB.mono(mcode, 13.5, .semibold), AB.sans(" " + ABText.typeName(mcode), 13.5, .semibold)]), mx, box.minY + 8)
         let line = ABText.matchLine(code)
-        let tag = lang == "en" ? line + " Tag one." : line + "。@ 一个这样的朋友来测"
+        let tag = lang == "en" ? line + " Tag one." : line + "。@ 一个这样的朋友来看看"
         AB.sans(tag, 12, .regular, AB.gray).draw(with: NSRect(x: mx, y: box.minY + 28, width: box.maxX - 12 - mx, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
 
-        // 9. The way in, at the bottom.
-        let entry = NSRect(x: x0, y: bounds.height - 28 - 84, width: W, height: 84)
-        AB.round(entry, 20, AB.ink)
-        put(AB.sans(L("测测你是什么老板 →", "What kind of AI boss are you? →"), 16, .semibold, .white), entry.minX + 18, entry.minY + 14)
-        put(AB.mono("dongo.app", 12, .semibold, .white), entry.minX + 18, entry.minY + 37)
-        put(AB.sans(L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded"), 10.5, .regular, NSColor.white.withAlphaComponent(0.68)), entry.minX + 18, entry.minY + 56)
-        let q = NSRect(x: entry.maxX - 12 - 60, y: entry.minY + 12, width: 60, height: 60)
-        AB.round(q, 8, .white)
-        AB.qr(AB.site(data["code"].s, ref: "card"), q.insetBy(dx: 4, dy: 4))
+        // 9. How it's counted, at the bottom (no link or QR code: the
+        // domain isn't ours, user 2026-11-07: 「不需要二维码dango.app，啥都不需要」).
+        // A footer like the share images': a rule, then the line.
+        let fy = bounds.height - 72
+        AB.line.setFill()
+        NSRect(x: x0, y: fy, width: W, height: 1).fill()
+        put(AB.sans(L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded"), 11, .regular, AB.gray), x0, fy + 26)
     }
 }
 
@@ -606,7 +600,6 @@ final class TypesView: ABPage {
         }
         y += CGFloat(left.count) * (rowH + gap) + 4
         put(AB.sans(L("每型一个招牌动作；你的职业角色在结果卡「团子构成」里另外显示", "One signature move per type; your job roles show on the card's crew"), 10.5, .regular, AB.gray), x0, y)
-        put(AB.mono("dongo.app", 12, .semibold), x0 + W, y - 1, align: 2)
     }
 }
 
@@ -679,7 +672,7 @@ final class RolesView: ABPage {
                                 12, .regular, AB.gray), x0, y, W, lineHeight: 17) + 14
         for r in c["roles"].arr {
             let rowH: CGFloat = 58
-            AB.fit(abtiImage("roles/" + r["art"].s), NSRect(x: x0, y: y + 2, width: 56, height: rowH - 8), align: 0)
+            AB.fit(roleArt(r["art"].s), NSRect(x: x0, y: y + 2, width: 56, height: rowH - 8), align: 0)
             AB.round(NSRect(x: x0 + 68, y: y + 13, width: 10, height: 10), 2, color(hex: r["color"].s))
             let name = AB.sans(cw(r, "name"), 15, .semibold)
             put(name, x0 + 85, y + 9)
@@ -687,7 +680,7 @@ final class RolesView: ABPage {
             put(AB.sans(lang == "en" ? r["covers_en"].s : r["covers_zh"].s, 11.5, .regular, AB.gray), x0 + 68, y + 32)
             var ax = x0 + W
             for alt in r["alt_art"].arr.reversed() {
-                let got = AB.fit(abtiImage("roles/" + alt.s), NSRect(x: ax - 30, y: y + 14, width: 30, height: 26), align: 2)
+                let got = AB.fit(roleArt(alt.s), NSRect(x: ax - 30, y: y + 14, width: 30, height: 26), align: 2)
                 ax = got.minX - 4
             }
             y += rowH
@@ -913,7 +906,7 @@ final class ShareView: ABPage {
         switch kind {
         case "total": y = total(d, y)
         default:
-            if kind == "day" { y = crewPanel(d, y) }
+            if kind == "day" { y = crewPanel(d, y, compact: !d["boss"].isNull) }
             put(AB.sans(ReportText.lead(d, share: true), 15, .medium), x0, y)
             y += 20
             let big = AB.mono(fmtUSD(d["usd"].d), 52, .semibold, kern: -1.5)
@@ -924,19 +917,24 @@ final class ShareView: ABPage {
             y += 56
             put(AB.mono(ReportText.moneyLine(d), 11.5, .regular, AB.gray), x0, y)
             y += 26
-            y = chart(d, y, x0, W)
+            let boss = !d["boss"].isNull
+            if boss { y = bossStrip(d, y) + 16 }
+            y = chart(d, y, x0, W, compact: boss)
             y += 10
             let who = kind == "week" ? L("这周谁干的", "Who worked this week") : kind == "month" ? L("这个月谁干的", "Who worked this month")
                 : kind == "year" ? L("这一年谁干的", "Who worked this year") : L("今天谁干的", "Who worked today")
             y += AB.header(who, L("按 BLS 时薪折成请人干的工时", "hours at BLS wages"), x0, y, W, size: 13.5) + 8
-            _ = AB.crewRows(d["crew"].arr, x0, y, W, max: kind == "month" || kind == "year" ? 5 : 4)
+            // As many rows as fit above the footer.
+            let fit = Int((bounds.height - 82 - 8 - y) / 31)
+            _ = AB.crewRows(d["crew"].arr, x0, y, W, max: min(kind == "month" || kind == "year" ? 5 : 4, max(1, fit)))
         }
         footer(kind == "total")
     }
 
-    /// The day's top crew standing on a dotted panel.
-    private func crewPanel(_ d: JV, _ y: CGFloat) -> CGFloat {
-        let r = NSRect(x: 30, y: y, width: 480, height: 138)
+    /// The day's top crew standing on a dotted panel; lower with the boss
+    /// strip under it.
+    private func crewPanel(_ d: JV, _ y: CGFloat, compact: Bool = false) -> CGFloat {
+        let r = NSRect(x: 30, y: y, width: 480, height: compact ? 104 : 138)
         AB.round(r, 24, AB.tile)
         color(hex: "#DEDEE2").setFill()
         var dy = r.minY + 12
@@ -948,7 +946,8 @@ final class ShareView: ABPage {
         put(AB.sans(L("今天上班的团子", "On shift today"), 11, .regular, AB.gray), r.minX + 16, r.minY + 14)
         let crew = d["crew"].arr.filter { !$0["art"].s.isEmpty }.prefix(3).map { $0["art"].s }
         let order = crew.count >= 3 ? [crew[1], crew[0], crew[2]] : crew
-        let sizes: [CGFloat] = order.count == 3 ? [84, 120, 84] : order.map { _ in 104 }
+        let k: CGFloat = compact ? 0.72 : 1
+        let sizes: [CGFloat] = (order.count == 3 ? [84, 120, 84] : order.map { _ in 104 }).map { $0 * k }
         var x = r.midX - (sizes.reduce(0, +) + CGFloat(max(0, sizes.count - 1)) * 4) / 2
         for (k, art) in order.enumerated() {
             let w = sizes[k]
@@ -958,27 +957,46 @@ final class ShareView: ABPage {
         return r.maxY + 14
     }
 
+    /// The period's boss type, from its own turns: picture, code and name,
+    /// and the type's line.
+    private func bossStrip(_ d: JV, _ y: CGFloat) -> CGFloat {
+        let r = NSRect(x: 30, y: y, width: 480, height: 66)
+        AB.round(r, 18, AB.tile)
+        let code = d["boss"]["code"].s
+        AB.fit(abtiImage("scene/T-" + code), NSRect(x: r.minX + 10, y: r.minY + 6, width: 66, height: 54), align: 1)
+        let tx = r.minX + 88, tw = r.maxX - 16 - tx
+        let kind = d["kind"].s
+        let who = kind == "week" ? L("这一周，你是", "This week you were") : kind == "month" ? L("这个月，你是", "This month you were")
+            : kind == "year" ? L("这一年，你是", "This year you were") : L("今天，你是", "Today you were")
+        put(AB.sans(who, 11, .regular, AB.gray), tx, r.minY + 9)
+        put(AB.join([AB.mono(code + "  ", 16, .semibold, kern: 1), AB.sans(ABText.typeName(code), 15, .semibold)]), tx, r.minY + 24)
+        AB.sans(ABText.roast(code), 11.5, .regular, AB.gray).draw(with: NSRect(x: tx, y: r.minY + 46, width: tw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        return r.maxY
+    }
+
     /// The period's chart: hours, the week's days, or the month's calendar.
-    private func chart(_ d: JV, _ y0: CGFloat, _ x0: CGFloat, _ W: CGFloat) -> CGFloat {
+    /// `compact` leaves room for the boss strip.
+    private func chart(_ d: JV, _ y0: CGFloat, _ x0: CGFloat, _ W: CGFloat, compact: Bool = false) -> CGFloat {
         var y = y0
+        let barsH: CGFloat = compact ? 110 : 170
         switch d["kind"].s {
         case "week":
             let daily = d["daily"].arr
             let vals: [Double?] = daily.map { $0.isNull ? nil : $0.d }
             let best = vals.enumerated().compactMap { (i, v) -> (Int, Double)? in v.map { (i, $0) } }.filter { $0.1 > 0 }.max { $0.1 < $1.1 }
             y += AB.header(L("每天产出", "Each day"), best.map { L("最拼的一天：", "Best day: ") + ReportText.wd($0.0) }, x0, y, W, size: 13.5) + 10
-            drawBars(vals, NSRect(x: x0, y: y, width: W, height: 170), mark: best?.0, labels: (0..<7).map { ($0, ReportText.wd($0)) }, gap: 20, labelSize: 10.5)
-            return y + 170 + 20
+            drawBars(vals, NSRect(x: x0, y: y, width: W, height: barsH), mark: best?.0, labels: (0..<7).map { ($0, ReportText.wd($0)) }, gap: 20, labelSize: 10.5)
+            return y + barsH + 20
         case "year":
             let vals: [Double?] = d["monthly"].arr.map { $0.isNull ? nil : $0.d }
             let best = vals.enumerated().compactMap { (i, v) -> (Int, Double)? in v.map { (i, $0) } }.filter { $0.1 > 0 }.max { $0.1 < $1.1 }
             y += AB.header(L("每月产出", "Each month"), best.map { L("最拼的一个月：", "Best month: ") + ReportText.month($0.0) }, x0, y, W, size: 13.5) + 10
-            drawBars(vals, NSRect(x: x0, y: y, width: W, height: 170), mark: best?.0, labels: (0..<12).map { ($0, ReportText.month($0)) }, gap: 10, labelSize: 10)
-            return y + 170 + 20
+            drawBars(vals, NSRect(x: x0, y: y, width: W, height: barsH), mark: best?.0, labels: (0..<12).map { ($0, ReportText.month($0)) }, gap: 10, labelSize: 10)
+            return y + barsH + 20
         case "month":
             let h = d["highlights"]
             y += AB.header(L("每天产出", "Each day"), L("开工 \(h["active_days"].i) 天 · 最长连续 \(h["longest_streak"].i) 天", "\(h["active_days"].i) days on · longest streak \(h["longest_streak"].i)"), x0, y, W, size: 13.5) + 8
-            y += drawCalendar(d, x0, y, W, cellH: 26, gap: 5) + 8
+            y += drawCalendar(d, x0, y, W, cellH: compact ? 18 : 26, gap: compact ? 4 : 5) + 8
             let lw = AB.heatLegend(x0, y)
             _ = lw
             put(AB.sans(L("黑框 = 今天 · 虚线 = 还没到", "outline = today · dashed = not yet"), 10.5, .regular, AB.gray), x0 + W, y, align: 2)
@@ -1038,28 +1056,30 @@ final class ShareView: ABPage {
         var sy = y
         for (k, v) in [(L("开工", "Days on"), L("\(d["active_days"].i) 天", "\(d["active_days"].i)")), (L("最长连续", "Longest streak"), L("\(d["longest_streak"].i) 天", "\(d["longest_streak"].i) days")),
                        (L("最拼的一天", "Best day"), AB.short(best) + " · " + fmtUSD(d["best_day"]["usd"].d))] {
+            // The value right-aligned: an English label is wider than a
+            // fixed column ("Longest streak" ran into its value).
             put(AB.sans(k, 11, .regular, AB.gray), sx, sy + 3)
-            put(AB.mono(v, 13, .semibold), sx + 70, sy)
+            put(AB.mono(v, 13, .semibold), x0 + W, sy, align: 2)
             sy += 24
         }
         _ = AB.heatLegend(sx, sy + 2, cell: 9)
         y += max(7 * (rowCell + 2), sy + 18 - y) + 14
         y += AB.header(L("\(d["days"].i) 天里谁干的", "Who worked, \(d["days"].i) days"), L("按 BLS 时薪折成请人干的工时", "hours at BLS wages"), x0, y, W, size: 13.5) + 6
-        return y + AB.crewRows(d["crew"].arr, x0, y, W, max: 5, rowH: 25)
+        // As many rows as fit above the footer (a two-line roast in English
+        // pushed the fifth into it).
+        let rows = Swift.max(1, Swift.min(5, Int((bounds.height - 82 - y) / 25)))
+        return y + AB.crewRows(d["crew"].arr, x0, y, W, max: rows, rowH: 25)
     }
 
     private func footer(_ total: Bool) {
         let y = bounds.height - 82
         AB.line.setFill()
         NSRect(x: 30, y: y, width: 480, height: 1).fill()
-        if total {
-            put(AB.join([AB.sans(L("测测你是什么老板 → ", "What kind of AI boss are you? → "), 14, .bold), AB.mono("dongo.app", 13, .semibold)]), 30, y + 18)
-            put(AB.sans(L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded"), 11, .regular, AB.gray), 30, y + 40)
-        } else {
-            put(AB.mono("dongo.app", 13, .semibold), 30, y + 18)
-            put(AB.sans(L("全在本机算 · 按 BLS 各职业中位时薪折算 · 不含项目名", "Runs on your Mac · BLS median wages · no project names"), 11, .regular, AB.gray), 30, y + 40)
-        }
-        AB.qr(total ? AB.site(data["boss"]["code"].s, ref: "share") : AB.site(ref: "share"), NSRect(x: 510 - 40, y: y + 14, width: 40, height: 40))
+        // How it's counted; no link or QR code (the domain isn't ours, user
+        // 2026-11-07: 「不需要二维码dango.app，啥都不需要」).
+        let note = total ? L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded")
+                         : L("全在本机算 · 按 BLS 各职业中位时薪折算 · 不含项目名", "Runs on your Mac · BLS median wages · no project names")
+        put(AB.sans(note, 11, .regular, AB.gray), 30, y + 30)
     }
 }
 
@@ -1091,7 +1111,7 @@ func dangoJSON(_ args: [String]) -> JV? {
 }
 
 /// Where exported images go (the same folder as the other cards).
-let exportDir = NSHomeDirectory() + "/Pictures/DONGO"
+let exportDir = NSHomeDirectory() + "/Pictures/DANGO"
 
 final class ReportView: ABPage {
     var kind = "day"
@@ -1397,10 +1417,10 @@ final class ReportView: ABPage {
         guard !data.isNull else { return }
         let v = ShareView(size: NSSize(width: 540, height: 675), data: data)
         try? FileManager.default.createDirectory(atPath: exportDir, withIntermediateDirectories: true)
-        let name = "dongo-\(kind)-\(data["from"].s).png"
+        let name = "dango-\(kind)-\(data["from"].s).png"
         let path = save ? exportDir + "/" + name : NSTemporaryDirectory() + name
         guard exportPage(v, path, copy: true) else { return }
-        let msg = save ? L("已导出到 ~/Pictures/DONGO，图片也复制好了，可以直接粘贴", "Saved to ~/Pictures/DONGO and copied; paste it anywhere")
+        let msg = save ? L("已导出到 ~/Pictures/DANGO，图片也复制好了，可以直接粘贴", "Saved to ~/Pictures/DANGO and copied; paste it anywhere")
             : L("图片复制好了，可以直接粘贴", "Copied; paste it anywhere")
         toast = (msg, Date().timeIntervalSince1970 + 2.5)
         needsDisplay = true
@@ -1422,7 +1442,7 @@ final class ReportWindow {
             return
         }
         let w = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-        w.title = L("DONGO 报告", "DONGO Reports")
+        w.title = L("DANGO 报告", "DANGO Reports")
         w.isReleasedWhenClosed = false
         w.appearance = NSAppearance(named: .aqua)
         let v = ReportView(size: size, data: JV(nil))

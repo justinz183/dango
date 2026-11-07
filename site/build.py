@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DONGO · ABTI go-to-market site generator.
+"""DANGO · ABTI go-to-market site generator.
 
 Reads assets/abti.json and the ABTI art in apps/widget/assets/abti/ and writes a
 static bilingual site (Chinese at /, English at /en/) to site/dist/.
@@ -20,7 +20,7 @@ except ImportError:  # `python3 -I` skips the user site-packages, which is where
     sys.path.append(site.getusersitepackages())
     from PIL import Image
 
-SITE_URL = "https://dongo.app"
+SITE_URL = "https://dango.app"
 DOWNLOAD_URL = "#download"
 HERO_TYPE = "HBGO"  # the sample type used throughout the design handoff
 
@@ -221,7 +221,7 @@ class Ctx:
 
 
 def brand(c):
-    return f'<a class="brand" href="{c.link("")}" aria-label="DONGO">DONGO{SPARK}</a>'
+    return f'<a class="brand" href="{c.link("")}" aria-label="DANGO">DANGO{SPARK}</a>'
 
 
 def header(c, current):
@@ -273,7 +273,7 @@ def page(c, title, desc, body, current=None, og_title=None, image=f"img/og/{HERO
 <link rel="alternate" hreflang="en" href="{en_url}">
 <link rel="alternate" hreflang="x-default" href="{zh_url}">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="DONGO">
+<meta property="og:site_name" content="DANGO">
 <meta property="og:locale" content="{c.t("zh_CN", "en_US")}">
 <meta property="og:title" content="{e(og_title)}">
 <meta property="og:description" content="{e(desc)}">
@@ -358,12 +358,12 @@ def home(c):
     ]
     priv = "\n".join(f'<div class="priv"><h3>{CHECK}{e(h)}</h3><p>{e(p)}</p></div>' for h, p in privacy)
     lead = c.t(
-        "DONGO 是住在你 Mac 屏幕角落的一只团子。它看着你的 Claude Code / Codex 干活，把这些活算成<b>一种老板人格</b>、<b>一家公司的规模</b>和<b>一个压榨率</b>。全在本机算，什么都不上传。",
-        "DONGO is a desktop pet for your Mac. It watches what your Claude Code and Codex agents get done and turns it into <b>a boss personality</b>, <b>a company size</b> and <b>a margin</b>. Everything runs locally; nothing is uploaded.",
+        "DANGO 是住在你 Mac 屏幕角落的一只团子。它看着你的 Claude Code / Codex 干活，把这些活算成<b>一种老板人格</b>、<b>一家公司的规模</b>和<b>一个压榨率</b>。全在本机算，什么都不上传。",
+        "DANGO is a desktop pet for your Mac. It watches what your Claude Code and Codex agents get done and turns it into <b>a boss personality</b>, <b>a company size</b> and <b>a margin</b>. Everything runs locally; nothing is uploaded.",
     )
     body = f"""<section class="hero">
   <div>
-    <p class="kicker">{c.t("ABTI · 老板人格测试", "ABTI · AI Boss Type")}</p>
+    <p class="kicker">{c.t("ABTI · 老板人格", "ABTI · AI Boss Type")}</p>
     <h1>{c.t('<span class="nw">你是哪种</span> <span class="nw">AI 老板？</span>', "What kind of AI boss are you?")}</h1>
     <p class="lead">{lead}</p>
     <div class="cta-row">
@@ -410,11 +410,11 @@ def home(c):
   </div>
 </section>
 
-{cta_dark(c, c.t("测测你是哪型 →", "Find your type →"), c.t("下载 Mac 版", "Get it for Mac"))}"""
-    title = c.t("你是哪种 AI 老板？· DONGO", "What kind of AI boss are you? · DONGO")
+{cta_dark(c, c.t("看看你是哪型 →", "Find your type →"), c.t("下载 Mac 版", "Get it for Mac"))}"""
+    title = c.t("你是哪种 AI 老板？· DANGO", "What kind of AI boss are you? · DANGO")
     desc = c.t(
-        "DONGO 看着你的 Claude Code / Codex 干活，测出你是 16 种 AI 老板里的哪一种，再算出公司规模和压榨率。全在本机算，不上传。",
-        "DONGO watches your Claude Code and Codex work and tells you which of 16 AI bosses you are, plus your company size and margin. Runs locally; nothing is uploaded.",
+        "DANGO 看着你的 Claude Code / Codex 干活，测出你是 16 种 AI 老板里的哪一种，再算出公司规模和压榨率。全在本机算，不上传。",
+        "DANGO watches your Claude Code and Codex work and tells you which of 16 AI bosses you are, plus your company size and margin. Runs locally; nothing is uploaded.",
     )
     return page(c, title, desc, body)
 
@@ -450,10 +450,10 @@ def types_page(c):
 {cells}
 </section>
 <p class="pairs-note">{c.t("每型一个招牌动作。四个字母怎么判，见", "Each type has its signature move. For how the letters are decided, see")} <a class="text-link" href="{c.link("how/")}">{c.t("怎么算", "How it works")}</a>{c.t("。", ".")}</p>
-{cta_dark(c, c.t("测测你是哪型 →", "Find your type →"), c.t("下载 Mac 版", "Get it for Mac"))}"""
-    title = c.t("16 种 AI 老板 · DONGO", "16 AI boss types · DONGO")
-    desc = c.t("DONGO 老板人格测试的 16 型图鉴：左边放权派，右边微操派，同一行就是绝配。",
-               "All 16 DONGO AI boss types: hands-off on the left, micromanagers on the right, perfect matches side by side.")
+{cta_dark(c, c.t("看看你是哪型 →", "Find your type →"), c.t("下载 Mac 版", "Get it for Mac"))}"""
+    title = c.t("16 种 AI 老板 · DANGO", "16 AI boss types · DANGO")
+    desc = c.t("DANGO 老板人格的 16 型图鉴：左边放权派，右边微操派，同一行就是绝配。",
+               "All 16 DANGO AI boss types: hands-off on the left, micromanagers on the right, perfect matches side by side.")
     return page(c, title, desc, body, current="types")
 
 
@@ -482,7 +482,7 @@ def type_page(c, code):
     <h1><span class="code">{code}</span><span class="name">{e(name)}</span></h1>
     <p class="roast"><span class="q" aria-hidden="true">“</span><span>{e(c.f(t, "roast"))}</span></p>
     <p class="portrait">{e(c.f(t, "portrait"))}</p>
-    <div class="cta-row"><a class="btn" href="{DOWNLOAD_URL}">{c.t("测测你是哪型 → 下载 DONGO", "Find your type → Get DONGO")}</a></div>
+    <div class="cta-row"><a class="btn" href="{DOWNLOAD_URL}">{c.t("看看你是哪型 → 下载 DANGO", "Find your type → Get DANGO")}</a></div>
   </div>
 </section>
 
@@ -503,9 +503,9 @@ def type_page(c, code):
   <p class="match-note">{c.t("绝配：前两个字母反过来，后两个不变。", "Perfect match: first two letters flipped, last two the same.")}</p>
 </section>
 
-{cta_dark(c, c.t("测测你是哪型 →", "Find your type →"), c.t("下载 DONGO", "Get DONGO"))}"""
+{cta_dark(c, c.t("看看你是哪型 →", "Find your type →"), c.t("下载 DANGO", "Get DANGO"))}"""
     title = f"{code} {name}"
-    return page(c, f"{title} · DONGO", c.f(t, "roast"), body, og_title=title, image=f"img/og/{code}.png")
+    return page(c, f"{title} · DANGO", c.f(t, "roast"), body, og_title=title, image=f"img/og/{code}.png")
 
 
 def how_page(c):
@@ -584,8 +584,8 @@ def how_page(c):
 
     body = f"""<section class="page-head">
   <h1>{c.t("怎么算", "How it works")}</h1>
-  <p class="sub">{c.t("所有门槛都是 DONGO 自己定的固定标准，不和别人比。用到的只有本机记下的数字：回合数、时长、改了几行、模型花了多少钱。",
-                      "Every threshold is a fixed DONGO standard, not a ranking against anyone else. The only inputs are numbers logged on your Mac: turns, minutes, lines changed, and what the models cost.")}</p>
+  <p class="sub">{c.t("所有门槛都是 DANGO 自己定的固定标准，不和别人比。用到的只有本机记下的数字：回合数、时长、改了几行、模型花了多少钱。",
+                      "Every threshold is a fixed DANGO standard, not a ranking against anyone else. The only inputs are numbers logged on your Mac: turns, minutes, lines changed, and what the models cost.")}</p>
   <nav class="toc" aria-label="{c.t("本页目录", "On this page")}">{toc_html}</nav>
 </section>
 
@@ -649,10 +649,10 @@ def how_page(c):
   </ul>
 </section>
 
-{cta_dark(c, c.t("测测你是哪型 →", "Find your type →"), c.t("下载 Mac 版", "Get it for Mac"))}"""
-    title = c.t("怎么算 · DONGO", "How it works · DONGO")
-    desc = c.t("DONGO 老板人格的四个字母、公司规模、压榨率和团子构成都怎么算。",
-               "How DONGO decides your four letters, your company size, your margin and your crew.")
+{cta_dark(c, c.t("看看你是哪型 →", "Find your type →"), c.t("下载 Mac 版", "Get it for Mac"))}"""
+    title = c.t("怎么算 · DANGO", "How it works · DANGO")
+    desc = c.t("DANGO 老板人格的四个字母、公司规模、压榨率和团子构成都怎么算。",
+               "How DANGO decides your four letters, your company size, your margin and your crew.")
     return page(c, title, desc, body, current="how")
 
 

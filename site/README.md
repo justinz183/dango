@@ -1,6 +1,6 @@
-# DONGO · AI 老板人格（ABTI）官网
+# DANGO · AI 老板人格（ABTI）官网
 
-给 DONGO 老板人格测试做的静态推广站：看到别人分享卡的人扫码进来，了解 16 型是什么意思、测试怎么算，然后去下载 App。中文在根目录，英文在 `/en/`，每页都有中文 / English 切换。
+给 DANGO 老板人格做的静态推广站：看到别人分享卡的人扫码进来，了解 16 型是什么意思、怎么算出来的，然后去下载 App。中文在根目录，英文在 `/en/`，每页都有中文 / English 切换。
 
 ## 页面
 
@@ -23,7 +23,7 @@ python3 -I site/build.py
 - 需要 Pillow（`-I` 模式下脚本会自己找用户目录里的 Pillow）。
 - 页面用 WebP 图；`img/og/` 里的 PNG 只给 og:image 用。
 - 样式只有一个文件 `site/site.css`，构建时拷到 `dist/assets/site.css`。
-- `build.py` 顶部两个常量：`SITE_URL`（拼 og:image 等绝对地址，现在是 `https://dongo.app`）和 `DOWNLOAD_URL`（下载按钮，现在是占位的 `#download`）。
+- `build.py` 顶部两个常量：`SITE_URL`（拼 og:image 等绝对地址，现在是 `https://dango.app`）和 `DOWNLOAD_URL`（下载按钮，现在是占位的 `#download`）。
 
 本地预览：
 

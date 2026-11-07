@@ -1,6 +1,7 @@
-// The ABTI story (故事模式, handoff README "0 故事模式"): seven screens like
-// a year-in-review, then the boss card as the eighth. 540 × 960, white (the
-// scan is black), an eight-part progress bar, the word mark and a close
+// The ABTI story (故事模式, handoff README "0 故事模式"): six screens like
+// a year-in-review, then the boss card as the seventh. No guessing first:
+// it is a read-out, not a test (user, 2026-11-07). 540 × 960, white (the
+// scan is black), a seven-part progress bar, the word mark and a close
 // button on top. Click the right of the screen for the next one, the left
 // third or ‹ for the one before, ← → on the keyboard; closing jumps to the
 // card and copies it. Each screen can be shared as 1080 × 1920, the card
@@ -11,11 +12,8 @@ import AppKit
 
 final class StoryView: NSView {
     var data = JV(nil)
-    /// 1–8; 8 is the boss card.
+    /// 1–7; 7 is the boss card.
     var screen = 1
-    /// The guess on screen 1: a letter per dimension, or nil.
-    var guess: [String?] = [nil, nil, nil, nil]
-    var skipped = false
     /// Seconds since the screen came up (for the scan and the reveal).
     var t = 0.0
     /// Sharing draws the screen bare: no progress, no buttons, a link at the bottom.
@@ -33,10 +31,10 @@ final class StoryView: NSView {
     private let W: CGFloat = 540, H: CGFloat = 960, x0: CGFloat = 30
 
     func go(_ n: Int) {
-        screen = min(8, max(1, n))
+        screen = min(7, max(1, n))
         t = 0
         timer?.invalidate()
-        if !reduce && (screen == 2 || screen == 3) {
+        if !reduce && (screen == 1 || screen == 2) {
             timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] tm in
                 guard let self else { return tm.invalidate() }
                 self.t += 1.0 / 30.0
@@ -51,10 +49,10 @@ final class StoryView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         hits = []
-        let dark = screen == 2
+        let dark = screen == 1
         (dark ? AB.ink : .white).setFill()
         NSRect(x: 0, y: 0, width: W, height: H).fill()
-        if screen == 8 {
+        if screen == 7 {
             let card = BossCardView(size: NSSize(width: W, height: H), data: data)
             if bare { card.render(); return }
             // The story's top row stays; the card sits under it, a little smaller.
@@ -75,15 +73,13 @@ final class StoryView: NSView {
         }
         if !bare { chrome(dark) }
         switch screen {
-        case 1: guessScreen()
-        case 2: scanScreen()
-        case 3: revealScreen()
-        case 4: payScreen()
-        case 5: momentsScreen()
-        case 6: checkupScreen()
+        case 1: scanScreen()
+        case 2: revealScreen()
+        case 3: payScreen()
+        case 4: momentsScreen()
+        case 5: checkupScreen()
         default: matchScreen()
         }
-        if bare { put(AB.mono("dongo.app", 12, .semibold, dark ? .white : AB.ink), W / 2, H - 36, align: 1) }
         drawToast()
     }
 
@@ -91,24 +87,24 @@ final class StoryView: NSView {
 
     private func chrome(_ dark: Bool) {
         let ink = dark ? NSColor.white : AB.ink
-        let seg = (W - 30 - 7 * 4) / 8
-        for k in 0..<8 {
+        let seg = (W - 30 - 6 * 4) / 7
+        for k in 0..<7 {
             AB.round(NSRect(x: 15 + CGFloat(k) * (seg + 4), y: 9, width: seg, height: 2.5), 1.25, k < screen ? ink : (dark ? NSColor.white.withAlphaComponent(0.2) : AB.line))
         }
         let sub = dark ? NSColor.white.withAlphaComponent(0.6) : AB.gray
-        if screen == 8 {
-            // On the card: ‹ back to the seventh screen in place of the word mark.
+        if screen == 7 {
+            // On the card: ‹ back to the sixth screen in place of the word mark.
             let back = NSRect(x: 15, y: 18, width: 36, height: 36)
             AB.round(back, 18, AB.control)
             put(AB.sans("‹", 18, .medium), back.midX, back.minY + 7, align: 1)
             hits.append(("prev", back))
-            put(AB.sans(L("老板人格测试", "AI Boss Type"), 11, .regular, sub), back.maxX + 10, 29)
+            put(AB.sans(L("老板人格", "AI Boss Type"), 11, .regular, sub), back.maxX + 10, 29)
         } else {
             let mw = AB.wordmark(15, 27, size: 13, color: ink)
-            put(AB.sans(L("老板人格测试", "AI Boss Type"), 11, .regular, sub), 15 + mw + 10, 29)
+            put(AB.sans(L("老板人格", "AI Boss Type"), 11, .regular, sub), 15 + mw + 10, 29)
         }
         var rx = W - 15 - 36 - 12
-        if screen == 8 {
+        if screen == 7 {
             // The card is the thing to send: its own share button up here.
             let s = AB.sans(L("⇪  分享总卡", "⇪  Share card"), 12, .semibold, .white)
             let r = NSRect(x: rx - s.size().width - 24, y: 18, width: s.size().width + 24, height: 36)
@@ -117,7 +113,7 @@ final class StoryView: NSView {
             hits.append(("shareCard", r))
             rx = r.minX - 12
         }
-        put(AB.mono("\(screen) / 8", 11, .regular, sub), rx, 29, align: 2)
+        put(AB.mono("\(screen) / 7", 11, .regular, sub), rx, 29, align: 2)
         let close = NSRect(x: W - 15 - 36, y: 18, width: 36, height: 36)
         AB.round(close, 18, dark ? NSColor.white.withAlphaComponent(0.12) : AB.control)
         put(AB.sans("×", 17, .medium, ink), close.midX, close.minY + 7, align: 1)
@@ -164,71 +160,12 @@ final class StoryView: NSView {
     private var code: String { data["code"].s }
     private var dims: [JV] { data["dims"].arr }
 
-    // MARK: 1 · 先猜
-
-    private var options: [(String, [(String, String, String)])] {
-        [
-            (L("你怎么派活", "How you hand out work"), [("H", L("放权", "Hands-off"), L("派完就撒手，等结果", "Assign it, walk away, wait")),
-                                                   ("M", L("微操", "Micro"), L("每一步都要过目", "Review every step"))]),
-            (L("你多半在干", "What you mostly do"), [("B", L("开荒", "Build"), L("总在开新项目", "Always starting something new")),
-                                                ("F", L("修缮", "Fix"), L("总在修老代码", "Always fixing old code"))]),
-            (L("你干活的范围", "How wide you go"), [("S", L("专精", "Specialist"), L("只干一类活", "One kind of work")),
-                                              ("G", L("跨界", "Generalist"), L("什么活都沾一点", "A bit of everything"))]),
-            (L("你几点干活", "When you work"), [("L", L("早鸟", "Lark"), L("白天把活干完", "Done by daylight")),
-                                           ("O", L("夜猫", "Owl"), L("天黑才进状态", "Comes alive after dark"))]),
-        ]
-    }
-
-    private func guessScreen() {
-        label(L("01 · 先猜", "01 · GUESS"), 104)
-        _ = title(L("你觉得你是\n什么样的老板？", "What kind of\nboss are you?"), 122)
-        put(AB.sans(L("先凭感觉选，等会儿对答案。猜错了才好玩。", "Go with your gut. We'll check in a minute. Wrong guesses are the fun part."), 13, .regular, AB.gray), x0, 208)
-        var y: CGFloat = 252
-        let cw = (W - 60 - 10) / 2
-        for (k, (q, opts)) in options.enumerated() {
-            put(AB.sans(q, 11.5, .regular, AB.gray), x0, y)
-            y += 20
-            for (j, o) in opts.enumerated() {
-                let r = NSRect(x: x0 + CGFloat(j) * (cw + 10), y: y, width: cw, height: 60)
-                let on = guess[k] == o.0
-                if on { AB.round(r, 14, AB.ink) } else { AB.round(r, 14, .white); AB.stroke(r, 14, AB.line, 1.2) }
-                let ink = on ? NSColor.white : AB.ink
-                put(AB.mono(o.0, 20, .bold, ink), r.minX + 16, r.midY - 13)
-                put(AB.sans(o.1, 14, .semibold, ink), r.minX + 44, r.minY + 12)
-                put(AB.sans(o.2, 11, .regular, on ? NSColor.white.withAlphaComponent(0.7) : AB.gray), r.minX + 44, r.minY + 33)
-                hits.append(("pick:\(k):\(o.0)", r))
-            }
-            y += 60 + 22
-        }
-        y += 6
-        put(AB.sans(L("你猜你是", "Your guess"), 13, .regular, AB.gray), x0, y + 15)
-        for k in 0..<4 {
-            let r = NSRect(x: x0 + 82 + CGFloat(k) * 52, y: y, width: 44, height: 50)
-            if let g = guess[k] {
-                AB.stroke(r, 10, AB.ink, 1.5)
-                put(AB.mono(g, 22, .bold), r.midX, r.midY - 14, align: 1)
-            } else {
-                AB.stroke(r, 10, color(hex: "#C9C9CE"), 1.2, dash: true)
-                put(AB.mono("?", 20, .regular, color(hex: "#C9C9CE")), r.midX, r.midY - 13, align: 1)
-            }
-        }
-        let left = guess.filter { $0 == nil }.count
-        let b = NSRect(x: x0, y: H - 24 - 40 - 72, width: W - 60, height: 48)
-        AB.round(b, 14, left == 0 ? AB.ink : color(hex: "#EDEDED"))
-        let bt = AB.sans(left == 0 ? L("猜好了，开始扫描 →", "Done, start the scan →") : L("还差 \(left) 个", "\(left) to go"), 15, .semibold, left == 0 ? .white : AB.gray)
-        put(bt, b.midX, b.midY - bt.size().height / 2, align: 1)
-        if left == 0 { hits.append(("start", b)) }
-        let skip = AB.sans(L("不猜了，直接扫描", "Skip it, just scan"), 12.5, .regular, AB.gray)
-        put(skip, W / 2, b.maxY + 18, align: 1)
-        hits.append(("skip", NSRect(x: W / 2 - skip.size().width / 2 - 8, y: b.maxY + 12, width: skip.size().width + 16, height: 28)))
-    }
-
-    // MARK: 2 · 扫描 (black)
+    // MARK: 1 · 扫描 (black)
 
     private func scanScreen() {
         let p = reduce ? 1 : min(1, t / 3.0)
         let days = data["scan_days"].i
-        label(L("02 · 扫描", "02 · SCAN"), 104, dark: true)
+        label(L("01 · 扫描", "01 · SCAN"), 104, dark: true)
         _ = title(p < 1 ? L("团子们正在\n翻你的历史", "Your dangos are going\nthrough your history") : L("翻完了，\n一共 \(days) 天", "Done.\n\(days) days in all"), 122, color: .white)
         let shown = Int((Double(days) * p).rounded())
         let n = AB.mono("\(shown)", 84, .semibold, .white, kern: -2)
@@ -261,11 +198,7 @@ final class StoryView: NSView {
         AB.para(AB.sans(L("🔒  只看数字：回合数、时长、改了几行、花了多少钱。不读代码，不读 prompt，什么都不上传。", "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded."), 11.5, .regular, NSColor.white.withAlphaComponent(0.7)), box.minX + 16, box.minY + 12, box.width - 32, lineHeight: 17)
         guard !bare else { return }
         let y2 = H - 24 - 40
-        let back = NSRect(x: x0, y: y2, width: 40, height: 40)
-        AB.round(back, 14, NSColor.white.withAlphaComponent(0.12))
-        put(AB.sans("‹", 18, .medium, .white), back.midX, back.minY + 8, align: 1)
-        hits.append(("prev", back))
-        var rp = NSRect(x: back.maxX + 10, y: y2, width: 60, height: 40)
+        var rp = NSRect(x: x0, y: y2, width: 60, height: 40)
         let rt = AB.sans(L("重播", "Replay"), 12.5, .semibold, .white)
         rp.size.width = rt.size().width + 28
         AB.round(rp, 14, NSColor.white.withAlphaComponent(0.12))
@@ -278,10 +211,10 @@ final class StoryView: NSView {
         if p >= 1 { hits.append(("next", gr)) }
     }
 
-    // MARK: 3 · 揭晓
+    // MARK: 2 · 揭晓
 
     private func revealScreen() {
-        label(L("03 · 揭晓", "03 · REVEAL"), 104)
+        label(L("02 · 揭晓", "02 · REVEAL"), 104)
         put(AB.sans(L("你是", "You are"), 15, .regular, AB.gray), x0, 132)
         let tw = (W - 60 - 30) / 4
         for (k, ch) in code.enumerated() {
@@ -305,38 +238,13 @@ final class StoryView: NSView {
             put(AB.sans(ABText.typeName(code), 30, .bold), W / 2, 556, align: 1)
             put(AB.sans(ABText.roast(code), 14, .regular), W / 2, 600, align: 1)
         }
-        if !skipped && (reduce || t >= 2.1) {
-            let box = NSRect(x: x0, y: 730, width: W - 60, height: 70)
-            AB.round(box, 16, AB.tile)
-            let gl = AB.sans(L("你猜的", "Your guess"), 12, .regular, AB.gray)
-            put(gl, box.minX + 16, box.minY + 14)
-            var gx = box.minX + 16 + gl.size().width + 10
-            var right = 0
-            var firstWrong: (String, String)?
-            for (k, ch) in code.enumerated() {
-                let g = guess[k] ?? "?"
-                let ok = g == String(ch)
-                if ok { right += 1 } else if firstWrong == nil { firstWrong = (g, String(ch)) }
-                let s = AB.mono(g, 15, .bold, ok ? AB.greenText : color(hex: "#B5B5BA"), kern: 2)
-                put(s, gx, box.minY + 11)
-                if !ok {
-                    color(hex: "#B5B5BA").setFill()
-                    NSRect(x: gx, y: box.minY + 21, width: s.size().width - 2, height: 1.2).fill()
-                }
-                gx += s.size().width + 6
-            }
-            put(AB.sans(L("猜中 \(right) / 4", "\(right) / 4 right"), 12, .semibold), box.maxX - 16, box.minY + 14, align: 2)
-            let lines = data["story"]["guess_lines"]
-            let line = firstWrong.map { lines["\($0.0)>\($0.1)"].s } ?? lines["all_right"].s
-            put(AB.sans(line, 13, .regular), box.minX + 16, box.minY + 40)
-        }
         nav(replay: true)
     }
 
-    // MARK: 4 · 发工资
+    // MARK: 3 · 发工资
 
     private func payScreen() {
-        label(L("04 · 发工资", "04 · PAYDAY"), 104)
+        label(L("03 · 发工资", "03 · PAYDAY"), 104)
         put(AB.sans(L("团子们替你打了", "Your dangos did"), 17, .medium), x0, 128)
         let big = AB.mono(fmtUSD(data["usd"].d), 54, .semibold, kern: -1.5)
         put(big, x0 - 2, 150)
@@ -398,11 +306,11 @@ final class StoryView: NSView {
         nav()
     }
 
-    // MARK: 5 · 名场面
+    // MARK: 4 · 名场面
 
     private func momentsScreen() {
         let days = data["scan_days"].i
-        label(L("05 · 名场面", "05 · MOMENTS"), 104)
+        label(L("04 · 名场面", "04 · MOMENTS"), 104)
         _ = title(L("这 \(days) 天里，\n团子们记得这些", "In these \(days) days,\nyour dangos remember"), 122, size: 28)
         let mo = data["moments"]
         var cards: [(String, String, String)] = []
@@ -443,11 +351,11 @@ final class StoryView: NSView {
         nav()
     }
 
-    // MARK: 6 · 体检
+    // MARK: 5 · 体检
 
     private func checkupScreen() {
-        label(L("06 · 体检", "06 · CHECKUP"), 104)
-        put(AB.sans(L("DONGO 体检报告", "DONGO Lab Report"), 24, .heavy), x0, 124)
+        label(L("05 · 体检", "05 · CHECKUP"), 104)
+        put(AB.sans(L("DANGO 体检报告", "DANGO Lab Report"), 24, .heavy), x0, 124)
         let date = data["date"].s
         let no = "No. ABTI-" + date.suffix(5).replacingOccurrences(of: "-", with: "") + String(format: "-%04d", data["scan_days"].i)
         put(AB.mono(no, 10, .regular, AB.gray), W - x0, 136, align: 2)
@@ -494,7 +402,7 @@ final class StoryView: NSView {
             color(hex: "#C2410C").withAlphaComponent(0.85).setStroke()
             ring.stroke()
             put(AB.sans("★", 13, .bold, color(hex: "#C2410C")), c.x, c.y - 34, align: 1)
-            put(AB.sans("DONGO", 15, .heavy, color(hex: "#C2410C")), c.x, c.y - 16, align: 1)
+            put(AB.sans("DANGO", 15, .heavy, color(hex: "#C2410C")), c.x, c.y - 16, align: 1)
             put(AB.sans(L("体检专用章", "LAB APPROVED"), 11, .semibold, color(hex: "#C2410C")), c.x, c.y + 4, align: 1)
         }
         y = max(y, c.y + 40) + 14
@@ -507,11 +415,11 @@ final class StoryView: NSView {
         nav()
     }
 
-    // MARK: 7 · 绝配
+    // MARK: 6 · 绝配
 
     private func matchScreen() {
         let m = data["match"]["code"].s
-        label(L("07 · 绝配", "07 · MATCH"), 104)
+        label(L("06 · 绝配", "06 · MATCH"), 104)
         put(AB.sans(L("你的绝配是", "Your perfect match"), 17, .medium), x0, 128)
         put(AB.join([AB.mono(m + " ", 30, .bold), AB.sans(ABText.typeName(m), 30, .bold)]), x0, 152)
         let iw = (W - 60 - 30) / 2
@@ -535,8 +443,8 @@ final class StoryView: NSView {
         y += 22
         let box = NSRect(x: x0, y: y, width: W - 60, height: 74)
         AB.round(box, 18, AB.tile)
-        put(AB.sans(L("@ 一个这样的朋友来测", "@ a friend who's like this"), 14, .bold), box.minX + 18, box.minY + 18)
-        put(AB.sans(L("TA 测完，你们俩可以合成一张合盘卡", "Once they've taken it, you two get a pair card"), 11.5, .regular, AB.gray), box.minX + 18, box.minY + 42)
+        put(AB.sans(L("@ 一个这样的朋友来看看", "@ a friend who's like this"), 14, .bold), box.minX + 18, box.minY + 18)
+        put(AB.sans(L("TA 装上团子看完自己的，你们俩可以合成一张合盘卡", "Once they've seen theirs, you two get a pair card"), 11.5, .regular, AB.gray), box.minX + 18, box.minY + 42)
         let b = NSRect(x: box.maxX - 16 - 96, y: box.midY - 20, width: 96, height: 40)
         AB.round(b, 12, AB.ink)
         put(AB.sans(L("复制邀请", "Copy invite"), 13, .semibold, .white), b.midX, b.midY - 9, align: 1)
@@ -580,15 +488,15 @@ final class StoryView: NSView {
         downAt = nil
         if let (id, _) = hits.last(where: { $0.1.contains(p) }) {
             act(id)
-        } else if screen != 1 && screen != 8 {
-            if p.x < W / 3 { go(screen - 1) } else if screen != 2 || t >= 3 || reduce { go(screen + 1) }
+        } else if screen != 7 {
+            if p.x < W / 3 { if screen > 1 { go(screen - 1) } } else if screen != 1 || t >= 3 || reduce { go(screen + 1) }
         }
     }
 
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
-        case 123: go(screen - 1)
-        case 124: if screen != 1 { go(screen + 1) }
+        case 123: if screen > 1 { go(screen - 1) }
+        case 124: go(screen + 1)
         case 53: act("close")
         default: super.keyDown(with: event)
         }
@@ -597,31 +505,21 @@ final class StoryView: NSView {
     private func act(_ id: String) {
         switch id {
         case "close":
-            if screen == 8 { onClose?() } else { go(8); copyCard() }
-        case "prev": go(screen - 1)
+            if screen == 7 { onClose?() } else { go(7); copyCard() }
+        case "prev": if screen > 1 { go(screen - 1) }
         case "next": go(screen + 1)
         case "replay": go(screen)
-        case "start": go(2)
-        case "skip":
-            skipped = true
-            go(2)
         case "share": shareScreen()
         case "shareCard": copyCard()
         case "invite":
             let m = data["match"]["code"].s
-            let line = L("我测出来是 \(code) \(ABText.typeName(code))，你的绝配可能是 \(m) \(ABText.typeName(m))。来测测你是什么老板：",
-                         "I got \(code) \(ABText.typeName(code)). My perfect match might be \(m) \(ABText.typeName(m)). What kind of AI boss are you? ") + AB.site(m, ref: "invite")
+            // No link: the domain isn't ours (user 2026-11-07: 「不需要二维码dango.app，啥都不需要」).
+            let line = L("我是 \(code) \(ABText.typeName(code))，你的绝配可能是 \(m) \(ABText.typeName(m))。",
+                         "I got \(code) \(ABText.typeName(code)). My perfect match might be \(m) \(ABText.typeName(m)).")
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(line, forType: .string)
             say(L("邀请复制好了，可以直接粘贴", "Invite copied; paste it anywhere"))
-        default:
-            if id.hasPrefix("pick:") {
-                let parts = id.split(separator: ":")
-                let k = Int(parts[1]) ?? 0, letter = String(parts[2])
-                guess[k] = guess[k] == letter ? nil : letter
-                skipped = false
-                needsDisplay = true
-            }
+        default: break
         }
     }
 
@@ -630,8 +528,6 @@ final class StoryView: NSView {
         let v = StoryView(frame: NSRect(x: 0, y: 0, width: W, height: H))
         v.data = data
         v.screen = screen
-        v.guess = guess
-        v.skipped = skipped
         v.t = 10
         v.bare = true
         try? FileManager.default.createDirectory(atPath: exportDir, withIntermediateDirectories: true)
@@ -643,7 +539,7 @@ final class StoryView: NSView {
     func copyCard() {
         let v = BossCardView(size: NSSize(width: W, height: H), data: data)
         try? FileManager.default.createDirectory(atPath: exportDir, withIntermediateDirectories: true)
-        if exportPage(v, exportDir + "/abti-\(code).png", copy: true) { say(L("总卡存好了，也复制到剪贴板了", "Card saved to ~/Pictures/DONGO and copied")) }
+        if exportPage(v, exportDir + "/abti-\(code).png", copy: true) { say(L("总卡存好了，也复制到剪贴板了", "Card saved to ~/Pictures/DANGO and copied")) }
     }
 }
 
@@ -653,12 +549,10 @@ final class StoryWindow {
 
     static func show() {
         if let w = shared, let v = w.contentView as? StoryView {
-            // Closed earlier: start again from the guess, on fresh numbers.
+            // Closed earlier: straight to the card, on fresh numbers.
             if !w.isVisible {
                 v.data = dangoJSON(["abti", "--json"]) ?? v.data
-                v.guess = [nil, nil, nil, nil]
-                v.skipped = false
-                v.go(1)
+                v.go(7)
             }
             NSApp.activate(ignoringOtherApps: true)
             w.makeKeyAndOrderFront(nil)
@@ -684,11 +578,14 @@ final class StoryWindow {
         w.contentView = v
         w.center()
         shared = w
+        // The story plays once; after that the result is the card, and ‹
+        // walks back through the story.
+        let seen = UserDefaults.standard.bool(forKey: "abtiShown")
         UserDefaults.standard.set(true, forKey: "abtiShown")
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
         w.makeFirstResponder(v)
-        v.go(1)
+        v.go(seen ? 7 : 1)
     }
 }
 

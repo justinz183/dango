@@ -54,7 +54,7 @@ stage="$(mktemp -d)"
 cp -R "$app" "$stage/"
 ln -s /Applications "$stage/Applications"
 cat > "$stage/先读我.txt" <<'EOF'
-DONGO（打工团子）
+DANGO（打工团子）
 
 1. 把 Dango 拖进「应用程序」文件夹，然后打开它。
 2. 第一次打开时 macOS 可能会说「无法验证开发者」：打开「系统设置 → 隐私与安全性」，往下翻，点「仍要打开」，再打开一次 Dango。
@@ -69,7 +69,7 @@ DONGO（打工团子）
 最后把「应用程序」里的 Dango 移到废纸篓。
 EOF
 cat > "$stage/Read Me.txt" <<'EOF'
-DONGO (Dango)
+DANGO (Dango)
 
 1. Drag Dango into the Applications folder, then open it.
 2. The first time, macOS may say it can't verify the developer: open System Settings → Privacy & Security, scroll down, click "Open Anyway", and open Dango again.
@@ -91,7 +91,7 @@ echo "built $dmg"
 
 # The one-line install: the app zipped as macOS zips apps (signatures kept),
 # and the installer with this version, the zip's checksum and the address.
-url="${DANGO_RELEASE_URL:-https://dongo.app}"
+url="${DANGO_RELEASE_URL:-https://dango.app}"
 zip="$out/Dango-$version.zip"
 rm -f "$zip"
 ditto -c -k --keepParent "$app" "$zip"
