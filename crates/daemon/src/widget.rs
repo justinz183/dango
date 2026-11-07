@@ -309,16 +309,20 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
     let prev_week = snapshot::counter(conn, "usd", &format!("week:{}", week_key(today - Duration::days(7))));
     let days = days_together(conn, tz, now);
     let lang = cfg.lang();
-    let en = lang.en();
     let job_name = job.map(|j| t.name_in(j, lang).to_string());
     let s = |zh: &str, en: &str| lang.t(zh, en).to_string();
     let (mood, line) = if working > 0 && since < 20 * MIN_MS {
         if hour < 5 {
             ("sleepy", s("这么晚了，还在干。", "Still at it this late."))
         } else if subagents > 0 {
-            ("focused", if en { format!("Working with {subagents} helpers.") } else { format!("带着 {subagents} 个帮手在干。") })
+            ("focused", lang.f("带着 {} 个帮手在干。", "Working with {} helpers.", &[&subagents.to_string()]))
         } else if let Some(j) = &job_name {
-            ("focused", if en { format!("Working as {} right now. Don't rush me.", a_job(j)) } else { format!("在当{j}，别催。") })
+            let j = match lang {
+                Lang::En => a_job(j),
+                Lang::Fr | Lang::Es => dango_core::i18n::lower_first(j),
+                _ => j.clone(),
+            };
+            ("focused", lang.f("在当{}，别催。", "Working as {} right now. Don't rush me.", &[&j]))
         } else {
             ("focused", s("在做了，别催。", "On it. Don't rush me."))
         }
@@ -342,16 +346,17 @@ pub fn character(conn: &Connection, tz: Tz, cfg: &Config, o: &Output, now: i64, 
         } else {
             let job = occupation::main(&work_of(&work)).map(|o| t.name_in(&o, lang).to_string()).unwrap_or_default();
             let h = fmt_hours_in(pd * k.units.minutes_per_day / 60.0, lang);
-            ("happy", if en { format!("Just did {h} of {} work, worth {}.", dango_core::i18n::lower_first(&job), fmt_usd(usd)) } else { format!("刚干了 {h} 的{job}活，值 {}。", fmt_usd(usd)) })
+            let job = if matches!(lang, Lang::En | Lang::Fr | Lang::Es) { dango_core::i18n::lower_first(&job) } else { job };
+            ("happy", lang.f("刚干了 {} 的{}活，值 {}。", "Just did {} of {} work, worth {}.", &[&h, &job, &fmt_usd(usd)]))
         }
     } else if let Some(l) = o.week_leverage.filter(|l| *l >= 10.0 && o.week_cost >= 1.0) {
-        ("happy", if en { format!("This week every $1 of model did ${l:.0} of work.") } else { format!("这周每花 $1，干出 ${l:.0} 的活。") })
+        ("happy", lang.f("这周每花 $1，干出 ${} 的活。", "This week every $1 of model did ${} of work.", &[&format!("{l:.0}")]))
     } else if prev_week > 0.0 && o.week_usd > prev_week * 1.2 && local.weekday().num_days_from_monday() >= 3 {
-        ("happy", if en { format!("Up {} on last week.", fmt_usd(o.week_usd - prev_week)) } else { format!("这周比上周多 {}。", fmt_usd(o.week_usd - prev_week)) })
+        ("happy", lang.f("这周比上周多 {}。", "Up {} on last week.", &[&fmt_usd(o.week_usd - prev_week)]))
     } else if o.today_usd > 0.0 && (days == 7 || days % 30 == 0 || days % 100 == 0) {
-        ("happy", if en { format!("Day {days} of working together.") } else { format!("一起干活的第 {days} 天。") })
+        ("happy", lang.f("一起干活的第 {} 天。", "Day {} of working together.", &[&days.to_string()]))
     } else if o.today_usd > 0.0 {
-        ("happy", if en { format!("{} of work today.", fmt_usd(o.today_usd)) } else { format!("今天干了 {} 的活。", fmt_usd(o.today_usd)) })
+        ("happy", lang.f("今天干了 {} 的活。", "{} of work today.", &[&fmt_usd(o.today_usd)]))
     } else {
         ("waiting", s("我在，随时开工。", "I'm here. Ready when you are."))
     };

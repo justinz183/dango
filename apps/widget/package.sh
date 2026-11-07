@@ -90,13 +90,19 @@ rm -rf "$stage"
 echo "built $dmg"
 
 # The one-line install: the app zipped as macOS zips apps (signatures kept),
-# and the installer with this version, the zip's checksum and the address.
-url="${DANGO_RELEASE_URL:-https://dango.app}"
+# and, when there is an address the files will be served from, the installer
+# with this version, the zip's checksum and that address. There is no
+# default address (2026-11-07: dango.app is not ours; user: 「不需要dango.app」).
 zip="$out/Dango-$version.zip"
-rm -f "$zip"
+rm -f "$zip" "$out/install.sh"
 ditto -c -k --keepParent "$app" "$zip"
-sum="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
-sed -e "s|@VERSION@|$version|g" -e "s|@SHA256@|$sum|g" -e "s|@BASE_URL@|${url%/}|g" apps/widget/install.sh.in > "$out/install.sh"
-chmod +x "$out/install.sh"
-echo "built $zip and $out/install.sh (for ${url%/})"
-[ -n "${DANGO_RELEASE_URL:-}" ] || echo "note: DANGO_RELEASE_URL is not set; install.sh points at $url"
+echo "built $zip"
+if [ -n "${DANGO_RELEASE_URL:-}" ]; then
+  url="$DANGO_RELEASE_URL"
+  sum="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
+  sed -e "s|@VERSION@|$version|g" -e "s|@SHA256@|$sum|g" -e "s|@BASE_URL@|${url%/}|g" apps/widget/install.sh.in > "$out/install.sh"
+  chmod +x "$out/install.sh"
+  echo "built $out/install.sh (for ${url%/})"
+else
+  echo "note: no DANGO_RELEASE_URL, so no install.sh (set it to an address you control)"
+fi

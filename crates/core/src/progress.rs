@@ -145,17 +145,17 @@ pub fn record_label(key: &str) -> &'static str {
 
 /// `record_label` in either language.
 pub fn record_label_in(key: &str, lang: crate::i18n::Lang) -> &'static str {
-    if !lang.en() {
+    if lang == crate::i18n::Lang::Zh {
         return record_label(key);
     }
-    match key {
+    crate::i18n::tr(lang, match key {
         "max_day_usd" => "best day",
         "max_day" => "most person-days in a day",
         "max_session" => "most person-days in a session",
         "max_leverage" => "best session time leverage",
         "max_streak" => "longest streak",
         _ => "record",
-    }
+    })
 }
 
 #[cfg(test)]

@@ -54,7 +54,7 @@ fn fmt_record(key: &str, v: f64) -> String {
 }
 
 pub fn stats(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<String> {
-    if cfg.lang().en() {
+    if cfg.lang() != dango_core::i18n::Lang::Zh {
         return stats_en(conn, tz, now);
     }
     let c = snapshot::company(conn, tz, cfg.general.weekly_target, now)?;

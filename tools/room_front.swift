@@ -34,7 +34,8 @@ for x in 0..<x1 {
 // cushions dip deep, so never open more than the old cut did.
 var smooth = tops
 for i in 0..<x1 {
-    let w = tops[max(0, i - 10)...min(x1 - 1, i + 10)].sorted()
+    let r = Int((5 * k).rounded())  // 5 points either side
+    let w = tops[max(0, i - r)...min(x1 - 1, i + r)].sorted()
     smooth[i] = min(w[w.count / 2], rectTop + Int(2.5 * k))
 }
 

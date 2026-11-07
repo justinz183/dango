@@ -71,9 +71,16 @@ func roleArt(_ art: String) -> NSImage? {
 }
 
 /// A config entry's words in the language.
+/// "工作室级" / "Studio tier" for a company size named in any language.
+func scalePill(_ named: String) -> String {
+    let tier = abtiConfig["scale_tiers"].arr.first { [$0["name_zh"].s, $0["name_en"].s, cw($0, "name")].contains(named) }
+    let n = tier.map { cw($0, "name") } ?? named
+    return L(n + "级", n + " tier")
+}
+
 func cw(_ v: JV, _ k: String) -> String {
-    let x = v[k + (lang == "en" ? "_en" : "_zh")].s
-    return x.isEmpty ? v[k + "_zh"].s : x
+    let zh = v[k + "_zh"].s, en = v[k + "_en"].s
+    return L(zh, en.isEmpty ? zh : en)
 }
 
 // MARK: - Words in the page's language (the result carries ids and numbers)
@@ -84,6 +91,8 @@ enum ABText {
     static func roast(_ code: String) -> String { cw(types[code], "roast") }
     static func matchLine(_ code: String) -> String { cw(types[code], "match_line") }
     static func scale(_ i: Int) -> JV { abtiConfig["scale_tiers"][i] }
+    /// A size threshold, short: 10000 → "10k", 10000000 → "10M".
+    static func shortUSD(_ v: Double) -> String { v >= 1e6 ? "\(Int(v / 1e6))M" : v >= 1e3 ? "\(Int(v / 1e3))k" : "\(Int(v))" }
     static func margin(_ i: Int) -> JV { abtiConfig["margin_tiers"][i] }
 
     /// A crew entry's name: a role, a hidden role, or "other".
@@ -94,8 +103,8 @@ enum ABText {
     }
 
     static func dimNames(_ id: String) -> [String] {
-        let x = abtiConfig["dimensions"][id][lang == "en" ? "name_en" : "name_zh"]
-        return [x[0].s, x[1].s]
+        let x = abtiConfig["dimensions"][id]
+        return (0..<2).map { L(x["name_zh"][$0].s, x["name_en"][$0].s) }
     }
 
     /// A check-up line: its label, the value as shown, its tier and colour.
@@ -106,7 +115,7 @@ enum ABText {
         let shown: String
         switch id {
         case "tokens_total": shown = compact(v)
-        case "lines_added": shown = lang == "en" ? compact(v) : compact(v) + "行"
+        case "lines_added": shown = L(compact(v) + "行", compact(v))
         case "first_try_pass", "night_shift": shown = AB.pct(v)
         case "longest_streak": shown = L("\(Int(v)) 天", "\(Int(v)) days")
         default: shown = L("\(Int(v)) 个", "\(Int(v))")
@@ -114,19 +123,20 @@ enum ABText {
         if (c["too_few"].raw as? Bool) == true { return (label, shown, cw(x, "too_few"), AB.gray) }
         let tiers = x["tiers"].arr
         let t = tiers.last { v >= $0[0].d } ?? tiers.first ?? JV(nil)
-        return (label, shown, t[lang == "en" ? 2 : 1].s, t[3].isNull ? AB.ink : color(hex: t[3].s))
+        return (label, shown, L(t[1].s, t[2].s), t[3].isNull ? AB.ink : color(hex: t[3].s))
     }
 
-    /// 128.4 亿 / 12.8B; 21.6 万 / 216K.
+    /// 128.4 亿 / 12.8B; 21.6 万 / 216K (万 / 億 in Japanese, 만 / 억 in Korean).
     static func compact(_ v: Double) -> String {
-        if lang == "en" {
+        if !cjk {
             if v >= 1e9 { return String(format: "%.1fB", v / 1e9) }
             if v >= 1e6 { return String(format: "%.1fM", v / 1e6) }
             if v >= 1e3 { return String(format: "%.0fK", v / 1e3) }
             return String(format: "%.0f", v)
         }
-        if v >= 1e8 { return String(format: "%.1f 亿", v / 1e8) }
-        if v >= 1e4 { return String(format: "%.1f 万", v / 1e4) }
+        let (wan, yi) = lang == "ja" ? ("万", "億") : lang == "ko" ? ("만", "억") : ("万", "亿")
+        if v >= 1e8 { return String(format: "%.1f ", v / 1e8) + yi }
+        if v >= 1e4 { return String(format: "%.1f ", v / 1e4) + wan }
         return String(format: "%.0f ", v)
     }
 }
@@ -269,9 +279,24 @@ enum AB {
         put(t, x, y)
         if let right, !right.isEmpty {
             let r = rightMono ? mono(right, 10.5, .regular, gray) : sans(right, 10.5, .regular, gray)
-            put(r, x + w, y + t.size().height - r.size().height - 1, align: 2)
+            // Beside the title when both fit (long in French and Spanish), else under it.
+            if t.size().width + 12 + r.size().width <= w {
+                put(r, x + w, y + t.size().height - r.size().height - 1, align: 2)
+            } else {
+                put(r, x, y + t.size().height + 2)
+                return t.size().height + r.size().height + 2
+            }
         }
         return t.size().height
+    }
+
+    /// One line of text at `size`, smaller (down to `least`) until it is
+    /// `w` wide, then cut with "…": translations run longer than the design.
+    static func fitLine(_ make: (CGFloat) -> NSAttributedString, _ size: CGFloat, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, least: CGFloat) {
+        var s = size
+        while make(s).size().width > w && s > least { s -= 0.5 }
+        let t = make(s)
+        t.draw(with: NSRect(x: x, y: y + (size - s) * 0.5, width: w, height: t.size().height + 2), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     static func pct(_ v: Double) -> String { String(format: "%.0f%%", v * 100) }
@@ -288,10 +313,7 @@ enum AB {
     static func monthDay(_ day: String) -> String {
         let p = day.split(separator: "-").compactMap { Int($0) }
         guard p.count == 3 else { return day }
-        if lang == "en" {
-            return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][p[1] - 1] + " \(p[2])"
-        }
-        return "\(p[1]) 月 \(p[2]) 日"
+        return Dates.monthDay(p[1], p[2])
     }
 
     static func date(_ day: String) -> Date? {
@@ -305,7 +327,7 @@ enum AB {
     static func weekday(_ day: String) -> String {
         guard let d = date(day) else { return "" }
         let k = (Calendar(identifier: .gregorian).component(.weekday, from: d) + 5) % 7
-        return lang == "en" ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][k] : ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][k]
+        return Dates.weekday(k)
     }
 
     static func short(_ day: String) -> String { day.count >= 10 ? String(day.dropFirst(5)) : day }
@@ -415,24 +437,24 @@ final class BossCardView: ABPage {
         let tx = x0 + 232 + 16, tw = W - 232 - 16
         let youAre = AB.mono(L("你是", "YOU ARE"), 11, .regular, AB.gray)
         let codeT = AB.mono(code, 42, .semibold, kern: 1.6)
-        let nameT = AB.sans(ABText.typeName(code), lang == "en" ? 26 : 30, .semibold, kern: lang == "en" ? -0.5 : -0.6)
-        let nameH = AB.para(nameT, tx, 0, tw, lineHeight: (lang == "en" ? 26 : 30) * 1.12, draw: false)
+        let nameT = AB.sans(ABText.typeName(code), cjk ? 30 : 26, .semibold, kern: cjk ? -0.6 : -0.5)
+        let nameH = AB.para(nameT, tx, 0, tw, lineHeight: (cjk ? 30 : 26) * 1.12, draw: false)
         let colH = youAre.size().height + 3 + 46 + 3 + nameH + 11 + 22
         var cy = y + (186 - colH) / 2
         put(youAre, tx, cy)
         cy += youAre.size().height + 3
         put(codeT, tx - 1, cy - 4)
         cy += 46 + 3
-        AB.para(nameT, tx, cy, tw, lineHeight: (lang == "en" ? 26 : 30) * 1.12)
+        AB.para(nameT, tx, cy, tw, lineHeight: (cjk ? 30 : 26) * 1.12)
         cy += nameH + 11
         let scaleName = cw(ABText.scale(d["scale"]["index"].i), "name")
-        let p1 = AB.pill(lang == "en" ? scaleName + " tier" : scaleName + "级", tx, cy, dark: true)
+        let p1 = AB.pill(L(scaleName + "级", scaleName + " tier"), tx, cy, dark: true)
         AB.pill(L("压榨率 ", "Margin ") + String(format: "%.1f%%", d["margin"].d * 100), p1.maxX + 6, cy, dark: false)
         y += 186 + 14
 
         // 3. The roast.
         put(NSAttributedString(string: "“", attributes: [.font: NSFont(name: "Georgia-Bold", size: 40) ?? NSFont.boldSystemFont(ofSize: 40), .foregroundColor: color(hex: "#D4D4D8")]), x0, y - 6)
-        let roastSize: CGFloat = lang == "en" ? 14 : 16
+        let roastSize: CGFloat = cjk ? 16 : 14
         y += AB.para(AB.sans(ABText.roast(code), roastSize, .medium), x0 + 30, y + 2, W - 30, lineHeight: roastSize * 1.45) + 2 + 14
 
         // 4. The four dimensions.
@@ -445,7 +467,7 @@ final class BossCardView: ABPage {
                 lw = max(lw, AB.sans(dm["letters"][k].s + " " + names[k], 12.5, .semibold).size().width + 2)
             }
         }
-        let vw: CGFloat = lang == "en" ? 62 : 48
+        let vw: CGFloat = cjk ? 48 : 62
         let barX = x0 + lw + 10, barW = W - lw * 2 - vw - 30
         for dm in dims {
             let win = dm["winner"].i
@@ -497,9 +519,8 @@ final class BossCardView: ABPage {
         put(tail, x0 + big.size().width + 8, y + big.size().height - tail.size().height - 6)
         y += big.size().height + 2
         let lv = d["leverage"].isNull ? "—" : AB.lev(d["leverage"].d)
-        let paid = lang == "en"
-            ? "You paid them \(fmtUSD(d["cost"].d)) · \(lv) leverage · \(cw(ABText.margin(d["margin_tier"]["index"].i), "name"))"
-            : "你只发了 \(fmtUSD(d["cost"].d)) 工资 · 杠杆 \(lv) · \(cw(ABText.margin(d["margin_tier"]["index"].i), "name"))"
+        let tierName = cw(ABText.margin(d["margin_tier"]["index"].i), "name")
+        let paid = L("你只发了 \(fmtUSD(d["cost"].d)) 工资 · 杠杆 \(lv) · \(tierName)", "You paid them \(fmtUSD(d["cost"].d)) · \(lv) leverage · \(tierName)")
         put(AB.mono(paid, 11.5, .regular, AB.gray), x0, y)
         y += 16 + 14
 
@@ -519,7 +540,7 @@ final class BossCardView: ABPage {
 
         // 7. The crew.
         let crew = d["crew"].arr
-        let right = lang == "en" ? "\(d["scan_days"].i) days · \(fmtInt(d["sessions"].i)) sessions" : "\(d["scan_days"].i) 天 · \(fmtInt(d["sessions"].i)) 个会话"
+        let right = L("\(d["scan_days"].i) 天 · \(fmtInt(d["sessions"].i)) 个会话", "\(d["scan_days"].i) days · \(fmtInt(d["sessions"].i)) sessions")
         y += AB.header(L("团子构成", "Your crew"), right, x0, y, W, rightMono: true) + 6
         AB.crewBar(crew, x0, y, W)
         y += 8 + 7
@@ -543,7 +564,7 @@ final class BossCardView: ABPage {
         let mcode = d["match"]["code"].s
         put(AB.join([AB.sans(L("你的绝配：", "Your perfect match: "), 13.5, .semibold), AB.mono(mcode, 13.5, .semibold), AB.sans(" " + ABText.typeName(mcode), 13.5, .semibold)]), mx, box.minY + 8)
         let line = ABText.matchLine(code)
-        let tag = lang == "en" ? line + " Tag one." : line + "。@ 一个这样的朋友来看看"
+        let tag = L(line + "。@ 一个这样的朋友来看看", line + " Tag one.")
         AB.sans(tag, 12, .regular, AB.gray).draw(with: NSRect(x: mx, y: box.minY + 28, width: box.maxX - 12 - mx, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
 
         // 9. How it's counted, at the bottom (no link or QR code: the
@@ -616,7 +637,11 @@ final class ScaleView: ABPage {
         y += AB.header(L("你的公司多大", "How big is your company"), L("按团子替你打的工，固定门槛，不和别人比", "By your dangos' work, fixed thresholds, no ranking"), x0, y, W, size: 16) + 12
         let tiers = c["scale_tiers"].arr
         let mine = data["scale"]["index"].i
-        let ranges = ["< $1k", "$1k – 10k", "$10k – 100k", "$100k – 1M", "≥ $1M"]
+        // The ranges from abti.json's thresholds, e.g. "$10k – 100k".
+        let mins = tiers.map { ABText.shortUSD($0["min_usd"].d) }
+        let ranges = mins.indices.map { i in
+            i == 0 ? "< $" + mins[1] : i == mins.count - 1 ? "≥ $" + mins[i] : "$" + mins[i] + " – " + mins[i + 1]
+        }
         for (k, t) in tiers.enumerated() {
             let rowH: CGFloat = 51
             // Signal bars: k + 1 of 5 dark.
@@ -629,8 +654,9 @@ final class ScaleView: ABPage {
             if k == mine {
                 AB.pill(L("你在这", "You're here"), x0 + 46 + name.size().width + 8, y + 4, dark: true, size: 10.5, padX: 7, padY: 1.5)
             }
-            put(AB.sans(cw(t, "line"), 11.5, .regular, AB.gray), x0 + 46, y + 25)
-            put(AB.mono(ranges[min(k, 4)], 12, .semibold), x0 + W, y + 14, align: 2)
+            let range = AB.mono(ranges[k], 12, .semibold)
+            AB.fitLine({ AB.sans(cw(t, "line"), $0, .regular, AB.gray) }, 11.5, x0 + 46, y + 25, W - 46 - range.size().width - 12, least: 9.5)
+            put(range, x0 + W, y + 14, align: 2)
             y += rowH
             AB.line.setFill()
             NSRect(x: x0, y: y - 1, width: W, height: 1).fill()
@@ -677,7 +703,7 @@ final class RolesView: ABPage {
             let name = AB.sans(cw(r, "name"), 15, .semibold)
             put(name, x0 + 85, y + 9)
             put(AB.mono(r["art"].s, 10.5, .regular, AB.gray), x0 + 85 + name.size().width + 8, y + 12)
-            put(AB.sans(lang == "en" ? r["covers_en"].s : r["covers_zh"].s, 11.5, .regular, AB.gray), x0 + 68, y + 32)
+            put(AB.sans(cw(r, "covers"), 11.5, .regular, AB.gray), x0 + 68, y + 32)
             var ax = x0 + W
             for alt in r["alt_art"].arr.reversed() {
                 let got = AB.fit(roleArt(alt.s), NSRect(x: ax - 30, y: y + 14, width: 30, height: 26), align: 2)
@@ -690,17 +716,20 @@ final class RolesView: ABPage {
         y += 12
         let box = NSRect(x: x0, y: y, width: W, height: 100)
         AB.round(box, 16, AB.tile)
-        put(AB.join([AB.sans(L("隐藏款  ", "Hidden  "), 11.5, .semibold), AB.sans(L("占到 10% 以上才出现，算一个工种 · 金色闪光是隐藏款标记", "appear at 10%+ and count as a role · the gold sparkle marks them"), 11.5, .regular, AB.gray)]), box.minX + 14, box.minY + 12)
+        AB.fitLine({ AB.join([AB.sans(L("隐藏款  ", "Hidden  "), $0, .semibold), AB.sans(L("占到 10% 以上才出现，算一个工种 · 金色闪光是隐藏款标记", "appear at 10%+ and count as a role · the gold sparkle marks them"), $0, .regular, AB.gray)]) }, 11.5, box.minX + 14, box.minY + 12, box.width - 28, least: 9)
         let hidden = c["hidden_roles"].arr
         let cell = (box.width - 28) / CGFloat(max(1, hidden.count))
         for (k, h) in hidden.enumerated() {
             let cx = box.minX + 14 + CGFloat(k) * cell
             let art = h["art"].s.split(separator: "/").last.map { String($0).replacingOccurrences(of: ".png", with: "") } ?? ""
             AB.fit(abtiImage("hidden/" + art), NSRect(x: cx, y: box.minY + 32, width: cell, height: 40))
-            put(AB.sans(lang == "en" ? h["name_en"].s : h["name_zh"].s, 11, .regular), cx + cell / 2, box.minY + 76, align: 1)
+            put(AB.sans(cw(h, "name"), 11, .regular), cx + cell / 2, box.minY + 76, align: 1)
         }
         y += 100 + 8
-        put(AB.sans(L("跨界 = 有 3 个以上角色各占 10% 以上。算钱仍按 23 个职业各自的 BLS 时薪。", "Generalist = 3+ roles at 10% or more each. Money still uses each of the 23 jobs' BLS wage."), 10.5, .regular, AB.gray), x0, y)
+        let jobs = data["jobs"].i
+        let note = jobs > 0 ? L("跨界 = 有 3 个以上角色各占 10% 以上。算钱仍按 \(jobs) 个职业各自的 BLS 时薪。", "Generalist = 3+ roles at 10% or more each. Money still uses each of the \(jobs) jobs' BLS wage.")
+                            : L("跨界 = 有 3 个以上角色各占 10% 以上。算钱仍按每个职业各自的 BLS 时薪。", "Generalist = 3+ roles at 10% or more each. Money still uses each job's BLS wage.")
+        AB.fitLine({ AB.sans(note, $0, .regular, AB.gray) }, 10.5, x0, y, W, least: 8.5)
     }
 }
 
@@ -749,13 +778,9 @@ enum ReportText {
         case "month":
             let p = from.split(separator: "-")
             guard p.count >= 2 else { return from }
-            if lang == "en" {
-                let m = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][(Int(p[1]) ?? 1) - 1]
-                return "\(m) \(p[0])"
-            }
-            return "\(p[0]) 年 \(Int(p[1]) ?? 0) 月"
-        case "year": return L("\(from.prefix(4)) 年", String(from.prefix(4)))
-        case "total": return lang == "en" ? "Since " + AB.monthDay(from) : AB.monthDay(from) + "至今"
+            return Dates.yearMonth(Int(p[0]) ?? 0, Int(p[1]) ?? 1)
+        case "year": return Dates.year(Int(from.prefix(4)) ?? 0)
+        case "total": return L(AB.monthDay(from) + "至今", "Since " + AB.monthDay(from))
         default: return compact ? from + " · " + AB.weekday(from) : AB.monthDay(from) + " · " + AB.weekday(from)
         }
     }
@@ -805,7 +830,7 @@ enum ReportText {
 
     /// A month by its index (0 = January): "1月" / "Jan".
     static func month(_ k: Int) -> String {
-        lang == "en" ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][k % 12] : "\(k % 12 + 1)月"
+        Dates.monthShort(k % 12 + 1)
     }
 
     static func moneyLine(_ d: JV) -> String {
@@ -817,9 +842,7 @@ enum ReportText {
         return L("模型花了 \(fmtUSD(d["cost"].d)) · 杠杆 \(lv) · ", "Model cost \(fmtUSD(d["cost"].d)) · \(lv) leverage · ") + prevName(d) + " " + change(d["vs_prev"]).replacingOccurrences(of: " ", with: "")
     }
 
-    static let weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-    static let weekdaysEn = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    static func wd(_ k: Int) -> String { lang == "en" ? weekdaysEn[k % 7] : weekdays[k % 7] }
+    static func wd(_ k: Int) -> String { Dates.weekday(k) }
 }
 
 /// The margin tier's index for a total report (from its boss summary).
@@ -915,7 +938,7 @@ final class ShareView: ABPage {
                 AB.pill(chip, x0 + big.size().width + 12, y + 16, dark: false, size: 12.5, padX: 11, padY: 4, fill: AB.greenSoft, ink: AB.greenText)
             }
             y += 56
-            put(AB.mono(ReportText.moneyLine(d), 11.5, .regular, AB.gray), x0, y)
+            AB.fitLine({ AB.mono(ReportText.moneyLine(d), $0, .regular, AB.gray) }, 11.5, x0, y, W, least: 9)
             y += 26
             let boss = !d["boss"].isNull
             if boss { y = bossStrip(d, y) + 16 }
@@ -1022,7 +1045,7 @@ final class ShareView: ABPage {
         put(AB.mono(code, 30, .semibold, kern: 1.2), tx, y + 14)
         var cy = y + 52
         cy += AB.para(AB.sans(ABText.typeName(code), 21, .semibold), tx, cy, tw) + 8
-        let p1 = AB.pill(lang == "en" ? d["boss"]["scale"].s + " tier" : cw(abtiConfig["scale_tiers"].arr.first { cw($0, "name") == d["boss"]["scale"].s || $0["name_en"].s == d["boss"]["scale"].s } ?? JV(nil), "name") + "级", tx, cy, dark: true, size: 11.5)
+        let p1 = AB.pill(scalePill(d["boss"]["scale"].s), tx, cy, dark: true, size: 11.5)
         AB.pill(L("压榨率 ", "Margin ") + String(format: "%.1f%%", d["boss"]["margin"].d * 100), p1.maxX + 6, cy, dark: false, size: 11.5)
         cy += 30
         cy += AB.para(AB.sans("“" + ABText.roast(code) + "”", 12.5, .medium), tx, cy, tw, lineHeight: 18) + 10
@@ -1155,7 +1178,7 @@ final class ReportView: ABPage {
         if !d["lang"].s.isEmpty { lang = d["lang"].s }
         // Tabs, and the period with arrows.
         let tabs = ["day", "week", "month", "year", "total"].map { ($0, ReportText.kindName($0, share: false)) }
-        let tw: CGFloat = lang == "en" ? 60 : 50
+        let tw: CGFloat = cjk ? 50 : 60
         let cap = NSRect(x: x0, y: y, width: tw * CGFloat(tabs.count) + 6, height: 34)
         AB.round(cap, 17, AB.control)
         for (k, (id, name)) in tabs.enumerated() {
@@ -1285,7 +1308,7 @@ final class ReportView: ABPage {
             AB.fit(abtiImage("scene/T-" + code), NSRect(x: box.minX + 12, y: box.minY + 8, width: 110, height: 84))
             let tx = box.minX + 134
             put(AB.join([AB.mono(code + " ", 16, .semibold), AB.sans(ABText.typeName(code), 16, .semibold)]), tx, box.minY + 14)
-            let p1 = AB.pill(lang == "en" ? d["boss"]["scale"].s + " tier" : d["boss"]["scale"].s + "级", tx, box.minY + 40, dark: true, size: 11)
+            let p1 = AB.pill(scalePill(d["boss"]["scale"].s), tx, box.minY + 40, dark: true, size: 11)
             AB.pill(L("压榨率 ", "Margin ") + String(format: "%.1f%%", d["boss"]["margin"].d * 100) + " · " + cw(ABText.margin(abtiMarginIndex(d)), "name"), p1.maxX + 6, box.minY + 40, dark: false, size: 11)
             AB.sans(ABText.roast(code), 12, .regular, AB.gray).draw(with: NSRect(x: tx, y: box.minY + 68, width: box.maxX - 14 - tx, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         } else {

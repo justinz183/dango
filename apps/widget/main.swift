@@ -30,11 +30,155 @@ let agentLabel = "com.dango.widget"
 let agentPlist = NSHomeDirectory() + "/Library/LaunchAgents/\(agentLabel).plist"
 /// The dashboard's width: the v3 themes' panel is 440.
 let dashboardWidth: CGFloat = 440
-/// The interface language ("zh" / "en"): from widget.json, or from a card's
-/// report while it is drawn; remembered for the next launch.
+/// The interface language ("zh", "en", "ko", "ja", "fr" or "es"): from
+/// widget.json, or from a card's report while it is drawn; remembered for
+/// the next launch.
 var lang = UserDefaults.standard.string(forKey: "lang") ?? "zh"
-/// The Chinese or the English text.
-func L(_ zh: String, _ en: String) -> String { lang == "en" ? en : zh }
+/// The six languages, each named in itself (user, 2026-11-08: 「中英韩日法西」).
+let languages: [(code: String, name: String)] = [("zh", "中文"), ("en", "English"), ("ko", "한국어"), ("ja", "日本語"), ("fr", "Français"), ("es", "Español")]
+/// The text in the interface language: the Chinese or the English as
+/// written; Korean, Japanese, French and Spanish are the English looked up
+/// in assets/i18n/<code>.json.
+func L(_ zh: String, _ en: String) -> String {
+    switch lang {
+    case "zh": return zh
+    case "en": return en
+    default: return I18n.tr(en)
+    }
+}
+/// Set at the CJK sizes: Chinese, Japanese and Korean.
+var cjk: Bool { ["zh", "ja", "ko"].contains(lang) }
+
+/// The translation tables (assets/i18n, copied into the app's Resources):
+/// English text → the language's. A sentence with numbers or names in it
+/// is a template, "In {} days, your dangos did"; a translation may number
+/// the holes {0}, {1} to put them in its own order. tools/i18n_check.py
+/// lists what a table lacks; that text stays English.
+enum I18n {
+    private static var tables: [String: [String: String]] = [:]
+    private static var patterns: [String: [(NSRegularExpression, String)]] = [:]
+    private static var done: [String: String] = [:]
+
+    static func table(_ code: String) -> [String: String] {
+        if let t = tables[code] { return t }
+        var dirs: [URL] = []
+        if let e = ProcessInfo.processInfo.environment["DANGO_ASSETS"] { dirs.append(URL(fileURLWithPath: e).appendingPathComponent("i18n")) }
+        if let r = Bundle.main.resourceURL { dirs.append(r.appendingPathComponent("i18n")) }
+        dirs.append(URL(fileURLWithPath: "assets/i18n"))
+        var t: [String: String] = [:]
+        for d in dirs {
+            if let data = try? Data(contentsOf: d.appendingPathComponent(code + ".json")),
+               let j = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
+                t = j
+                break
+            }
+        }
+        tables[code] = t
+        return t
+    }
+
+    /// The English in the interface language: the table's line, or a
+    /// template's with the numbers and names put back; else the English.
+    static func tr(_ en: String) -> String {
+        let key = lang + "\u{1}" + en
+        if let s = done[key] { return s }
+        let t = table(lang)
+        var out = t[en] ?? en
+        if t[en] == nil {
+            let ns = en as NSString
+            for (re, tpl) in templates(lang, t) {
+                guard let m = re.firstMatch(in: en, range: NSRange(location: 0, length: ns.length)) else { continue }
+                out = fill(tpl, (1..<m.numberOfRanges).map { ns.substring(with: m.range(at: $0)) })
+                break
+            }
+        }
+        if done.count > 4000 { done.removeAll() }
+        done[key] = out
+        return out
+    }
+
+    private static func templates(_ code: String, _ t: [String: String]) -> [(NSRegularExpression, String)] {
+        if let p = patterns[code] { return p }
+        let p = t.filter { $0.key.contains("{}") && $0.key.replacingOccurrences(of: "{}", with: "").count > 1 }
+            .sorted { $0.key.count > $1.key.count }
+            .compactMap { k, v -> (NSRegularExpression, String)? in
+                let parts = k.components(separatedBy: "{}").map { NSRegularExpression.escapedPattern(for: $0) }
+                guard let re = try? NSRegularExpression(pattern: "^" + parts.joined(separator: "(.+?)") + "$", options: [.dotMatchesLineSeparators]) else { return nil }
+                return (re, v)
+            }
+        patterns[code] = p
+        return p
+    }
+
+    /// Fills `{}` holes in order, or `{0}`, `{1}` holes by number.
+    static func fill(_ tpl: String, _ args: [String]) -> String {
+        var out = tpl
+        if args.indices.contains(where: { out.contains("{\($0)}") }) {
+            for (i, a) in args.enumerated() { out = out.replacingOccurrences(of: "{\(i)}", with: a) }
+            return out
+        }
+        for a in args {
+            guard let r = out.range(of: "{}") else { break }
+            out.replaceSubrange(r, with: a)
+        }
+        return out
+    }
+}
+
+/// Months and weekdays, and dates written with them, in the interface language.
+enum Dates {
+    static func monthShort(_ m: Int) -> String {
+        let k = (m - 1 + 12) % 12
+        switch lang {
+        case "zh": return "\(k + 1)月"
+        case "ja": return "\(k + 1)月"
+        case "ko": return "\(k + 1)월"
+        case "fr": return ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."][k]
+        case "es": return ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"][k]
+        default: return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][k]
+        }
+    }
+    /// 0 = Monday.
+    static func weekday(_ k: Int) -> String {
+        let all: [String]
+        switch lang {
+        case "zh": all = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        case "ja": all = ["月", "火", "水", "木", "金", "土", "日"]
+        case "ko": all = ["월", "화", "수", "목", "금", "토", "일"]
+        case "fr": all = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
+        case "es": all = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+        default: all = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        }
+        return all[(k % 7 + 7) % 7]
+    }
+    /// "10 月 29 日", "Oct 29", "10월 29일", "10月29日", "29 oct.", "29 oct".
+    static func monthDay(_ m: Int, _ d: Int) -> String {
+        switch lang {
+        case "zh": return "\(m) 月 \(d) 日"
+        case "ja": return "\(m)月\(d)日"
+        case "ko": return "\(m)월 \(d)일"
+        case "fr", "es": return "\(d) " + monthShort(m)
+        default: return monthShort(m) + " \(d)"
+        }
+    }
+    /// "2026 年 10 月", "Oct 2026", "2026년 10월", "2026年10月", "oct. 2026".
+    static func yearMonth(_ y: Int, _ m: Int) -> String {
+        switch lang {
+        case "zh": return "\(y) 年 \(m) 月"
+        case "ja": return "\(y)年\(m)月"
+        case "ko": return "\(y)년 \(m)월"
+        default: return monthShort(m) + " \(y)"
+        }
+    }
+    static func year(_ y: Int) -> String {
+        switch lang {
+        case "zh": return "\(y) 年"
+        case "ja": return "\(y)年"
+        case "ko": return "\(y)년"
+        default: return "\(y)"
+        }
+    }
+}
 
 /// The dango the app carries (a packaged install, apps/widget/package.sh).
 /// In Contents/Helpers: next to the app's own "Dango" in Contents/MacOS it
@@ -312,7 +456,7 @@ final class DashboardView: NSView {
     func contentHeight() -> CGFloat { layoutV3(draw: false) }
 
     override func draw(_ dirtyRect: NSRect) {
-        _ = layoutV3(draw: true)
+        Appearance.drawing { _ = layoutV3(draw: true) }
     }
 
     /// "2026-10-29" → "10/29".
@@ -446,7 +590,7 @@ final class PetView: NSView {
             NSColor(calibratedWhite: 0.11, alpha: 1).setFill()
             bounds.fill()
         }
-        drawCard()
+        Appearance.drawing { drawCard() }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -483,6 +627,7 @@ final class PetView: NSView {
 final class App: NSObject, NSApplicationDelegate {
     var panel: NSPanel!
     var expanded: NSView!
+    var appearanceWatch: NSKeyValueObservation?
     var scroll: NSScrollView!
     var dashboard: DashboardView!
     var last: Model?
@@ -503,11 +648,11 @@ final class App: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        panel.appearance = NSAppearance(named: .aqua)
-        // The panel's white back, rounded as the design has it.
+        panel.appearance = NSAppearance(named: Appearance.dark ? .darkAqua : .aqua)
+        // The panel's back (white, or the dark theme's), rounded as the design has it.
         expanded = NSView(frame: NSRect(origin: .zero, size: NSSize(width: dashboardWidth, height: 600)))
         expanded.wantsLayer = true
-        expanded.layer?.backgroundColor = NSColor.white.cgColor
+        Appearance.drawing { expanded.layer?.backgroundColor = V3.surface.cgColor }
         expanded.layer?.cornerRadius = 36
         expanded.layer?.masksToBounds = true
         scroll = NSScrollView(frame: expanded.bounds)
@@ -557,6 +702,10 @@ final class App: NSObject, NSApplicationDelegate {
         fitPanel()
 
         ensureDaemon()
+        // macOS switching light / dark repaints the themed views.
+        appearanceWatch = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.appearanceChanged() }
+        }
         reload()
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reload() }
         Timer.scheduledTimer(withTimeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
@@ -783,16 +932,28 @@ final class App: NSObject, NSApplicationDelegate {
         exportItem.submenu = exportMenu()
         menu.addItem(exportItem)
         let langs = NSMenu()
-        for (code, title) in [("zh", "中文"), ("en", "English")] {
+        for (code, title) in languages {
             let item = NSMenuItem(title: title, action: #selector(setLanguage(_:)), keyEquivalent: "")
             item.representedObject = code
             item.state = lang == code ? .on : .off
             item.target = self
             langs.addItem(item)
         }
-        let langItem = NSMenuItem(title: "语言 / Language", action: nil, keyEquivalent: "")
+        // "Language" stays beside the word, so the menu is found in any language.
+        let langItem = NSMenuItem(title: lang == "en" ? "Language" : L("语言", "Language") + " / Language", action: nil, keyEquivalent: "")
         langItem.submenu = langs
         menu.addItem(langItem)
+        let looks = NSMenu()
+        for (code, title) in [("system", L("跟随系统", "Match the system")), ("light", L("浅色", "Light")), ("dark", L("深色（白团子）", "Dark (white dango)"))] {
+            let item = NSMenuItem(title: title, action: #selector(setAppearance(_:)), keyEquivalent: "")
+            item.representedObject = code
+            item.state = Appearance.choice == code ? .on : .off
+            item.target = self
+            looks.addItem(item)
+        }
+        let lookItem = NSMenuItem(title: L("外观", "Appearance"), action: nil, keyEquivalent: "")
+        lookItem.submenu = looks
+        menu.addItem(lookItem)
         let auto = NSMenuItem(title: L("登录时自动启动", "Start at login"), action: #selector(toggleAutostart), keyEquivalent: "")
         auto.state = FileManager.default.fileExists(atPath: agentPlist) ? .on : .off
         menu.addItem(auto)
@@ -833,6 +994,23 @@ final class App: NSObject, NSApplicationDelegate {
                 self?.pet?.flash(L("通知没打开：去「系统设置 → 通知 → Dango」允许", "Notifications are off: allow Dango in System Settings → Notifications"))
             }
         }
+    }
+
+    /// The appearance menu: match the system, light, or dark (white 团子).
+    @objc func setAppearance(_ sender: NSMenuItem) {
+        guard let code = sender.representedObject as? String else { return }
+        UserDefaults.standard.set(code, forKey: "appearance")
+        appearanceChanged()
+    }
+
+    /// Repaints everything themed (also when macOS switches light / dark).
+    @objc func appearanceChanged() {
+        let dark = Appearance.dark
+        panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        Appearance.drawing { expanded.layer?.backgroundColor = V3.surface.cgColor }
+        dashboard.needsDisplay = true
+        dashboard.subviews.forEach { $0.needsDisplay = true }
+        pet?.needsDisplay = true
     }
 
     /// The language menu: switches here at once and tells the daemon
@@ -995,10 +1173,12 @@ enum SettleNotice {
 
 // MARK: - Entry
 
-/// Renders a view offscreen at 2× to a PNG (for checks without a window).
+/// Renders a view offscreen at 2× (or `--scale N`) to a PNG, for checks
+/// without a window; on a Retina Mac the pixels are twice that again.
 func snapshot(_ v: NSView, _ size: NSSize, _ path: String) {
-    v.frame = NSRect(origin: .zero, size: NSSize(width: size.width * 2, height: size.height * 2))
-    v.scaleUnitSquare(to: NSSize(width: 2, height: 2))
+    let s = CGFloat(args.firstIndex(of: "--scale").flatMap { args.indices.contains($0 + 1) ? Double(args[$0 + 1]) : nil } ?? 2)
+    v.frame = NSRect(origin: .zero, size: NSSize(width: size.width * s, height: size.height * s))
+    v.scaleUnitSquare(to: NSSize(width: s, height: s))
     if let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
         v.cacheDisplay(in: v.bounds, to: rep)
         if let png = rep.representation(using: .png, properties: [:]) {
@@ -1008,6 +1188,10 @@ func snapshot(_ v: NSView, _ size: NSSize, _ path: String) {
 }
 
 let args = CommandLine.arguments
+// Snapshots in a theme or at an hour: --dark / --light, --hour 21.5.
+if args.contains("--dark") { Appearance.forced = true }
+if args.contains("--light") { Appearance.forced = false }
+if let i = args.firstIndex(of: "--hour"), args.indices.contains(i + 1) { Appearance.hour = Double(args[i + 1]) }
 if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
     // --state working|waiting|happy|proud|sleepy|missing, --job ID, --helpers N, --receipt
     _ = NSApplication.shared
@@ -1111,6 +1295,30 @@ if let i = args.firstIndex(of: "--snapshot-office"), args.count > i + 1 {
     // --t SEC: the moment to render (4.35 catches the first one's blink).
     v.tick(flagv("--t").flatMap { Double($0) } ?? 0.9)
     snapshot(v, size, args[i + 1])
+    exit(0)
+}
+
+if let i = args.firstIndex(of: "--snapshot-dango"), args.count > i + 1 {
+    // --snapshot-dango out.png [--role R06 | --job swe] [--status idle] [--width 480]:
+    // one 团子 (body, eyes, accessory) on a clear ground, as wide as asked;
+    // for the website and docs, so their 团子 are always the app's own.
+    _ = NSApplication.shared
+    let flagv = { (f: String) -> String? in args.firstIndex(of: f).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
+    let role = flagv("--role") ?? flagv("--job").flatMap { packRoles[$0] }
+    let width = CGFloat(Double(flagv("--width") ?? "") ?? 480)
+    let e = packLayout(role).extent
+    let size = NSSize(width: width, height: (width * e.height / e.width).rounded())
+    let img = NSImage(size: size, flipped: true) { b in
+        drawFittedDango(b, role: role, status: flagv("--status") ?? "idle")
+        return true
+    }
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8, samplesPerPixel: 4,
+                               hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    img.draw(in: NSRect(origin: .zero, size: size))
+    NSGraphicsContext.restoreGraphicsState()
+    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: args[i + 1]))
     exit(0)
 }
 

@@ -123,7 +123,9 @@ apps/widget/package.sh
 
 Abre `Dango-<versión>.dmg` en `target/dist`, arrastra Dango a Aplicaciones y ábrelo. La primera vez, macOS avisa que no puede verificar al desarrollador: ve a Ajustes del Sistema → Privacidad y seguridad y pulsa «Abrir igualmente». El dango aparece en la esquina inferior derecha, lee tu historial durante unos segundos y luego cuenta la historia de tu tipo de jefe. Desde entonces lleva la cuenta en segundo plano y vuelve tras reiniciar.
 
-Por ahora la app está en chino e inglés; coreano, japonés, francés y español están en camino. También hay una versión para Windows en desarrollo.
+La app habla chino, inglés, coreano, japonés, francés y español: haz clic derecho en el dango para elegir el idioma.
+
+**Windows (versión preliminar)**: Windows 10 1803 o posterior de 64 bits, con WebView2 (incluido en Windows 11). Ejecuta `Dango_<versión>_x64-setup.exe`: se instala solo para ti, sin permisos de administrador, en `%LOCALAPPDATA%\Dango`. El instalador aún no está firmado; si SmartScreen lo bloquea, haz clic en Más información → Ejecutar de todas formas. El dango aparece en la esquina inferior derecha; clic izquierdo en el icono de la bandeja para abrir o cerrar el panel, clic derecho para el idioma y la apariencia. El mismo `Dango.exe` lleva la cuenta en segundo plano, se abre al iniciar sesión y guarda sus datos en `%USERPROFILE%\.dango`. Esta primera versión trae el dango de la esquina, el panel y la bandeja; la historia del tipo de jefe, la ventana de informes y las imágenes para compartir llegan después, y «Compartir hoy» copia por ahora un informe de texto. El instalador lo compila en Windows el [flujo de trabajo de Windows](.github/workflows/windows.yml).
 
 ## Desarrollo
 
@@ -133,6 +135,7 @@ Por ahora la app está en chino e inglés; coreano, japonés, francés y españo
 | `crates/daemon` | El demonio: sigue los registros de cada agente, SQLite, tipo de jefe, informes |
 | `crates/cli` | El comando `dango` |
 | `apps/widget` | La app de macOS (Swift / AppKit): el dango, el panel, la oficina, el tipo de jefe, las tarjetas |
+| `apps/windows` | La app de Windows (Tauri v2): el dango, el panel, la bandeja; el mismo `Dango.exe --daemon` lleva la cuenta |
 | `assets` | Oficios y salarios, precios de modelos, umbrales y textos del tipo de jefe |
 | `site` | El sitio web dangoai.org |
 

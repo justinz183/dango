@@ -153,7 +153,7 @@ pub fn settlement_box(s: &TurnSummary) -> String {
         tags.push((if i == 0 { 1 } else { 2 }, j.clone()));
     }
     if s.files > 0 {
-        tags.push((5, if l.en() { format!("{} files", s.files) } else { format!("{} 个文件", s.files) }));
+        tags.push((5, l.f("{} 个文件", "{} files", &[&s.files.to_string()])));
     }
     match s.test_passed {
         Some(true) => tags.push((3, l.t("测试通过", "tests passed").into())),
@@ -164,7 +164,7 @@ pub fn settlement_box(s: &TurnSummary) -> String {
         tags.push((4, l.t("已提交", "committed").into()));
     }
     // English labels are a cell wider.
-    let lw = if l.en() { 14 } else { 13 };
+    let lw = if l == crate::i18n::Lang::Zh { 13 } else { 14 };
     let room = INNER - 2 - lw;
     let join = |t: &[(u8, String)]| t.iter().map(|(_, x)| x.as_str()).collect::<Vec<_>>().join(" · ");
     while tags.len() > 1 && width(&join(&tags)) > room {

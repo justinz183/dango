@@ -734,7 +734,9 @@ fn a_followed_session_without_hooks_shows_live() {
     assert_eq!((working, helpers), (1, 1), "at work, one helper out");
     assert!(last.is_some(), "followed events count as activity");
     let d = daemon::widget::data(&p.conn, tz, &Config::default(), t0 + 3_000).unwrap();
-    assert_eq!(d["character"]["mood"], "focused", "{}", d["character"]);
+    // At work; before 5 AM (the test runs on the real clock) the 团子 is sleepy instead.
+    let hour = chrono::Timelike::hour(&tz.local(t0 + 3_000));
+    assert_eq!(d["character"]["mood"], if hour < 5 { "sleepy" } else { "focused" }, "{}", d["character"]);
 
     // The subagent comes back; Claude writes a file, then asks to run a
     // command and the dialog is open.

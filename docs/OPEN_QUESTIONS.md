@@ -90,7 +90,7 @@
 
 24. ~~字标~~：2026-11-01 用户要求面板也按设计包改，统一写 DONGO。App 名、命令、数据目录仍是 Dango / dango。2026-11-07 用户：产品名是 dango 不是 dongo，所有界面都改成 DANGO（字标 D + 团子当 A + NGO）。
 25. ~~导出文件夹~~：2026-11-01 统一成设计包的 `~/Pictures/DONGO`；旧的 `~/Pictures/Dango` 里已有的图不动。2026-11-07 起是 `~/Pictures/DANGO`，`~/Pictures/DONGO` 里已有的图同样不动。
-26. **二维码和域名**：2026-11-07 查了，dango.app 不是我们的（NS 在 afternic，打开跳到 GoDaddy 的出售页），所以分享图、总卡、故事「分享这一屏」上的二维码和 dango.app 字样、邀请文字里的链接都去掉了，不换别的（用户：「不需要二维码dango.app，啥都不需要」）。还没定：README / package.sh 的安装地址和 site/ 的 SITE_URL 仍写着 dango.app——谁买下这个域名谁就控制 install.sh，得在发出去之前换成自己能控制的域名。
+26. **二维码和域名**：2026-11-07 查了，dango.app 不是我们的（NS 在 afternic，打开跳到 GoDaddy 的出售页），所以分享图、总卡、故事「分享这一屏」上的二维码和 dango.app 字样、邀请文字里的链接都去掉了，不换别的（用户：「不需要二维码dango.app，啥都不需要」）。同一天用户又说「不需要dango.app」：package.sh 不再有默认地址（不设 `DANGO_RELEASE_URL` 就不出 install.sh），README 改成 dmg 安装，site/ 的 `SITE_URL` 留空。还没定：要不要一个自己的域名放安装包和网站。
 27. **文案和产品经理加回来后历史没重算**：旧回合里写文档的分钟仍记在研究员（$37.87/小时）。重算会挪到文案（$36.98）或产品经理（$49.19），总数可能变少，要 `dango rebuild --allow-lower`，需要你同意。
 28. 故事已有英文版（我们写的，设计师可以再改 abti.json 里的 `*_en`）。总卡写「看全部 16 型」打开图鉴，但设计稿的总卡上没有这个入口，现在从右键「老板人格测试 → 16 型图鉴」打开，网上在 `site/` 的 16 型页面。
 
@@ -107,3 +107,13 @@
 ## SPEC 原有的开放问题（未变）
 
 产品名与 CLI 名、person-day / dev-day、分类器 v2、杠杆率 50x 上限、Codex 侧阈值、组队周环时机、季节装饰日历、早鸟窗口、Windows 托盘验证、Cursor / Windsurf 接入——见 SPEC 第 19 节。
+
+## Windows 版（2026-11-08）
+
+35. **没在真 Windows 上跑过**：Rust 部分和 App 只在 Mac 上交叉类型检查过，界面在 Mac 的浏览器里对照 macOS 截图看过，App 的窗口、托盘、单实例在 Mac 上跑过；Windows 上的透明置顶窗口、点击穿透、托盘、Run 键、`--daemon`、AF_UNIX socket 和安装包都要在 Windows 10 / 11 上实测，或者推送后看 windows 工作流。
+36. **安装包没签名**：SmartScreen 会拦（「更多信息 → 仍要运行」）。要不拦得买代码签名证书；什么时候买、放哪下载（dangoai.org？）待定。
+37. **面板「点外面就收起」靠失焦**：要是 Windows 上面板打开后拿不到焦点，就只能点收起键、Esc 或托盘图标收起。实测时看一眼。
+38. **Codex 在 Windows 上跑的是 PowerShell 命令**：`command_text` 只拆 `zsh -lc …` 这种，`powershell -Command …` 会当成一整串，跑测试、部署这些命令的职业可能认不准；`C:\…\python.exe` 这种完整路径的程序名也没拆。要拿真的 Windows 会话记录看了再改（改分类规则前问你）。
+39. **Claude Code 在 Windows 上的 `sessions/<pid>.json`**（马上结算、等你批准）格式是否一样没验证；读不到会退回只看会话记录。
+40. **`dango.exe` 不在 PATH 里**：装在 `%LOCALAPPDATA%\Dango\bin`，要不要在安装时加进 PATH（NSIS 改 PATH 容易截断别的值）。
+41. **只出 x64**：没有 ARM64 Windows 的包。

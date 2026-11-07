@@ -25,6 +25,9 @@ ShadowCorp 是住在屏幕角落的"你的 Claude"：它记得自己替你干了
 - ~~**经典**~~：原来的深色玻璃仪表盘和透明桌宠。2026-11-06 删掉（用户看了一台没装插件的新机器：「那我觉得你可以删掉这个版本的ui」）：新装的机器默认是它；现在默认插画办公室，存着 `classic` 的读成插画办公室。团子口味、舞台 + 茶水间办公室、按场景干活的大宠物、旧的四种分享卡（§5）和面板上的「全部 / Claude Code / Codex」切换跟着一起删了（widget.json 不再写按工具的 `views`）。
 - ~~**A · 矢量办公室**~~：2026-11-07 删掉（用户：「请你把矢量办公室的也删掉」），右键的主题菜单也没了；没有抠图的职业仍画成矢量团子。同一天稍后，抠图和矢量团子也都换掉了：团子都是按设计师 v2 开发包（~/Downloads/DONGO_Developer_Pack_v2）现拼的：身体 B01 + 状态眼神 E01–E12 + 职业配饰 P01–P12，部件和坐标在 apps/widget/assets/dango（tools/dango_pack.swift 从开发包切出来，dango.json 是 512×512 布局），theme.swift `drawPackDango` / `drawFittedDango` / `packPicture` 画（宠物卡片、办公室、名册、老板人格的团子构成和分享图都走它）；眼神按开发包 taskVisuals：在干 E02、等你批准 E04、开心 E06、冒烟 E07（加额头泛红）、睡 E09、其余 E01；职业 → 角色见 `packRoles`，没有配饰的职业是同一个身体。2026-11-07 删掉了旧的 R01–R12 抠图（浅色底抠的，边缘一圈灰白、只有约 300 px）、叠眼的 roleEyes 和矢量团子（用户：「这些贴图是有边缘的」「从根源上把图片这个问题解决」）。沙发和桌子的前景层是 theme-b/room-front.png（tools/room_front.swift 顺着坐垫、扶手的描边从 room.png 切出来，团子坐进沙发不再被平切）。bundle.sh 先跑 tools/check_art.swift：部件没透明、外缘亮色超过 30%、分辨率不到最大显示尺寸的 3 倍，打包就失败。
 - **A · 矢量办公室**、**B · 插画办公室**：设计稿 v3（dango-ui-handoff，2026-10-30）。白色面板 440 宽：顶栏（字标、day N、圆形收起键）→ 办公室（A 392×210 代码画的房间，B 392×178 插画背景 + 设计包的角色抠图）→ 今日 $ 大数字、单日纪录、团子的一句话 → 1D / 7D / 30D → 四个数字块 → 员工名册（在干黑卡、等你批准白卡描边、摸鱼灰卡、下班淡掉；默认 6 张，+ 展开）→ Claude Code 与 Codex 对比条 → 最近 30 天柱图（今天绿色）→ 导出（左边方块打开报告窗口，右边黑色主按钮导出今日日报，右端 ▾ 选周报 / 月报 / 年报和上一期）。桌面上的团子换成 300×100 的白卡（团子、今天 $、纪录、在当谁 · 杠杆、几人在干 / 摸鱼）。
+- **浅色 / 深色**（2026-11-07，用户：「dark的theme是白团子」）：右键「外观」跟随系统（默认）/ 浅色 / 深色（UserDefaults `appearance`），macOS 切换深浅色时跟着重画。深色是黑底面板（#1C1C1E，卡片 #2C2C2E）、白字，团子换成白身体 B01W（tools/dark_art.py 从 B01 调出来，描边、阴影、高光不变，眼睛和配饰照旧）；在干的名册卡和「分享日报」反过来是浅底深字。只管面板、办公室和角落的团子（theme.swift `V3` 的颜色在 `Appearance.drawing` 里才变），老板人格各页、报告窗口和分享图仍是浅色黑团子。
+- **六种语言**（2026-11-08，用户：「中英韩日法西」）：中文、English、한국어、日本語、Français、Español，右键「语言」选（每种语言用它自己的名字），`dango lang` 也认这 6 个代码。代码里仍是中英两份，韩日法西是英文查 assets/i18n 里的表（键是英文原句；带数字的句子是 `{}` 模板），老板人格文案和职业名也一样；日期、星期、万 / 億 / 만 这类单位按语言写（main.swift `Dates`、abti.rs `compact`）；中日韩用中文那套字号（`cjk`），法语、西班牙语用英文那套，太长的标题和行会缩字号或截断。翻译是我们写的，`tools/i18n_check.py` 保证四张表一句不缺、占位符对得上。终端的文字报告不翻，四种新语言看英文。
+- **办公室按本机时间变**（2026-11-07，用户：「办公室应该随着系统时间发生变化」，和深浅色无关）：7–17 点白天；17–18 点太阳落下、18:30 前是晚霞（theme-b/room-dusk.png：屋里偏暖，窗外紫到橙，太阳沉到树后）；18:30–19:30 天黑下来；夜里（room-night.png：屋里偏蓝暗，窗外星空和弯月）；5–6 点天亮成朝霞、6–7 点回到白天。三张图叠着淡入淡出（`Appearance.sky()`），前景层也各有一张；都由 dark_art.py 从 room.png 调出来，房间的形状不变。
 - **团子的状态**（README 办公室的状态）：在干 / 开心 / 冒烟 / 等你批准 / 摸鱼 / 睡了 / 下班，各有眼神、动作（bob、hop、shake、tilt、breathe）和位置（两个工位、站位、三个沙发座位、A 还有门口一个），换位置时 0.9 秒走过去，每 4.3 秒眨一次眼。状态从哪来（2026-10-30）：守护进程按事件写 `office[].status` / `status_since`——**等你批准** = 会话收到 `permission_prompt` 通知、到它下一个事件为止（等多久都算）；**冒烟** = 本回合测试命令失败 ≥ 3 次（`widget::FUMING_FAILS`）；**开心** = 最近一个回合以测试全绿或一次提交结束、30 分钟内（`HAPPY_MS`）。在干 / 摸鱼 / 睡了（一小时没活）/ 下班（今天没活）由小部件按时间算。角落卡片上的团子用当前职业在办公室里的状态。用例 replay.rs `office_states_follow_the_events`。
 - **和设计稿不一样的地方**：名册用职业名，没有"阿析、码哥"这种名字；设计包只画了 7 个职业的配饰 / 抠图（数据分析师、软件工程师、平面设计、研究员、视频剪辑、运维、B 里还有测试），别的职业在 A 里是不戴配饰的团子，在 B 里退回 A 的矢量团子；B 右边站位和两个工位会挤（设计稿已知问题 3）；中文模式下 day N、1D / 7D / 30D、avg $/d 写成「第 N 天」「1 天 / 7 天 / 30 天」「日均」（一屏一种语言）。2026-11-01 起字标和设计稿一样写 DONGO；2026-11-07 用户改回产品名 DANGO，字标是 D + 团子当 A + NGO + 蓝色箭头，App 图标换成白底上的团子。
 
@@ -201,7 +204,7 @@ Claude Code 自己会给每个会话起标题（如「修复添加deepseek后的
 冷启动活动：按真实用法把用户归到 16 型老板之一，做成故事、总卡、报告和分享图。设计包是 dango-abti-handoff（README、tokens、prototypes、config/abti.json）；**门槛和文案只在 assets/abti.json**，程序直接读，代码里不写死。
 
 - **四个维度**（abti.rs `result`）：H/M 看回合里 AI 自己动手的程度（工具调用 ≥ 8 或带子 agent 算放手）；B/F 看新文件里写的行数占全部改动的比例；S/G 看占比 ≥ 10% 的角色有几个（≥ 3 个算跨界）；L/O 看 20 点到次日 8 点的本地计时分钟占比。贴近分界线的维度在总卡上标「≈ on the fence」。绝配 = 前两个字母反过来、后两个不变。
-- **钱**：公司规模按累计产出分 5 档（固定门槛，不年化，不和别人比）；压榨率 = 1 − 模型花费 ÷ 产出，分档起名；杠杆 = 产出 ÷ 模型花费。团子构成把 20 种职业映射到 8 个角色 + 6 个隐藏款（占比 ≥ 10% 才露出来），其余算「其他」。
+- **钱**：公司规模按累计产出分 5 档（固定门槛，不年化，不和别人比；2026-11-08 用户：「把这个数量级每一个都x10」，现在是个体户 < $10k、小作坊 $10k–100k、工作室 $100k–1M、集团 $1M–10M、上市公司 ≥ $10M，门槛只在 assets/abti.json 的 `min_usd`，说明页和故事屏的金额都从它算）；压榨率 = 1 − 模型花费 ÷ 产出，分档起名；杠杆 = 产出 ÷ 模型花费。团子构成把 20 种职业映射到 8 个角色 + 6 个隐藏款（占比 ≥ 10% 才露出来），其余算「其他」。
 - **体检单** 6 格：累计 token（全产品唯一列 token 的地方）、新增代码行、测试一次过、夜班指数、最长连续开工、最多同时带的子 agent；分档是 Dango 自定的，样本太少就标出来。
 - **热力图** 按自己的产出排序分四档（不和别人比）。
 - **名场面**：最晚收工的回合（只看 0–6 点）、最拼的一天、最长连续开工、最长的一回合。回合长度按「AI 在干活的时间」算：回合里相邻事件的间隔相加，超过 10 分钟的间隔不算（那是在等人，不是在干活）——不然一个开着放了一夜的回合会显示成 21 小时。
@@ -218,3 +221,16 @@ Claude Code 自己会给每个会话起标题（如「修复添加deepseek后的
 4. ✅ v5：经济杠杆（§1，token × 官方 API 价）。
 5. ✅ v6：49 种职业与话题分类（`occupation::topic`）、场景与部件装扮（`drawCharacter(look:)`、`drawActivity`、`drawBackdrop`）、舞台 + 茶水间办公室与走动、`rebuild` 用 $ 守"只增不减"并把用量事件放到最后重放（否则没有 Stop 就结束的回合会丢模型花费）。
 6. 可选的「让 Claude 写日报」；各步分钟数按真实反馈再校准（docs/OPEN_QUESTIONS.md 第 000 条）。
+
+## 9. Windows 版（2026-11-08）
+
+用户：「请你再开发个 Windows 版本的 DANGO」。先做 MVP：角落的团子、面板、托盘、安装包；老板人格的故事、报告窗口和 4:5 分享图放第二步。
+
+- **技术栈：Tauri v2**（apps/windows）。macOS 的 apps/widget 是 Swift/AppKit，Windows 上用不了；Tauri 的后端就是 Rust，直接链接 crates/daemon（读 config、写语言、出文字日报都调现成的函数），自带 NSIS 安装包，WebView2 在 Windows 11 自带。没选 Electron（另带一个 Chromium，和 Rust 之间还要一层进程通信）和原生 Win32 / WinUI（面板的排版和动画要重写一遍，没法在 Mac 上看效果）。界面是网页，在 Mac 的浏览器里就能截图对照（CLAUDE.md「Windows 版」）。
+- **一个程序两种身份**：`Dango.exe` 不带参数是团子 + 面板 + 托盘；`Dango.exe --daemon` 跑 `daemon::server::run`，和 macOS 的 `dango daemon` 是同一段代码。守护进程放在 GUI 程序里，是因为登录项启动控制台程序会弹一个黑窗口。命令行 `dango.exe`（crates/cli）装在 `bin\`：和 `Dango.exe` 放一起会撞名（磁盘不分大小写，和 macOS 把它放进 Contents/Helpers 是同一个原因）。
+- **开机自启：注册表 Run 键**（HKCU，不要管理员权限；没用任务计划，它的「登录时」触发要管理员权限）。两个值：`Dango Daemon` = `"…\Dango.exe" --daemon`（= com.dango.daemon），`Dango` = 团子（= com.dango.widget 的登录项，托盘「登录时自动启动」开关它）。App 每次启动做 macOS `ensureDaemon` 做的事：写登录项（第一次也打开团子的登录启动，团子冒「团子们在翻你的…历史」）、守护进程没在跑就起一个；Run 键没有 launchd 的 KeepAlive，App 每 30 秒看一次 processor.lock，没人拿就再起。
+- **守护进程和 CLI 之间**：还是同一个 JSON 行协议、同一个 `daemon.sock` 文件。Windows 10 1803 起支持 AF_UNIX，Rust 标准库没有，用 uds_windows；文件在用户目录里，别的用户打不开（macOS 上是 0600）。
+- **路径**：主目录在 Windows 上是 %USERPROFILE%（Windows 不设 HOME），所以 `.claude`、`.codex`、`.dsh`、`.workbuddy-ai` 和数据目录 `.dango` 都在它下面，`DANGO_HOME` 照旧能改。会话记录里的 `C:\…\tests\x.py` 在算职业前把 `\` 换成 `/`，tests/、components/ 这些目录规则才认得；只在 Windows 上换，macOS 的算法一个字节不变。跟读日志靠文件长度和偏移，Windows 上 Rust 打开文件默认允许别人同时写，行为一样。
+- **团子和面板**：dango.js 按 apps/widget/assets/dango/dango.json 用部件 PNG 拼团子，逐个移植了 theme.swift 的 `drawPackDango`、`packRoles`、`motion`、`stateExtras`、`officeStatus`、`Appearance.sky`；panel.js 是 `layoutV3`，pet.js 是 `drawCard`，尺寸都照抄（面板 440 宽、团子窗口 230 × 140、团子 84 × 74）。宠物窗口透明、置顶、不进任务栏；只有团子那块接鼠标：后台每 50 毫秒看一次光标，在团子外面时整个窗口点击穿透（macOS 是 `ignoresMouseEvents` 跟着全局鼠标走）。面板失焦就收起（macOS 用全局点击监听）。外观（跟随系统 / 浅色 / 深色）存在 App 自己的 prefs.json，深色是白团子 B01W，和 macOS 一样只管团子、面板和办公室。语言和 macOS 一样六种（中英韩日法西）：托盘菜单走 `Lang::t`，页面的 `L(中, 英)` 对另外四种查同一份 assets/i18n 表。
+- **这一版没有的**（第二步）：老板人格故事和总卡窗口、16 型图鉴、报告窗口、4:5 分享图（面板「分享日报」先把 `dango report` 的文字日报放进剪贴板，不带会话标题和项目名）、结算提示音和系统通知。`dango card` 在 Windows 上会说还不能出分享图。
+- **验证**：这台 Mac 上只能交叉类型检查（tools/windows_check.sh）和在浏览器里看界面；真编译、测试和安装包在 GitHub Actions 的 windows-latest 上（.github/workflows/windows.yml）。没在真 Windows 上跑过的地方记在 docs/OPEN_QUESTIONS.md 35–41。

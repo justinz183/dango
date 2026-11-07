@@ -123,7 +123,9 @@ apps/widget/package.sh
 
 Ouvrez `Dango-<version>.dmg` dans `target/dist`, glissez Dango dans Applications et lancez-le. La première fois, macOS indique qu’il ne peut pas vérifier le développeur : allez dans Réglages Système → Confidentialité et sécurité et cliquez sur « Ouvrir quand même ». Le dango apparaît en bas à droite, lit votre historique pendant quelques secondes, puis raconte l’histoire de votre type de patron. Ensuite, il continue de compter en arrière-plan et revient après un redémarrage.
 
-L’interface de l’app est pour l’instant en chinois et en anglais ; le coréen, le japonais, le français et l’espagnol sont en préparation. Une version Windows est en cours de développement.
+L’app parle chinois, anglais, coréen, japonais, français et espagnol : clic droit sur le dango pour choisir la langue.
+
+**Windows (préversion)** : Windows 10 1803 ou plus récent en 64 bits, avec WebView2 (inclus dans Windows 11). Lancez `Dango_<version>_x64-setup.exe` : il s’installe pour vous seul, sans droits d’administrateur, dans `%LOCALAPPDATA%\Dango`. Le programme d’installation n’est pas encore signé ; si SmartScreen le bloque, cliquez sur Informations complémentaires → Exécuter quand même. Le dango se place en bas à droite ; clic gauche sur l’icône de la barre des tâches pour ouvrir ou fermer le panneau, clic droit pour la langue et l’apparence. Le même `Dango.exe` compte en arrière-plan, démarre à l’ouverture de session et garde ses données dans `%USERPROFILE%\.dango`. Cette première version a le dango du coin, le panneau et l’icône ; l’histoire du type de patron, la fenêtre des rapports et les images à partager arrivent ensuite, et « Partager le jour » copie pour l’instant un rapport texte. Le programme d’installation est construit sous Windows par le [workflow Windows](.github/workflows/windows.yml).
 
 ## Développer
 
@@ -133,6 +135,7 @@ L’interface de l’app est pour l’instant en chinois et en anglais ; le cor�
 | `crates/daemon` | Le démon : suit les journaux de chaque agent, SQLite, type de patron, rapports |
 | `crates/cli` | La commande `dango` |
 | `apps/widget` | L’app macOS (Swift / AppKit) : le dango, le panneau, le bureau, le type de patron, les cartes |
+| `apps/windows` | L’app Windows (Tauri v2) : le dango, le panneau, l’icône ; le même `Dango.exe --daemon` compte en arrière-plan |
 | `assets` | Métiers et salaires, prix des modèles, seuils et textes du type de patron |
 | `site` | Le site dangoai.org |
 

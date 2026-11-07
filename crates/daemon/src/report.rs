@@ -359,7 +359,7 @@ pub fn day(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Nai
     let start = midnight(tz, date);
     let end = midnight(tz, date.succ_opt().unwrap());
     let t = tally(conn, tz, start, end, tool)?;
-    let lang = cfg.lang();
+    let lang = cfg.lang().zh_or_en();
     let en = lang.en();
     let sessions = t.sessions(conn, claude_dir, show_names, 10, lang, |s, e| (hhmm(tz, s.max(start)), hhmm(tz, e.min(end - 1))))?;
     let blocks: Vec<Value> = t
@@ -455,7 +455,7 @@ pub fn week(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Na
     let next = monday + Duration::days(7);
     let (start, end) = (midnight(tz, monday), midnight(tz, next));
     let t = tally(conn, tz, start, end, tool)?;
-    let lang = cfg.lang();
+    let lang = cfg.lang().zh_or_en();
     let en = lang.en();
     let sessions = t.sessions(conn, claude_dir, show_names, 3, lang, |s, e| (md_in(tz.date(s), lang), md_in(tz.date(e), lang)))?;
     let today = tz.date(now);
@@ -546,7 +546,7 @@ pub fn month(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: N
     let n_days = (next - first).num_days();
     let (start, end) = (midnight(tz, first), midnight(tz, next));
     let t = tally(conn, tz, start, end, tool)?;
-    let lang = cfg.lang();
+    let lang = cfg.lang().zh_or_en();
     let en = lang.en();
     let sessions = t.sessions(conn, claude_dir, show_names, 3, lang, |s, e| (md_in(tz.date(s), lang), md_in(tz.date(e), lang)))?;
     let today = tz.date(now);
@@ -649,7 +649,7 @@ pub fn year(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, date: Na
     let next = NaiveDate::from_ymd_opt(date.year() + 1, 1, 1).unwrap();
     let (start, end) = (midnight(tz, first), midnight(tz, next));
     let t = tally(conn, tz, start, end, tool)?;
-    let lang = cfg.lang();
+    let lang = cfg.lang().zh_or_en();
     let en = lang.en();
     let sessions = t.sessions(conn, claude_dir, show_names, 3, lang, |s, e| (md_in(tz.date(s), lang), md_in(tz.date(e), lang)))?;
     let today = tz.date(now);

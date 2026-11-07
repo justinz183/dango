@@ -54,7 +54,7 @@ Usage:
   dango status [--claude]     one-line status; --claude for statusLine
   dango stats                 output page
   dango widget                start the desktop pet (bottom-right corner)
-  dango lang [zh|en]          show or set the language
+  dango lang [zh|en|ko|ja|fr|es]  show or set the language
   dango report [--week|--month|--year] [--day DATE] [--tool claude|codex|deepseek|workbuddy] [--names] [--json]
                                    day / week / month / year report (DATE = YYYY-MM-DD | today | yesterday;
                                    the week, month or year that contains DATE)
@@ -151,7 +151,21 @@ fn flag(args: &[String], name: &str) -> Option<String> {
 }
 
 fn claude_dir() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".claude")
+    daemon::paths::user_home().unwrap_or_default().join(".claude")
+}
+
+/// $HOME (%USERPROFILE% on Windows), or the same error `env::var` gives.
+fn home() -> std::result::Result<PathBuf, std::env::VarError> {
+    daemon::paths::user_home().ok_or(std::env::VarError::NotPresent)
+}
+
+/// Opens a file with its default app: `open` on a Mac, `start` on Windows.
+fn open_path(path: &Path) -> std::io::Result<std::process::ExitStatus> {
+    if cfg!(windows) {
+        std::process::Command::new("cmd").args(["/C", "start", ""]).arg(path).status()
+    } else {
+        std::process::Command::new("open").arg(path).status()
+    }
 }
 
 fn parse_day(args: &[String]) -> Result<chrono::NaiveDate> {
@@ -253,6 +267,11 @@ fn renderer() -> Result<PathBuf> {
 /// ~/Pictures/DANGO and copied. Share images never carry project names or
 /// session titles.
 fn card(paths: &Paths, args: &[String]) -> Result<i32> {
+    if cfg!(windows) {
+        // The share images are drawn by the macOS app; the Windows app does
+        // not draw them yet.
+        return Err(Config::load(paths).lang().t("Windows 版还不能出分享图", "The Windows version cannot make share images yet").into());
+    }
     let kind = ["week", "month", "year"].into_iter().find(|k| args.iter().any(|a| *a == format!("--{k}"))).unwrap_or("day");
     let day = parse_day(args)?;
     let (tz, now) = (Tz::from_env(), now_ms());
@@ -265,7 +284,7 @@ fn card(paths: &Paths, args: &[String]) -> Result<i32> {
     let out = match flag(args, "--out") {
         Some(o) => PathBuf::from(o),
         None => {
-            let dir = PathBuf::from(std::env::var("HOME")?).join("Pictures").join("DANGO");
+            let dir = home()?.join("Pictures").join("DANGO");
             fs::create_dir_all(&dir)?;
             dir.join(format!("dango-{date}.png"))
         }
@@ -282,26 +301,30 @@ fn card(paths: &Paths, args: &[String]) -> Result<i32> {
         println!("{what}：{}（已复制到剪贴板）", out.display());
     }
     if !args.iter().any(|a| a == "--no-open") {
-        std::process::Command::new("open").arg(&out).status()?;
+        open_path(&out)?;
     }
     Ok(0)
 }
 
-/// `dango lang [zh|en]`: shows or sets the language of everything shown,
+/// `dango lang [zh|en|ko|ja|fr|es]`: shows or sets the language of everything shown,
 /// and rewrites widget.json so the widget switches at once.
 fn lang(paths: &Paths, args: &[String]) -> Result<i32> {
     let Some(want) = args.first() else {
         println!("{}", Config::load(paths).lang().code());
         return Ok(0);
     };
-    let locale = match want.to_lowercase().as_str() {
+    let w = want.to_lowercase();
+    let locale = match w.as_str() {
         "zh" | "zh-cn" | "cn" | "中文" => "zh-CN",
-        "en" | "en-us" | "english" => "en",
-        other => return Err(format!("dango lang zh|en (got {other:?})").into()),
+        _ => match dango_core::i18n::Lang::ALL.into_iter().find(|l| w == l.code() || w == l.name().to_lowercase()) {
+            Some(l) => l.code(),
+            None => return Err(format!("dango lang zh|en|ko|ja|fr|es (got {other:?})", other = want).into()),
+        },
     };
     Config::set_locale(paths, locale)?;
     fresh_db(paths, |c, cfg| daemon::widget::write(paths, c, Tz::from_env(), cfg, now_ms()))?;
-    println!("{}", Config::load(paths).lang().t("界面语言：中文", "Language: English"));
+    let l = Config::load(paths).lang();
+    println!("{}", l.f("界面语言：{}", "Language: {}", &[l.name()]));
     Ok(0)
 }
 
@@ -310,6 +333,9 @@ fn lang(paths: &Paths, args: &[String]) -> Result<i32> {
 /// this one. The widget itself refuses to run twice.
 fn widget(paths: &Paths) -> Result<i32> {
     fresh_db(paths, |c, cfg| daemon::widget::write(paths, c, Tz::from_env(), cfg, now_ms()))?;
+    if cfg!(windows) {
+        return windows_widget(paths);
+    }
     let home = std::env::var("HOME").unwrap_or_default();
     let apps = [PathBuf::from("/Applications/Dango.app"), PathBuf::from(format!("{home}/Applications/Dango.app"))];
     if let Some(app) = apps.iter().find(|a| a.exists()) {
@@ -327,6 +353,25 @@ fn widget(paths: &Paths) -> Result<i32> {
         .stderr(std::process::Stdio::null())
         .spawn()?;
     println!("{}", Config::load(paths).lang().t("打工团子已启动，在屏幕右下角。右键可退出或设置登录时自动启动。", "Dango started in the bottom-right corner. Right-click it to quit or start it at login."));
+    Ok(0)
+}
+
+/// Windows: Dango.exe from the installer (this dango sits in its bin
+/// folder), or the dev build next to this one (apps/windows).
+fn windows_widget(paths: &Paths) -> Result<i32> {
+    let exe = std::env::current_exe()?;
+    let local = std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Dango").join("Dango.exe"));
+    let candidates = [exe.parent().and_then(Path::parent).map(|d| d.join("Dango.exe")), local, Some(exe.with_file_name("dango-desktop.exe"))];
+    let lang = Config::load(paths).lang();
+    let Some(app) = candidates.into_iter().flatten().find(|p| p.is_file()) else {
+        return Err(lang.t("没有找到 Dango.exe，先装 Windows 安装包（apps/windows）", "Dango.exe not found: install the Windows app first (apps/windows)").into());
+    };
+    std::process::Command::new(app)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    println!("{}", lang.t("打工团子已打开，在屏幕右下角。右键托盘图标可以换语言和外观。", "Dango is open in the bottom-right corner. Right-click the tray icon for language and appearance."));
     Ok(0)
 }
 
@@ -358,7 +403,7 @@ fn panel(paths: &Paths, no_open: bool) -> Result<i32> {
         Ok(format!("面板：{}", page.display()))
     })?;
     if !no_open {
-        std::process::Command::new("open").arg(&page).status()?;
+        open_path(&page)?;
     }
     Ok(0)
 }
@@ -372,7 +417,7 @@ fn run_backfill(paths: &Paths, args: &[String]) -> Result<i32> {
     let dir = |flag: &str, default: &str| -> Result<PathBuf> {
         Ok(match args.iter().position(|a| a == flag) {
             Some(i) => PathBuf::from(args.get(i + 1).ok_or(format!("{flag} needs a path"))?),
-            None => PathBuf::from(std::env::var("HOME")?).join(default),
+            None => home()?.join(default),
         })
     };
     let (claude_dir, codex_dir, dsh_dir) = (dir("--claude-dir", ".claude")?, dir("--codex-dir", ".codex")?, dir("--dsh-dir", ".dsh")?);

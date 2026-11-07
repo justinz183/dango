@@ -323,7 +323,7 @@
       "id": "workshop",
       "name_zh": "小作坊",
       "name_en": "Workshop",
-      "min_usd": 1000,
+      "min_usd": 10000,
       "line_zh": "门面不大，团子们已经开始轮班。",
       "line_en": "Small shop, but the dangos already work in shifts."
     },
@@ -331,7 +331,7 @@
       "id": "studio",
       "name_zh": "工作室",
       "name_en": "Studio",
-      "min_usd": 10000,
+      "min_usd": 100000,
       "line_zh": "有了工位和咖啡机，团子开始管你叫老板。",
       "line_en": "Desks, a coffee machine, and dangos who call you boss."
     },
@@ -339,7 +339,7 @@
       "id": "group",
       "name_zh": "集团",
       "name_en": "Group",
-      "min_usd": 100000,
+      "min_usd": 1000000,
       "line_zh": "团子分了部门，茶水间开始有人议论你。",
       "line_en": "Your dangos have departments now, and opinions about you."
     },
@@ -347,7 +347,7 @@
       "id": "listed",
       "name_zh": "上市公司",
       "name_en": "Listed",
-      "min_usd": 1000000,
+      "min_usd": 10000000,
       "line_zh": "敲钟了。团子们在问期权什么时候发。",
       "line_en": "You rang the bell. The dangos are asking about stock options."
     }

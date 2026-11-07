@@ -115,15 +115,14 @@ impl Table {
     /// The occupation's name in `lang`.
     pub fn name_in(&self, id: &str, lang: crate::i18n::Lang) -> &str {
         match (self.get(id), lang) {
-            (Some(o), crate::i18n::Lang::En) => o.name_en.as_str(),
-            (Some(o), _) => o.name.as_str(),
+            (Some(o), l) => l.t(&o.name, &o.name_en),
             (None, l) => l.t("其他", "Other"),
         }
     }
 
     /// Where the wages come from, in `lang`.
     pub fn label_in(&self, lang: crate::i18n::Lang) -> &str {
-        if lang.en() && !self.label_en.is_empty() { &self.label_en } else { &self.label }
+        if self.label_en.is_empty() { &self.label } else { lang.t(&self.label, &self.label_en) }
     }
 
     /// US$ for a set of minutes per occupation.

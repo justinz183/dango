@@ -9,20 +9,71 @@ import AppKit
 
 // MARK: - Tokens (tokens.json; text greys at the accessible #6E6E73)
 
+/// Light or dark, and the time of day in the office.
+enum Appearance {
+    /// Snapshots: --dark / --light, --hour H.
+    static var forced: Bool?
+    static var hour: Double?
+    /// UserDefaults "appearance": "system" (the default), "light" or "dark".
+    static var choice: String { UserDefaults.standard.string(forKey: "appearance") ?? "system" }
+    static var dark: Bool {
+        if let forced { return forced }
+        switch choice {
+        case "dark": return true
+        case "light": return false
+        default: return NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+    }
+    /// Draws the panel, the office or the pet in the theme's colours.
+    static func drawing(_ body: () -> Void) {
+        let was = V3.dark
+        V3.dark = dark
+        body()
+        V3.dark = was
+    }
+    /// The office's sky by the Mac's clock, in both themes (user, 2026-11-07:
+    /// 「办公室应该随着系统时间发生变化」): how much of the sunset picture and
+    /// of the night picture go over the day's. Day 7:00–17:00; the sun sets
+    /// 17:00–18:00; night falls 18:30–19:30; dawn 5:00–6:00, sunrise 6:00–7:00.
+    static func sky(_ date: Date = Date()) -> (dusk: CGFloat, night: CGFloat) {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+        let h = hour ?? Double(c.hour ?? 12) + Double(c.minute ?? 0) / 60
+        switch h {
+        case 7..<17: return (0, 0)
+        case 17..<18: return (CGFloat(h - 17), 0)
+        case 18..<18.5: return (1, 0)
+        case 18.5..<19.5: return (1, CGFloat(h - 18.5))
+        case 5..<6: return (1, CGFloat(6 - h))
+        case 6..<7: return (CGFloat(7 - h), 0)
+        default: return (1, 1)
+        }
+    }
+}
+
 enum V3 {
-    static let ink = color(hex: "#1C1C1C")
-    static let surface = NSColor.white
-    static let tile = color(hex: "#F6F6F6")
-    static let control = color(hex: "#F4F4F4")
-    static let line = color(hex: "#E6E6E8")
-    static let secondary = color(hex: "#6E6E73")
-    static let bar = color(hex: "#DADADA")
-    static let barZero = color(hex: "#EDEDED")
-    static let today = color(hex: "#16A34A")
-    static let track = color(hex: "#E9E9E9")
-    static let brand = color(hex: "#2F7BF5")
-    static let workingText = color(hex: "#15803D")
-    static let waitingText = color(hex: "#B45309")
+    /// The dark theme (user, 2026-11-07: 「dark的theme是白团子」): on only
+    /// while the panel, the office and the corner pet draw (`Appearance.drawing`),
+    /// so the share images, the boss card and the report window stay light
+    /// with black 团子 wherever they are drawn.
+    static var dark = false
+    private static func pick(_ light: String, _ night: String) -> NSColor { color(hex: dark ? night : light) }
+    static var ink: NSColor { pick("#1C1C1C", "#F2F2F7") }
+    static var surface: NSColor { dark ? color(hex: "#1C1C1E") : NSColor.white }
+    static var tile: NSColor { pick("#F6F6F6", "#2C2C2E") }
+    static var control: NSColor { pick("#F4F4F4", "#2C2C2E") }
+    static var line: NSColor { pick("#E6E6E8", "#3A3A3C") }
+    static var secondary: NSColor { pick("#6E6E73", "#A1A1A6") }
+    static var bar: NSColor { pick("#DADADA", "#48484A") }
+    static var barZero: NSColor { pick("#EDEDED", "#2C2C2E") }
+    static var today: NSColor { pick("#16A34A", "#30D158") }
+    static var track: NSColor { pick("#E9E9E9", "#3A3A3C") }
+    static var brand: NSColor { pick("#2F7BF5", "#4F8DFF") }
+    static var workingText: NSColor { pick("#15803D", "#30D158") }
+    static var waitingText: NSColor { pick("#B45309", "#FFB340") }
+    /// What sits on an ink-filled shape (a busy staff card, the share button).
+    static var onInk: NSColor { dark ? color(hex: "#1C1C1E") : NSColor.white }
+    /// A raised card or the chosen segment: white by day.
+    static var raised: NSColor { dark ? color(hex: "#3A3A3C") : NSColor.white }
     static let body = color(hex: "#1E1E1E")
     static let outline = color(hex: "#111111")
 
@@ -432,7 +483,7 @@ func drawPackDango(_ body: NSRect, role: String?, status: String) {
         img.draw(in: place(r), from: src, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
     }
     // B01 drawn as round as the designer's role sheet (bodyRect is taller than B01).
-    if let b = packImage("B01") { draw(b, in: l.body) }
+    if let b = packImage(V3.dark ? "B01W" : "B01") { draw(b, in: l.body) }
     if status == "fuming" {
         // 冒火中: the forehead flushes, the body stays black (the pack's rules).
         let f = place(NSRect(x: l.body.midX - 80, y: l.body.minY + 26, width: 160, height: 56))
@@ -519,13 +570,16 @@ final class V3OfficeView: NSView {
     /// Who goes where: two desks for working / happy / fuming, a place to
     /// stand for waiting, the sofa's three seats and then the door for idle
     /// and sleeping; off is outside.
+    /// The two desk places' left edges (70 wide); the laptops are centred on them.
+    static let deskX: [CGFloat] = [218, 318]
+
     private func arrangement() -> [(Occupant, String, NSRect)] {
         let all = occupants.map { ($0, officeStatus($0, model)) }
         let desk = all.filter { ["working", "happy", "fuming"].contains($0.1) }.prefix(2)
         let stand = all.filter { $0.1 == "waiting" }.prefix(1)
         let lounge = all.filter { ["idle", "sleeping"].contains($0.1) }.prefix(3)
         var out: [(Occupant, String, NSRect)] = []
-        let desks: [NSRect] = [feet(218, bottom: 123, w: 70), feet(318, bottom: 123, w: 70)]
+        let desks: [NSRect] = V3OfficeView.deskX.map { feet($0, bottom: 123, w: 70) }
         // The one waiting stands between the desks, drawn first so the two
         // at work are in front of it.
         for (o, s) in stand { out.append((o, s, feet(268, bottom: 123, w: 70))) }
@@ -557,6 +611,10 @@ final class V3OfficeView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        Appearance.drawing { drawOffice() }
+    }
+
+    private func drawOffice() {
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(roundedRect: bounds, xRadius: 24, yRadius: 24).addClip()
         let people = arrangement()
@@ -580,8 +638,12 @@ final class V3OfficeView: NSView {
     // and the desk's outlines by tools/room_front.swift).
     private func drawRoom(_ people: [(Occupant, String, NSRect)]) {
         let room = themeImage("room")
+        let (dusk, night) = Appearance.sky()
+        let hints: [NSImageRep.HintKey: Any] = [.interpolation: NSImageInterpolation.high.rawValue]
         if let room {
-            room.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+            room.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: hints)
+            if dusk > 0 { themeImage("room-dusk")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: dusk, respectFlipped: true, hints: hints) }
+            if night > 0 { themeImage("room-night")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: night, respectFlipped: true, hints: hints) }
         } else {
             color(hex: "#FBF3E4").setFill()
             bounds.fill()
@@ -592,13 +654,27 @@ final class V3OfficeView: NSView {
             let at = now(o.job.id, NSRect(x: place.midX - w / 2, y: place.maxY - h, width: w, height: h))
             drawDango(o, s, at, phase: Double(i) * 0.41)
         }
-        themeImage("room-front")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
-        // The two laptops on the desk.
+        themeImage("room-front")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: hints)
+        if dusk > 0 { themeImage("room-front-dusk")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: dusk, respectFlipped: true, hints: hints) }
+        if night > 0 { themeImage("room-front-night")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: night, respectFlipped: true, hints: hints) }
+        // The two laptops on the desk, each centred on its desk place and
+        // outlined like the illustration's furniture.
         func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ rad: CGFloat, _ c: String) { fill(rrect(x, y, w, h, rad), color(hex: c)) }
-        r(236, 120, 42, 18, 3, "#9AA0A8"); r(240, 124, 34, 10, 2, "#E9EEF2")
-        for (k, h) in [3.0, 6, 4, 7].enumerated() { r(245 + CGFloat(k) * 6, 133 - CGFloat(h), 3, CGFloat(h), 0, k == 3 ? "#2E8B57" : "#5FBF84") }
-        r(332, 120, 42, 18, 3, "#9AA0A8"); r(336, 124, 34, 10, 2, "#E9EEF2")
-        strokePath("M345 128l-3 3 3 3M357 128l3 3-3 3", color(hex: "#5B6B8C"), 1.5)
+        let ink = color(hex: "#3A3530")
+        for (n, left) in V3OfficeView.deskX.enumerated() {
+            let x = left + 35 - 21
+            r(x, 120, 42, 18, 3, "#9AA0A8")
+            ink.setStroke()
+            let lid = rrect(x + 0.4, 120.4, 41.2, 17.2, 2.8)
+            lid.lineWidth = 0.8
+            lid.stroke()
+            r(x + 4, 124, 34, 10, 2, "#E9EEF2")
+            if n == 0 {
+                for (k, h) in [3.0, 6, 4, 7].enumerated() { r(x + 9 + CGFloat(k) * 6, 133 - CGFloat(h), 3, CGFloat(h), 0, k == 3 ? "#2E8B57" : "#5FBF84") }
+            } else {
+                strokePath("M\(x + 13) 128l-3 3 3 3M\(x + 25) 128l3 3-3 3", color(hex: "#5B6B8C"), 1.5)
+            }
+        }
     }
 }
 
@@ -703,18 +779,28 @@ extension DashboardView {
         if let b = m.boss {
             let box = NSRect(x: padX, y: y, width: inner, height: 116)
             if draw {
-                AB.round(box, 20, AB.tile)
+                AB.round(box, 20, V3.tile)
                 AB.fit(abtiImage("scene/T-" + b.code), NSRect(x: box.minX + 10, y: box.minY + 12, width: 116, height: 92))
                 let tx = box.minX + 136, right = box.maxX - 14
-                put(AB.join([AB.mono(b.code + " ", 16, .semibold), AB.sans(b.name, 16, .semibold)]), tx, box.minY + 14)
-                put(V3.mono(L("老板人格 ›", "Boss type ›"), 10, .regular, V3.secondary), right, box.minY + 10, align: 2)
-                let p1 = AB.pill(lang == "en" ? b.scale + " tier" : b.scale + "级", tx, box.minY + 42, dark: true, size: 11)
+                // The type's name gets smaller (to 13 pt) to stay clear of the
+                // link; French and Spanish names run long, and then the link
+                // is just its arrow.
+                let title = { (size: CGFloat) in AB.join([V3.mono(b.code + " ", size, .semibold), V3.sans(b.name, size, .semibold)]) }
+                var link = V3.mono(L("老板人格 ›", "Boss type ›"), 10, .regular, V3.secondary)
+                if title(13).size().width > right - link.size().width - 10 - tx {
+                    link = V3.mono("›", 12, .regular, V3.secondary)
+                }
+                put(link, right, box.minY + 10, align: 2)
+                var size: CGFloat = 16
+                while title(size).size().width > right - link.size().width - 10 - tx && size > 13 { size -= 0.5 }
+                put(title(size), tx, box.minY + 14 + (16 - size) * 0.6)
+                let p1 = AB.pill(scalePill(b.scale), tx, box.minY + 42, dark: true, size: 11, fill: V3.ink, ink: V3.onInk)
                 // The margin's tier name too when it fits on the line.
                 let margin = L("压榨率 ", "Margin ") + String(format: "%.1f%%", b.margin * 100)
                 let full = margin + (b.marginTier.isEmpty ? "" : " · " + b.marginTier)
                 let fits = p1.maxX + 6 + AB.sans(full, 11, .medium).size().width + 24 <= right
-                AB.pill(fits ? full : margin, p1.maxX + 6, box.minY + 42, dark: false, size: 11)
-                AB.para(AB.sans(b.roast, 12, .regular, AB.gray), tx, box.minY + 70, right - tx, lineHeight: 16)
+                AB.pill(fits ? full : margin, p1.maxX + 6, box.minY + 42, dark: false, size: 11, fill: V3.raised, ink: V3.ink)
+                AB.para(V3.sans(b.roast, 12, .regular, V3.secondary), tx, box.minY + 70, right - tx, lineHeight: 16)
             }
             v3Hits.append(("boss", box))
             y += box.height + 14
@@ -740,7 +826,7 @@ extension DashboardView {
                     sh.shadowBlurRadius = 3
                     sh.shadowOffset = NSSize(width: 0, height: -1)
                     sh.set()
-                    NSColor.white.setFill()
+                    V3.raised.setFill()
                     NSBezierPath(roundedRect: r, xRadius: 12, yRadius: 12).fill()
                     NSGraphicsContext.restoreGraphicsState()
                 }
@@ -904,7 +990,7 @@ extension DashboardView {
         // 9. One row: where the money comes from, the report window, and
         //    share today's report (right-click it: copy, other periods, the folder).
         let rowH: CGFloat = 36
-        let shareText = V3.sans("⇪  " + L("分享日报", "Share today"), 13, .semibold, .white)
+        let shareText = V3.sans("⇪  " + L("分享日报", "Share today"), 13, .semibold, V3.onInk)
         let shareR = NSRect(x: W - padX - shareText.size().width - 32, y: y, width: shareText.size().width + 32, height: rowH)
         let reportText = V3.sans(L("报告", "Reports"), 13, .medium)
         let reportR = NSRect(x: shareR.minX - 8 - reportText.size().width - 28, y: y, width: reportText.size().width + 28, height: rowH)
@@ -930,7 +1016,7 @@ extension DashboardView {
         let busy = ["working", "happy", "fuming"].contains(status)
         let off = status == "off"
         let path = NSBezierPath(roundedRect: status == "waiting" ? r.insetBy(dx: 0.75, dy: 0.75) : r, xRadius: 18, yRadius: 18)
-        (busy ? V3.ink : status == "waiting" ? NSColor.white : V3.tile).setFill()
+        (busy ? V3.ink : status == "waiting" ? V3.raised : V3.tile).setFill()
         path.fill()
         if status == "waiting" {
             V3.ink.setStroke()
@@ -942,7 +1028,7 @@ extension DashboardView {
         themeDango(NSRect(x: r.minX + 14, y: r.midY - 15, width: 36, height: 30), job: job.id, status: busy ? "working" : status == "sleeping" ? "sleeping" : "idle")
         NSGraphicsContext.restoreGraphicsState()
         let tx = r.minX + 60
-        let titleInk = busy ? NSColor.white : off ? V3.secondary : V3.ink
+        let titleInk = busy ? V3.onInk : off ? V3.secondary : V3.ink
         var x = tx
         if !off && status != "idle" && status != "sleeping" {
             V3.dot(status).setFill()
@@ -951,7 +1037,7 @@ extension DashboardView {
         }
         let title = V3.sans(job.name + " · " + statusName(status), 13, .medium, titleInk)
         title.draw(with: NSRect(x: x, y: r.minY + 14, width: r.maxX - 10 - x, height: 18), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        let sub = V3.mono(fmtHours(job.hours) + " · " + fmtUSD(job.usd), 11, .regular, busy ? NSColor.white.withAlphaComponent(0.6) : V3.secondary)
+        let sub = V3.mono(fmtHours(job.hours) + " · " + fmtUSD(job.usd), 11, .regular, busy ? V3.onInk.withAlphaComponent(0.6) : V3.secondary)
         put(sub, tx, r.minY + 35)
     }
 

@@ -85,6 +85,8 @@ for (_, r) in roles {
     use(acc, ar, extent)
     for e in eyes { use(e, er, extent) }
 }
+// The dark theme's white body is drawn wherever the black one is.
+scale["B01W"] = scale["B01"]
 for (id, need) in scale.sorted(by: { $0.key < $1.key }) {
     guard let r = rep(dir.appendingPathComponent(id + ".png")) else { failures.append("\(id).png: missing"); continue }
     check(id + ".png", r, needWidth: need)

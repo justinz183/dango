@@ -1441,8 +1441,7 @@ impl Processor {
                 }
                 t
             }
-            Highlight::Ring { pd, target } if lang.en() => format!("Weekly ring closed {} / {} person-days", fmt_short(pd), fmt_short(target)),
-            Highlight::Ring { pd, target } => format!("本周合环 {} / {} 人日", fmt_short(pd), fmt_short(target)),
+            Highlight::Ring { pd, target } => lang.f("本周合环 {} / {} 人日", "Weekly ring closed {} / {} person-days", &[&fmt_short(pd), &fmt_short(target)]),
             Highlight::Record { key, new, old } => {
                 let fmt = |x: f64| match key.as_str() {
                     "max_leverage" => format!("{x:.1}x"),
@@ -1450,14 +1449,10 @@ impl Processor {
                     "max_day_usd" => dango_core::render::fmt_usd(x),
                     _ => fmt_pd(x),
                 };
-                if lang.en() {
-                    format!("New record: {} {} (was {})", progress::record_label_in(&key, lang), fmt(new), fmt(old))
-                } else {
-                    format!("新纪录：{} {}（之前 {}）", progress::record_label(&key), fmt(new), fmt(old))
-                }
+                lang.f("新纪录：{} {}（之前 {}）", "New record: {} {} (was {})", &[progress::record_label_in(&key, lang), &fmt(new), &fmt(old)])
             }
         };
-        let more = if lang.en() { format!(" +{} more", all.len() - 1) } else { format!(" 等 {} 项", all.len()) };
+        let more = if lang == dango_core::i18n::Lang::Zh { format!(" 等 {} 项", all.len()) } else { lang.f("", " +{} more", &[&(all.len() - 1).to_string()]) };
         if all.len() > 1 && width(&text) + width(&more) <= HIGHLIGHT_WIDTH {
             text += &more;
         }

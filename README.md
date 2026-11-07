@@ -123,7 +123,9 @@ apps/widget/package.sh
 
 打开 `target/dist` 里的 `Dango-<版本>.dmg`，把 Dango 拖进「应用程序」再打开。第一次打开时 macOS 会提示无法验证开发者，去「系统设置 → 隐私与安全性」点「仍要打开」。团子会出现在屏幕右下角，先花几秒读一遍你的历史，然后放一段你的老板人格故事。之后它在后台一直记着，开机也会自己回来。
 
-App 界面现在有中文和英文，韩语、日语、法语、西班牙语正在做。Windows 版正在开发。
+App 界面有中文、English、한국어、日本語、Français、Español 六种语言，右键「语言」切换。
+
+**Windows（预览版）**：64 位 Windows 10 1803 或更新，要有 WebView2（Windows 11 自带）。运行 `Dango_<版本>_x64-setup.exe`，只装给你自己、不用管理员权限，装在 `%LOCALAPPDATA%\Dango`；安装包还没签名，SmartScreen 拦的时候点「更多信息 → 仍要运行」。团子在屏幕右下角，托盘图标左键开关面板、右键换语言和外观；后台记录的也是 `Dango.exe`，开机自己启动，数据在 `%USERPROFILE%\.dango`。这一版先有角落的团子、面板和托盘，老板人格的故事、报告窗口和分享图下一步做，「分享日报」先复制一份文字日报。安装包由 [Windows 工作流](.github/workflows/windows.yml) 在 Windows 上构建，步骤见 [CLAUDE.md](CLAUDE.md) 的「Windows 版」。
 
 ## 开发
 
@@ -133,6 +135,7 @@ App 界面现在有中文和英文，韩语、日语、法语、西班牙语正�
 | `crates/daemon` | 守护进程：跟读各个 AI 的会话记录、SQLite、老板人格、报告 |
 | `crates/cli` | 命令行 `dango` |
 | `apps/widget` | macOS App（Swift / AppKit）：团子、面板、办公室、老板人格、分享图 |
+| `apps/windows` | Windows App（Tauri v2）：团子、面板、托盘；同一个 `Dango.exe --daemon` 在后台记录 |
 | `assets` | 职业表和时薪、模型单价、老板人格的门槛和文案 |
 | `site` | 官网 dangoai.org |
 

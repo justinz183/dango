@@ -18,6 +18,7 @@ rm -rf "$tmpcheck"
 cp -R apps/widget/assets/theme-b "$app/Contents/Resources/theme-b"
 cp -R apps/widget/assets/dango "$app/Contents/Resources/dango"
 cp -R apps/widget/assets/abti "$app/Contents/Resources/abti"
+cp -R assets/i18n "$app/Contents/Resources/i18n"
 cp assets/abti.json "$app/Contents/Resources/abti/abti.json"
 
 tmp="$(mktemp -d)"

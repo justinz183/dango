@@ -12,6 +12,7 @@ use std::sync::OnceLock;
 use chrono::{Datelike, Duration, NaiveDate, Timelike};
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use dango_core::i18n::Lang;
 use dango_core::occupation::Table;
 
 use crate::config::Config;
@@ -101,9 +102,17 @@ fn s<'a>(v: &'a Value, k: &str) -> &'a str {
 }
 
 /// A config entry's text in the language: `name_zh` / `name_en`.
-fn txt(v: &Value, k: &str, en: bool) -> String {
-    let want = format!("{k}_{}", if en { "en" } else { "zh" });
-    v[&want].as_str().or_else(|| v[format!("{k}_zh")].as_str()).unwrap_or("").to_string()
+/// A config entry's words in `lang`: its `_zh` or `_en`, the other
+/// languages translated from the English (assets/i18n).
+fn txt(v: &Value, k: &str, lang: Lang) -> String {
+    let zh = v[format!("{k}_zh")].as_str().unwrap_or("");
+    lang.t(zh, v[format!("{k}_en")].as_str().unwrap_or(zh)).to_string()
+}
+
+/// One of a pair of names in `lang` (`name_zh` / `name_en` arrays).
+fn pair_name(v: &Value, i: usize, lang: Lang) -> String {
+    let zh = v["name_zh"][i].as_str().unwrap_or("");
+    lang.t(zh, v["name_en"][i].as_str().unwrap_or(zh)).to_string()
 }
 
 /// Dollars per day ("YYYY-MM-DD" → $) from the day counters.
@@ -164,7 +173,7 @@ fn heat(days: &BTreeMap<String, f64>, from: NaiveDate, to: NaiveDate, today: Nai
 /// The crew: each role's dollars, share and hours over `turns`, biggest
 /// first. Hidden roles stand on their own only at 10% or more, else they
 /// go into "other".
-fn crew(turns: &[Turn], en: bool) -> Vec<Value> {
+fn crew(turns: &[Turn], lang: Lang) -> Vec<Value> {
     let c = config();
     let t = Table::builtin();
     let mut usd: BTreeMap<String, f64> = BTreeMap::new();
@@ -189,7 +198,7 @@ fn crew(turns: &[Turn], en: bool) -> Vec<Value> {
     for r in c["roles"].as_array().into_iter().flatten() {
         let (u, m) = sum(&r["occupations"]);
         if u > 0.0 {
-            out.push((u, json!({ "id": s(r, "id"), "name": txt(r, "name", en), "color": s(r, "color"), "text_on_color": s(r, "text_on_color"),
+            out.push((u, json!({ "id": s(r, "id"), "name": txt(r, "name", lang), "color": s(r, "color"), "text_on_color": s(r, "text_on_color"),
                                   "art": s(r, "art"), "usd": u, "share": u / total, "hours": m / 60.0, "hidden": false })));
         }
     }
@@ -200,7 +209,7 @@ fn crew(turns: &[Turn], en: bool) -> Vec<Value> {
         }
         if u / total >= c["dimensions"]["range"]["role_share_min"].as_f64().unwrap_or(0.1) {
             let art = s(r, "art").rsplit('/').next().unwrap_or("").trim_end_matches(".png").to_string();
-            out.push((u, json!({ "id": s(r, "id"), "name": txt(r, "name", en), "color": "#B5B5BA", "text_on_color": "#1C1C1C",
+            out.push((u, json!({ "id": s(r, "id"), "name": txt(r, "name", lang), "color": "#B5B5BA", "text_on_color": "#1C1C1C",
                                   "art": art, "usd": u, "share": u / total, "hours": m / 60.0, "hidden": true })));
         } else {
             other = (other.0 + u, other.1 + m);
@@ -214,7 +223,7 @@ fn crew(turns: &[Turn], en: bool) -> Vec<Value> {
     out.sort_by(|a, b| b.0.total_cmp(&a.0));
     let mut list: Vec<Value> = out.into_iter().map(|o| o.1).collect();
     if other.0 > 0.0 {
-        list.push(json!({ "id": "other", "name": if en { "Other" } else { "其他" }, "color": "#B5B5BA", "text_on_color": "#1C1C1C",
+        list.push(json!({ "id": "other", "name": lang.t("其他", "Other"), "color": "#B5B5BA", "text_on_color": "#1C1C1C",
                           "art": "", "usd": other.0, "share": other.0 / total, "hours": other.1 / 60.0, "hidden": true }));
     }
     list
@@ -247,7 +256,7 @@ struct Letters {
     owl: bool,
 }
 
-fn letters(all: &[Turn], tz: Tz, en: bool) -> Letters {
+fn letters(all: &[Turn], tz: Tz, lang: Lang) -> Letters {
     let d = &config()["dimensions"];
     let n = all.len().max(1) as f64;
 
@@ -258,7 +267,7 @@ fn letters(all: &[Turn], tz: Tz, en: bool) -> Letters {
     let changed: f64 = all.iter().map(|t| t.lines_added + t.lines_removed).sum();
     let build = if changed > 0.0 { (all.iter().map(|t| t.new_lines).sum::<f64>() / changed).min(1.0) } else { 0.0 };
     // S / G: roles at 10% or more.
-    let crew_all = crew(&all, en);
+    let crew_all = crew(&all, lang);
     let share_min = d["range"]["role_share_min"].as_f64().unwrap_or(0.1);
     let wide = crew_all.iter().filter(|r| r["id"] != "other" && r["share"].as_f64().unwrap_or(0.0) >= share_min).count() as i64;
     let min_roles = d["range"]["min_roles"].as_i64().unwrap_or(3);
@@ -274,7 +283,7 @@ fn letters(all: &[Turn], tz: Tz, en: bool) -> Letters {
         let first = ratio > x["threshold"].as_f64().unwrap_or(0.5);
         let letter = x["letters"][if first { 0 } else { 1 }].as_str().unwrap_or("").to_string();
         let pct = if first { ratio } else { 1.0 - ratio };
-        let names: Vec<String> = (0..2).map(|i| x[if en { "name_en" } else { "name_zh" }][i].as_str().unwrap_or("").to_string()).collect();
+        let names: Vec<String> = (0..2).map(|i| pair_name(x, i, lang)).collect();
         (letter.clone(), json!({ "id": id, "letters": x["letters"], "names": names, "letter": letter, "winner": if first { 0 } else { 1 },
                                  "pct": pct, "tie": pct >= lo && pct <= hi }))
     };
@@ -283,14 +292,14 @@ fn letters(all: &[Turn], tz: Tz, en: bool) -> Letters {
     let (o, dho) = dim("hours", night);
     let g = wide >= min_roles;
     let r_letter = d["range"]["letters"][if g { 1 } else { 0 }].as_str().unwrap_or("S").to_string();
-    let dr = json!({ "id": "range", "letters": d["range"]["letters"], "names": (0..2).map(|i| d["range"][if en { "name_en" } else { "name_zh" }][i].clone()).collect::<Vec<_>>(),
+    let dr = json!({ "id": "range", "letters": d["range"]["letters"], "names": (0..2).map(|i| json!(pair_name(&d["range"], i, lang))).collect::<Vec<_>>(),
                      "letter": r_letter, "winner": if g { 1 } else { 0 }, "roles": wide, "min_roles": min_roles, "cells": 8 });
     Letters { code: format!("{h}{b}{r_letter}{o}"), dims: vec![dh, db, dr, dho], crew: crew_all, wide: g, owl: o == "O" }
 }
 
 pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value> {
     let c = config();
-    let en = cfg.lang().en();
+    let lang = cfg.lang();
     let all = turns(conn, 0, i64::MAX)?;
     let today = tz.date(now);
     let days = day_usd(conn, "usd")?;
@@ -298,7 +307,7 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
     let scan_days = (today - first).num_days() + 1;
     let sessions: i64 = conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0)).unwrap_or(0);
     let n = all.len().max(1) as f64;
-    let Letters { code, dims, crew: crew_all, wide: g, owl } = letters(&all, tz, en);
+    let Letters { code, dims, crew: crew_all, wide: g, owl } = letters(&all, tz, lang);
     let ty = &c["types"][&code];
     let mcode = s(ty, "match").to_string();
     let mt = &c["types"][&mcode];
@@ -326,20 +335,20 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
         let x = &ck[id];
         let too_few = id == "first_try_pass" && (runs.len() as i64) < x["min_runs"].as_i64().unwrap_or(20);
         let (label, color) = if too_few {
-            (txt(x, "too_few", en), Value::Null)
+            (txt(x, "too_few", lang), Value::Null)
         } else {
-            tier(&x["tiers"], v).map(|t| (t[if en { 2 } else { 1 }].as_str().unwrap_or("").to_string(), t.get(3).cloned().unwrap_or(Value::Null))).unwrap_or_default()
+            tier(&x["tiers"], v).map(|t| (lang.t(t[1].as_str().unwrap_or(""), t[2].as_str().unwrap_or("")).to_string(), t.get(3).cloned().unwrap_or(Value::Null))).unwrap_or_default()
         };
-        json!({ "id": id, "label": txt(x, "label", en), "value": v, "shown": shown, "tier": label, "tier_color": color, "too_few": too_few })
+        json!({ "id": id, "label": txt(x, "label", lang), "value": v, "shown": shown, "tier": label, "tier_color": color, "too_few": too_few })
     };
     let tokens = tidy(tokens);
     let checkup = vec![
-        item("tokens_total", tokens, compact(tokens, en)),
-        item("lines_added", lines, compact(lines, en)),
+        item("tokens_total", tokens, compact(tokens, lang)),
+        item("lines_added", lines, compact(lines, lang)),
         item("first_try_pass", first_pass, format!("{:.0}%", first_pass * 100.0)),
         item("night_shift", small_hours, format!("{:.0}%", small_hours * 100.0)),
-        item("longest_streak", streak_days as f64, if en { format!("{streak_days} days") } else { format!("{streak_days} 天") }),
-        item("max_subagents", max_sub as f64, if en { format!("{max_sub}") } else { format!("{max_sub} 个") }),
+        item("longest_streak", streak_days as f64, lang.f("{} 天", "{} days", &[&streak_days.to_string()])),
+        item("max_subagents", max_sub as f64, if lang == Lang::Zh { format!("{max_sub} 个") } else { format!("{max_sub}") }),
     ];
 
     // The story's moments.
@@ -365,23 +374,18 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
                 _ => false,
             };
             if hit && out.len() < 3 {
-                out.push(s(a, if en { "en" } else { "zh" }).replace("{night_shift}", &pct(small_hours)).replace("{first_try_pass}", &pct(first_pass))
+                out.push(lang.t(s(a, "zh"), s(a, "en")).replace("{night_shift}", &pct(small_hours)).replace("{first_try_pass}", &pct(first_pass))
                     .replace("{max_subagents}", &max_sub.to_string()).replace("{longest_streak}", &streak_days.to_string()).replace("{margin}", &format!("{:.1}", margin * 100.0)));
             }
         }
         if out.is_empty() {
-            out.push(s(&st["advice"], if en { "fallback_en" } else { "fallback" }).to_string());
+            out.push(lang.t(s(&st["advice"], "fallback"), s(&st["advice"], "fallback_en")).to_string());
         }
         out
     };
     let verdict = if small_hours > 0.15 { "night" } else if runs.len() >= 20 && first_pass < 0.6 { "tests" } else { "fine" };
-    let rel = &st[if en { "relations_en" } else { "relations" }];
-    let relations = vec![
-        s(rel, "H<>M").to_string(),
-        s(rel, "B<>F").to_string(),
-        s(rel, if g { "G=G" } else { "S=S" }).to_string(),
-        s(rel, if owl { "O=O" } else { "L=L" }).to_string(),
-    ];
+    let rel = |k: &str| lang.t(s(&st["relations"], k), s(&st["relations_en"], k)).to_string();
+    let relations = vec![rel("H<>M"), rel("B<>F"), rel(if g { "G=G" } else { "S=S" }), rel(if owl { "O=O" } else { "L=L" })];
 
     Ok(json!({
         "lang": cfg.lang().code(),
@@ -390,17 +394,20 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
         "scan_days": scan_days,
         "sessions": sessions,
         "turns": all.len(),
+        // How many jobs are priced, from the table (the story and the roles
+        // page said 23 after the sciences became one scientist).
+        "jobs": Table::builtin().occupation.len(),
         "code": code,
-        "type": { "code": code, "name": txt(ty, "name", en), "roast": txt(ty, "roast", en), "portrait": txt(ty, "portrait", en) },
+        "type": { "code": code, "name": txt(ty, "name", lang), "roast": txt(ty, "roast", lang), "portrait": txt(ty, "portrait", lang) },
         "dims": dims,
         "usd": usd, "cost": cost, "leverage": if cost > 0.0 { Some(usd / cost) } else { None }, "margin": margin,
-        "scale": { "id": s(&scales[si], "id"), "index": si, "name": txt(&scales[si], "name", en), "line": txt(&scales[si], "line", en),
-                   "next": next.map(|x| txt(x, "name", en)), "next_need": next.and_then(|x| x["min_usd"].as_f64()).map(|m| m - usd) },
-        "margin_tier": { "index": mi, "name": margins.get(mi).map(|x| txt(x, "name", en)), "line": margins.get(mi).map(|x| txt(x, "line", en)) },
+        "scale": { "id": s(&scales[si], "id"), "index": si, "name": txt(&scales[si], "name", lang), "line": txt(&scales[si], "line", lang),
+                   "next": next.map(|x| txt(x, "name", lang)), "next_need": next.and_then(|x| x["min_usd"].as_f64()).map(|m| m - usd) },
+        "margin_tier": { "index": mi, "name": margins.get(mi).map(|x| txt(x, "name", lang)), "line": margins.get(mi).map(|x| txt(x, "line", lang)) },
         "crew": crew_all,
         "checkup": checkup,
         "cost_row": cost,
-        "match": { "code": mcode, "name": txt(mt, "name", en), "line": txt(ty, "match_line", en) },
+        "match": { "code": mcode, "name": txt(mt, "name", lang), "line": txt(ty, "match_line", lang) },
         "moments": {
             "latest_night": latest.map(|t| json!({ "time": hhmm(tz, t.end), "date": day_key(tz.date(t.end)) })),
             "best_day": best.clone().map(|(k, v)| json!({ "date": k, "usd": v, "hours": best_hours })),
@@ -411,7 +418,7 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
         "best_day": best.as_ref().map(|b| b.0.clone()),
         "story": {
             "advice": advice,
-            "verdict": s(&st[if en { "verdict_en" } else { "verdict" }], verdict),
+            "verdict": lang.t(s(&st["verdict"], verdict), s(&st["verdict_en"], verdict)),
             "relations": relations,
             // Only the numbers: the config's notes beside them are for people.
             "timing": st["timing"].as_object().map(|m| m.iter().filter(|(_, v)| v.is_number()).map(|(k, v)| (k.clone(), v.clone())).collect::<serde_json::Map<_, _>>()),
@@ -420,8 +427,14 @@ pub fn result(conn: &Connection, tz: Tz, cfg: &Config, now: i64) -> Result<Value
 }
 
 /// 12,840,000,000 → 128.4 亿 / 12.8B; 216,000 → 21.6 万 / 216K.
-fn compact(v: f64, en: bool) -> String {
-    if en {
+fn compact(v: f64, lang: Lang) -> String {
+    // 万 / 億 for Japanese, 만 / 억 for Korean.
+    let (wan, yi) = match lang {
+        Lang::Ja => ("万", "億"),
+        Lang::Ko => ("만", "억"),
+        _ => ("万", "亿"),
+    };
+    if !matches!(lang, Lang::Zh | Lang::Ja | Lang::Ko) {
         match v {
             _ if v >= 1e9 => format!("{:.1}B", v / 1e9),
             _ if v >= 1e6 => format!("{:.1}M", v / 1e6),
@@ -430,8 +443,8 @@ fn compact(v: f64, en: bool) -> String {
         }
     } else {
         match v {
-            _ if v >= 1e8 => format!("{:.1} 亿", v / 1e8),
-            _ if v >= 1e4 => format!("{:.1} 万", v / 1e4),
+            _ if v >= 1e8 => format!("{:.1} {yi}", v / 1e8),
+            _ if v >= 1e4 => format!("{:.1} {wan}", v / 1e4),
             _ => format!("{v:.0}"),
         }
     }
@@ -455,7 +468,7 @@ fn tidy(x: f64) -> f64 {
 /// What got done in a period, for the report window only (never on share
 /// images): the top sessions by $, with the title and folder the session
 /// has on this Mac, and the same $ summed by project.
-fn named_work(conn: &Connection, claude_dir: &Path, from: i64, to: i64, en: bool) -> Result<(Vec<Value>, Vec<Value>)> {
+fn named_work(conn: &Connection, claude_dir: &Path, from: i64, to: i64, lang: Lang) -> Result<(Vec<Value>, Vec<Value>)> {
     let mut st = conn.prepare(
         "SELECT t.session_id, s.source, s.ended_at, SUM(t.usd), SUM(t.human_minutes), COUNT(*), MAX(t.ended_at)
          FROM turns t JOIN sessions s ON s.id = t.session_id
@@ -473,7 +486,7 @@ fn named_work(conn: &Connection, claude_dir: &Path, from: i64, to: i64, en: bool
             sessions.push(json!({ "title": meta.title, "project": meta.project, "tool": tool(src), "usd": usd, "minutes": minutes,
                                   "turns": turns, "last": last }));
         }
-        let name = meta.project.clone().unwrap_or_else(|| if en { "No project folder".into() } else { "不在项目文件夹里".into() });
+        let name = meta.project.clone().unwrap_or_else(|| lang.t("不在项目文件夹里", "No project folder").to_string());
         match projects.iter_mut().find(|p| p.0 == name) {
             Some(p) => { p.1 += usd; p.2 += minutes; p.3 += 1; }
             None => projects.push((name, *usd, *minutes, 1)),
@@ -486,7 +499,7 @@ fn named_work(conn: &Connection, claude_dir: &Path, from: i64, to: i64, en: bool
 
 /// One report (日报 / 周报 / 月报 / 年报 / 总计) for the period holding `date`.
 pub fn report(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, kind: &str, date: NaiveDate, now: i64) -> Result<Value> {
-    let en = cfg.lang().en();
+    let lang = cfg.lang();
     let today = tz.date(now);
     let usd_days = day_usd(conn, "usd")?;
     let cost_days = day_usd(conn, "cost")?;
@@ -517,7 +530,7 @@ pub fn report(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, kind: 
         _ => from - Duration::days(span),
     };
     let prev = tidy(sum_days(&usd_days, prev_from, from - Duration::days(1)));
-    let (sessions, projects) = named_work(conn, claude_dir, midnight(tz, from), midnight(tz, to + Duration::days(1)), en)?;
+    let (sessions, projects) = named_work(conn, claude_dir, midnight(tz, from), midnight(tz, to + Duration::days(1)), lang)?;
     let best_any = usd_days.values().copied().fold(0.0, f64::max);
     let daily = |a: NaiveDate, b: NaiveDate| -> Vec<Value> {
         let mut out = Vec::new();
@@ -544,16 +557,16 @@ pub fn report(conn: &Connection, tz: Tz, cfg: &Config, claude_dir: &Path, kind: 
         "cost": cost,
         "leverage": if cost > 0.0 { Some(usd / cost) } else { None },
         "vs_prev": if prev > 0.0 { Some(usd / prev - 1.0) } else { None },
-        "crew": crew(&ts, en),
+        "crew": crew(&ts, lang),
         "sessions": sessions,
         "projects": projects,
     });
     // The period's own boss type, from its turns alone (the total's is the
     // boss card's, below).
     if !ts.is_empty() {
-        let code = letters(&ts, tz, en).code;
+        let code = letters(&ts, tz, lang).code;
         let ty = &config()["types"][&code];
-        out["boss"] = json!({ "code": code, "name": txt(ty, "name", en), "roast": txt(ty, "roast", en) });
+        out["boss"] = json!({ "code": code, "name": txt(ty, "name", lang), "roast": txt(ty, "roast", lang) });
     }
     match kind {
         "day" => {

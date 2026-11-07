@@ -123,7 +123,9 @@ apps/widget/package.sh
 
 Open `Dango-<version>.dmg` in `target/dist`, drag Dango to Applications and open it. The first time, macOS says it can’t verify the developer: go to System Settings → Privacy & Security and click Open Anyway. The dango appears in the bottom-right corner, reads your history for a few seconds, then tells your boss-type story. From then on it keeps count in the background and comes back after a restart.
 
-The app speaks Chinese and English today; Korean, Japanese, French and Spanish are on the way. A Windows version is in the works.
+The app speaks Chinese, English, Korean, Japanese, French and Spanish: right-click it and pick a language.
+
+**Windows (preview)**: 64-bit Windows 10 1803 or later, with WebView2 (built into Windows 11). Run `Dango_<version>_x64-setup.exe`: it installs for you only, without admin rights, into `%LOCALAPPDATA%\Dango`. The installer isn’t signed yet, so if SmartScreen stops it, click More info → Run anyway. The dango sits in the bottom-right corner; left-click the tray icon to open or close the panel, right-click it for language and appearance. The same `Dango.exe` keeps count in the background, starts at login, and keeps its data in `%USERPROFILE%\.dango`. This first version has the corner dango, the panel and the tray; the boss-type story, the report window and share images come next, and “Share today” copies a text report for now. The installer is built on Windows by the [Windows workflow](.github/workflows/windows.yml).
 
 ## Develop
 
@@ -133,6 +135,7 @@ The app speaks Chinese and English today; Korean, Japanese, French and Spanish a
 | `crates/daemon` | The daemon: follows each agent’s session logs, SQLite, boss type, reports |
 | `crates/cli` | The `dango` command |
 | `apps/widget` | The macOS app (Swift / AppKit): the dango, panel, office, boss type, share cards |
+| `apps/windows` | The Windows app (Tauri v2): the dango, panel, tray; the same `Dango.exe --daemon` keeps count |
 | `assets` | Jobs and wages, model prices, boss-type thresholds and copy |
 | `site` | The website, dangoai.org |
 

@@ -185,8 +185,11 @@ final class StoryView: NSView {
             let r = NSRect(x: x0 + CGFloat(i / rows) * (cell + gap), y: 346 + CGFloat(i % rows) * (cell + gap), width: cell, height: cell)
             AB.round(r, 2, dim[min(4, max(0, v.i))])
         }
+        // The number of jobs comes from the table (data "jobs"), never written in.
+        let jobs = data["jobs"].i
+        let jobsLine = jobs > 0 ? L("\(jobs) 种职业各自的计时分钟", "Minutes on the clock for each of \(jobs) jobs") : L("每种职业各自的计时分钟", "Minutes on the clock for each job")
         let lines = [L("\(fmtInt(data["sessions"].i)) 个会话", "\(fmtInt(data["sessions"].i)) sessions"), L("每个回合 AI 自己动手几步", "How many steps the AI took on its own each turn"),
-                     L("23 种职业各自的计时分钟", "Minutes on the clock for each of 23 jobs"), L("模型一共花了多少钱", "What the models cost in all")]
+                     jobsLine, L("模型一共花了多少钱", "What the models cost in all")]
         var y: CGFloat = 346 + CGFloat(rows) * (cell + gap) + 26
         for (k, l) in lines.enumerated() where p >= Double(k + 1) / 4.0 - 0.001 {
             put(AB.sans("✓", 13, .bold, AB.green), x0, y)
@@ -294,7 +297,7 @@ final class StoryView: NSView {
                 AB.pill(L("你在这", "You're here"), r.midX - pw / 2, r.minY - 22, dark: true, size: 10, padX: 7, padY: 1.5)
             }
             put(AB.sans(cw(tr, "name"), 11.5, k == mine ? .semibold : .regular, k == mine ? AB.ink : AB.gray), r.midX, base + 8, align: 1)
-            let th = k == 0 ? "< $1k" : ["$1k", "$10k", "$100k", "$1M"][min(3, k - 1)]
+            let th = k == 0 ? "< $" + ABText.shortUSD(tiers[1]["min_usd"].d) : "$" + ABText.shortUSD(tr["min_usd"].d)
             put(AB.mono(th, 9, .regular, AB.gray), r.midX, base + 26, align: 1)
         }
         y = base + 52
@@ -380,7 +383,7 @@ final class StoryView: NSView {
         }
         rows.insert((L("模型花费", "Model cost"), fmtUSD(data["cost"].d), "—", L("只看看", "FYI"), AB.ink), at: 1)
         for r in rows {
-            put(AB.sans(r.0, 12, .regular), cols[0], y + 8)
+            AB.fitLine({ AB.sans(r.0, $0, .regular) }, 12, cols[0], y + 8, cols[1] - cols[0] - 8, least: 9.5)
             put(AB.mono(r.1, 12, .semibold), cols[1], y + 8)
             put(AB.mono(r.2, 9.5, .regular, AB.gray), cols[2], y + 10)
             put(AB.sans(r.3, 11, .semibold, r.4), cols[3], y + 9, align: 2)
