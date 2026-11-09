@@ -917,14 +917,14 @@ final class App: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: isExpanded ? L("收起仪表盘", "Close dashboard") : L("打开仪表盘", "Open dashboard"), action: #selector(toggle), keyEquivalent: ""))
         let boss = NSMenu()
-        for (id, title) in [("story", L("我的老板人格", "My boss type")), ("types", L("16 型图鉴", "All 16 types")),
+        for (id, title) in [("story", L("我的 ABTI", "My ABTI")), ("types", L("ABTI 人格图鉴", "All ABTI types")),
                             ("scale", L("规模和压榨率怎么算", "How scale and margin work")), ("roles", L("团子构成怎么算", "How the crew works"))] {
             let item = NSMenuItem(title: title, action: #selector(openBoss(_:)), keyEquivalent: "")
             item.representedObject = id
             item.target = self
             boss.addItem(item)
         }
-        let bossItem = NSMenuItem(title: L("老板人格", "AI Boss Type"), action: nil, keyEquivalent: "")
+        let bossItem = NSMenuItem(title: L("ABTI 人格", "ABTI"), action: nil, keyEquivalent: "")
         bossItem.submenu = boss
         menu.addItem(bossItem)
         menu.addItem(NSMenuItem(title: L("报告", "Reports"), action: #selector(openReports), keyEquivalent: ""))
@@ -1292,6 +1292,8 @@ if let i = args.firstIndex(of: "--snapshot-office"), args.count > i + 1 {
     v.model = m
     v.occupants = staff
     v.instant = true
+    // --hover N: the job-and-state label over the N'th 团子 (0 first).
+    v.hoverIndex = flagv("--hover").flatMap { Int($0) }
     // --t SEC: the moment to render (4.35 catches the first one's blink).
     v.tick(flagv("--t").flatMap { Double($0) } ?? 0.9)
     snapshot(v, size, args[i + 1])
@@ -1307,9 +1309,10 @@ if let i = args.firstIndex(of: "--snapshot-dango"), args.count > i + 1 {
     let role = flagv("--role") ?? flagv("--job").flatMap { packRoles[$0] }
     let width = CGFloat(Double(flagv("--width") ?? "") ?? 480)
     let e = packLayout(role).extent
-    let size = NSSize(width: width, height: (width * e.height / e.width).rounded())
+    // Room around it for the paws, the waving arcs and the alert marks.
+    let size = NSSize(width: width, height: (width * e.height / e.width * 1.12).rounded())
     let img = NSImage(size: size, flipped: true) { b in
-        drawFittedDango(b, role: role, status: flagv("--status") ?? "idle")
+        drawFittedDango(b.insetBy(dx: width * 0.11, dy: size.height * 0.06), role: role, status: flagv("--status") ?? "idle")
         return true
     }
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8, samplesPerPixel: 4,

@@ -37,7 +37,7 @@ const USAGE: &str = "dango（打工团子）— 你的 AI 替你干了多少活�
   dango card [--week|--month|--year] [--day DATE] [--out PNG] [--no-open]
                                    导出 4:5 分享图（和报告窗口同一套设计）到 ~/Pictures/DANGO/ 并复制到剪贴板
   dango abti [--json] | dango abti --report day|week|month|year|total [--day DATE]
-                                   老板人格的结果 / 报告窗口一页的数据（JSON）
+                                   ABTI 人格的结果 / 报告窗口一页的数据（JSON）
   dango panel [--no-open]     生成并打开本地网页面板（办公室、成就、周报）
   dango backfill [--claude-dir DIR]
                                    导入安装前的 Claude Code 历史
@@ -61,7 +61,7 @@ Usage:
   dango card [--week|--month|--year] [--day DATE] [--out PNG] [--no-open]
                                    export the 4:5 share image (the report window's design) to ~/Pictures/DANGO/ and copy it
   dango abti [--json] | dango abti --report day|week|month|year|total [--day DATE]
-                                   the AI boss type, or one report window page (JSON)
+                                   your ABTI, or one report window page (JSON)
   dango backfill [--claude-dir DIR]
                                    import Claude Code and Codex history from before install
   dango daemon                run the daemon in the foreground

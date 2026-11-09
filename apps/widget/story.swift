@@ -98,10 +98,10 @@ final class StoryView: NSView {
             AB.round(back, 18, AB.control)
             put(AB.sans("‹", 18, .medium), back.midX, back.minY + 7, align: 1)
             hits.append(("prev", back))
-            put(AB.sans(L("老板人格", "AI Boss Type"), 11, .regular, sub), back.maxX + 10, 29)
+            put(AB.sans(L("ABTI 人格", "ABTI"), 11, .regular, sub), back.maxX + 10, 29)
         } else {
             let mw = AB.wordmark(15, 27, size: 13, color: ink)
-            put(AB.sans(L("老板人格", "AI Boss Type"), 11, .regular, sub), 15 + mw + 10, 29)
+            put(AB.sans(L("ABTI 人格", "ABTI"), 11, .regular, sub), 15 + mw + 10, 29)
         }
         var rx = W - 15 - 36 - 12
         if screen == 7 {
@@ -364,7 +364,7 @@ final class StoryView: NSView {
         put(AB.mono(no, 10, .regular, AB.gray), W - x0, 136, align: 2)
         let info = NSRect(x: x0, y: 168, width: W - 60, height: 32)
         AB.stroke(info, 10, AB.line, 1)
-        put(AB.join([AB.sans(L("类型 ", "Type "), 11, .regular, AB.gray), AB.mono(code, 11, .semibold),
+        put(AB.join([AB.sans("ABTI ", 11, .regular, AB.gray), AB.mono(code, 11, .semibold),
                      AB.sans(L("    样本 \(data["scan_days"].i) 天 · \(fmtInt(data["sessions"].i)) 会话", "    Sample \(data["scan_days"].i) days · \(fmtInt(data["sessions"].i)) sessions"), 11, .regular, AB.gray)]), info.minX + 12, info.minY + 9)
         put(AB.sans(L("日期 ", "Date ") + date, 11, .regular, AB.gray), info.maxX - 12, info.minY + 9, align: 2)
         var y: CGFloat = 218
@@ -631,7 +631,7 @@ final class PageWindow: NSObject {
         let size = NSSize(width: full.width * k, height: full.height * k)
         window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         super.init()
-        window.title = ["types": L("16 型图鉴", "All 16 types"), "scale": L("规模和压榨率怎么算", "How scale and margin work"),
+        window.title = ["types": L("ABTI 人格图鉴", "All ABTI types"), "scale": L("规模和压榨率怎么算", "How scale and margin work"),
                         "roles": L("团子构成怎么算", "How the crew works")][id] ?? ""
         window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .aqua)

@@ -75,13 +75,13 @@ Un bonnet pour le code, un casque pour la vidéo. À la fin de chaque tour, une 
 
 Aucun plugin, aucun réglage. DANGO lit les journaux de session que ces outils gardent déjà sur votre Mac, compte votre travail passé dès l’installation et les met côte à côte : qui en a fait le plus, qui vous donne le plus de levier.
 
-## Vous êtes le patron. Quel genre de patron ?
+## ABTI : vous êtes le patron. Quel genre de patron ?
 
-Pas de questionnaire. À partir de ce que vos agents ont vraiment fait, DANGO calcule **quatre lettres, une taille d’entreprise et une marge**, puis raconte votre histoire : votre nuit la plus tardive, votre plus grosse journée, votre fiche de paie.
+Pas de questionnaire. À partir de ce que vos agents ont vraiment fait, DANGO calcule votre **ABTI** (quatre lettres), une taille d’entreprise et une marge, puis raconte votre histoire : votre nuit la plus tardive, votre plus grosse journée, votre fiche de paie.
 
 <table>
 <tr>
-<td width="300"><img src="docs/images/card-en.jpg" width="280" alt="La carte du type de patron"></td>
+<td width="300"><img src="docs/images/card-en.jpg" width="280" alt="La carte ABTI"></td>
 <td>
 
 | Axe | D’un côté | De l’autre |
@@ -91,9 +91,9 @@ Pas de questionnaire. À partir de ce que vos agents ont vraiment fait, DANGO ca
 | Votre champ d’action | Spécialiste **S** | Généraliste **G** |
 | Quand vous travaillez | Lève-tôt **L** | Oiseau de nuit **O** |
 
-Quatre axes, seize types de patron. La taille de votre entreprise suit le travail de vos dangos, en cinq paliers : Auto-entrepreneur, Atelier, Studio, Groupe, Société cotée.
+Quatre axes, 16 types ABTI. La taille de votre entreprise suit le travail de vos dangos, en cinq paliers : Auto-entrepreneur, Atelier, Studio, Groupe, Société cotée.
 
-[Voir les 16 types →](https://dangoai.org/en/types/)
+[Voir les 16 types ABTI →](https://dangoai.org/en/types/)
 
 </td>
 </tr>
@@ -101,7 +101,7 @@ Quatre axes, seize types de patron. La taille de votre entreprise suit le travai
 
 ## Chaque rapport est une carte à partager.
 
-Jour, semaine, mois, année et total, **chacun avec le type de patron de cette période**. Touchez « Partager » et choisissez où l’envoyer. Les cartes ne montrent jamais de noms de projets, de titres de session ni de code.
+Jour, semaine, mois, année et total, **chacun avec l’ABTI de cette période**. Touchez « Partager » et choisissez où l’envoyer. Les cartes ne montrent jamais de noms de projets, de titres de session ni de code.
 
 <p align="center"><img src="docs/images/share-en.jpg" width="420" alt="Une carte de la semaine"></p>
 
@@ -121,22 +121,22 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin
 apps/widget/package.sh
 ```
 
-Ouvrez `Dango-<version>.dmg` dans `target/dist`, glissez Dango dans Applications et lancez-le. La première fois, macOS indique qu’il ne peut pas vérifier le développeur : allez dans Réglages Système → Confidentialité et sécurité et cliquez sur « Ouvrir quand même ». Le dango apparaît en bas à droite, lit votre historique pendant quelques secondes, puis raconte l’histoire de votre type de patron. Ensuite, il continue de compter en arrière-plan et revient après un redémarrage.
+Ouvrez `Dango-<version>.dmg` dans `target/dist`, glissez Dango dans Applications et lancez-le. La première fois, macOS indique qu’il ne peut pas vérifier le développeur : allez dans Réglages Système → Confidentialité et sécurité et cliquez sur « Ouvrir quand même ». Le dango apparaît en bas à droite, lit votre historique pendant quelques secondes, puis raconte l’histoire de votre ABTI. Ensuite, il continue de compter en arrière-plan et revient après un redémarrage.
 
 L’app parle chinois, anglais, coréen, japonais, français et espagnol : clic droit sur le dango pour choisir la langue.
 
-**Windows (préversion)** : Windows 10 1803 ou plus récent en 64 bits, avec WebView2 (inclus dans Windows 11). Lancez `Dango_<version>_x64-setup.exe` : il s’installe pour vous seul, sans droits d’administrateur, dans `%LOCALAPPDATA%\Dango`. Le programme d’installation n’est pas encore signé ; si SmartScreen le bloque, cliquez sur Informations complémentaires → Exécuter quand même. Le dango se place en bas à droite ; clic gauche sur l’icône de la barre des tâches pour ouvrir ou fermer le panneau, clic droit pour la langue et l’apparence. Le même `Dango.exe` compte en arrière-plan, démarre à l’ouverture de session et garde ses données dans `%USERPROFILE%\.dango`. Cette première version a le dango du coin, le panneau et l’icône ; l’histoire du type de patron, la fenêtre des rapports et les images à partager arrivent ensuite, et « Partager le jour » copie pour l’instant un rapport texte. Le programme d’installation est construit sous Windows par le [workflow Windows](.github/workflows/windows.yml).
+**Windows (préversion)** : Windows 10 1803 ou plus récent en 64 bits, avec WebView2 (inclus dans Windows 11). Lancez `Dango_<version>_x64-setup.exe` : il s’installe pour vous seul, sans droits d’administrateur, dans `%LOCALAPPDATA%\Dango`. Le programme d’installation n’est pas encore signé ; si SmartScreen le bloque, cliquez sur Informations complémentaires → Exécuter quand même. Le dango se place en bas à droite ; clic gauche sur l’icône de la barre des tâches pour ouvrir ou fermer le panneau, clic droit pour la langue et l’apparence. Le même `Dango.exe` compte en arrière-plan, démarre à l’ouverture de session et garde ses données dans `%USERPROFILE%\.dango`. Cette première version a le dango du coin, le panneau et l’icône ; l’histoire de l’ABTI, la fenêtre des rapports et les images à partager arrivent ensuite, et « Partager le jour » copie pour l’instant un rapport texte. Le programme d’installation est construit sous Windows par le [workflow Windows](.github/workflows/windows.yml).
 
 ## Développer
 
 | Dossier | Contenu |
 | --- | --- |
 | `crates/core` | Logique pure : sujets, métiers et salaires, calcul |
-| `crates/daemon` | Le démon : suit les journaux de chaque agent, SQLite, type de patron, rapports |
+| `crates/daemon` | Le démon : suit les journaux de chaque agent, SQLite, ABTI, rapports |
 | `crates/cli` | La commande `dango` |
-| `apps/widget` | L’app macOS (Swift / AppKit) : le dango, le panneau, le bureau, le type de patron, les cartes |
+| `apps/widget` | L’app macOS (Swift / AppKit) : le dango, le panneau, le bureau, l’ABTI, les cartes |
 | `apps/windows` | L’app Windows (Tauri v2) : le dango, le panneau, l’icône ; le même `Dango.exe --daemon` compte en arrière-plan |
-| `assets` | Métiers et salaires, prix des modèles, seuils et textes du type de patron |
+| `assets` | Métiers et salaires, prix des modèles, seuils et textes de l’ABTI |
 | `site` | Le site dangoai.org |
 
 Construire, tester et empaqueter : [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Toutes les règles de calcul : [docs/DESIGN.md](docs/DESIGN.md).

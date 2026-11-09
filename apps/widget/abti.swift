@@ -427,7 +427,7 @@ final class BossCardView: ABPage {
         var y: CGFloat = 28
         // 1. Top: the word mark, what this is, the date.
         let mw = AB.wordmark(x0, y)
-        put(AB.sans(L("老板人格", "AI Boss Type"), 14, .medium, AB.gray), x0 + mw + 10, y + 3)
+        put(AB.sans(L("ABTI 人格", "ABTI"), 14, .medium, AB.gray), x0 + mw + 10, y + 3)
         put(AB.mono("ABTI · " + d["date"].s, 12, .regular, AB.gray), x0 + W, y + 4, align: 2)
         y += 22 + 10
 
@@ -458,7 +458,7 @@ final class BossCardView: ABPage {
         y += AB.para(AB.sans(ABText.roast(code), roastSize, .medium), x0 + 30, y + 2, W - 30, lineHeight: roastSize * 1.45) + 2 + 14
 
         // 4. The four dimensions.
-        y += AB.header(L("你的老板人格", "Your boss profile"), L("≈ 两边都沾 · 格子 = 占一成以上的角色", "≈ on the fence · squares = roles at 10%+"), x0, y, W) + 8
+        y += AB.header(L("你的 ABTI", "Your ABTI"), L("≈ 两边都沾 · 格子 = 占一成以上的角色", "≈ on the fence · squares = roles at 10%+"), x0, y, W) + 8
         let dims = d["dims"].arr
         var lw: CGFloat = 54
         for dm in dims {
@@ -585,7 +585,7 @@ final class TypesView: ABPage {
         let x0: CGFloat = 28, W: CGFloat = 484
         var y: CGFloat = 28
         let mw = AB.wordmark(x0, y)
-        put(AB.sans(L("16 种 AI 老板", "16 AI boss types"), 14, .medium, AB.gray), x0 + mw + 10, y + 3)
+        put(AB.sans(L("16 种 ABTI 人格", "The 16 ABTI types"), 14, .medium, AB.gray), x0 + mw + 10, y + 3)
         put(AB.mono("ABTI", 12, .regular, AB.gray), x0 + W, y + 4, align: 2)
         y += 34
         put(AB.sans(L("你是哪一种老板？", "Which boss are you?"), 22, .semibold), x0, y)
@@ -620,7 +620,7 @@ final class TypesView: ABPage {
             }
         }
         y += CGFloat(left.count) * (rowH + gap) + 4
-        put(AB.sans(L("每型一个招牌动作；你的职业角色在结果卡「团子构成」里另外显示", "One signature move per type; your job roles show on the card's crew"), 10.5, .regular, AB.gray), x0, y)
+        put(AB.sans(L("每种 ABTI 人格一个招牌动作；你的职业角色在结果卡「团子构成」里另外显示", "One signature move per ABTI type; your job roles show on the card's crew"), 10.5, .regular, AB.gray), x0, y)
     }
 }
 
@@ -693,8 +693,8 @@ final class RolesView: ABPage {
         let mw = AB.wordmark(x0, y)
         put(AB.sans(L("团子构成 · 8 个角色", "Your crew · 8 roles"), 14, .medium, AB.gray), x0 + mw + 10, y + 3)
         y += 42
-        y += AB.para(AB.sans(L("写代码统称程序员。角色只看团子在干什么活，和老板类型无关；颜色跟角色走，不跟名次走。右边的小团子是同一角色的备用造型。",
-                                "All coding is the coder. A role is about the work, not the boss type; colours follow the role, not the rank. Small ones on the right are the same role's alternates."),
+        y += AB.para(AB.sans(L("写代码统称程序员。角色只看团子在干什么活，和 ABTI 类型无关；颜色跟角色走，不跟名次走。右边的小团子是同一角色的备用造型。",
+                                "All coding is the coder. A role is about the work, not your ABTI; colours follow the role, not the rank. Small ones on the right are the same role's alternates."),
                                 12, .regular, AB.gray), x0, y, W, lineHeight: 17) + 14
         for r in c["roles"].arr {
             let rowH: CGFloat = 58

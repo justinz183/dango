@@ -36,8 +36,9 @@ function applyTheme() {
 // --- The office (V3OfficeView) ---------------------------------------------
 
 const OFFICE = { w: 392, h: 178 };
-/// The two desk places' left edges (70 wide); the laptops are centred on them.
-const DESK_X = [218, 318];
+/// The two desk places' left edges (50 wide), behind the laptops of the
+/// designer's office (tools/office_art.py); the same as theme.swift.
+const DESK_X = [209.2, 272.6];
 let officeCtx = null;
 const walks = new Map();
 
@@ -51,9 +52,9 @@ function arrangement(m) {
   const stand = all.filter(([, s]) => s === "waiting").slice(0, 1);
   const lounge = all.filter(([, s]) => ["idle", "sleeping"].includes(s)).slice(0, 3);
   const out = [];
-  for (const [o, s] of stand) out.push([o, s, feet(268, 123, 70)]);
-  desk.forEach(([o, s], i) => out.push([o, s, feet(DESK_X[i], 123, 70)]));
-  const seats = [59, 111, 163].map((x) => feet(x - 29, 127.5, 58));
+  for (const [o, s] of stand) out.push([o, s, feet(7, 166, 46)]);
+  desk.forEach(([o, s], i) => out.push([o, s, feet(DESK_X[i], 131, 50)]));
+  const seats = [86.2, 122.4, 158.2].map((x) => feet(x - 23, 146.7, 46));
   lounge.forEach(([o, s], i) => out.push([o, s, seats[i]]));
   return out;
 }
@@ -107,6 +108,7 @@ function drawOffice() {
   }
   const people = arrangement(model);
   for (const id of [...walks.keys()]) if (!people.some(([o]) => o.id === id)) walks.delete(id);
+  officeSpots = [];
   const b = packLayout(null).body;
   people.forEach(([o, s, place], i) => {
     // The body a little narrower than the place, standing on its floor.
@@ -114,34 +116,41 @@ function drawOffice() {
     const at = walkTo(o.id, { x: place.x + place.w / 2 - w / 2, y: place.y + place.h - h, w, h }, t);
     const phase = i * 0.41, role = PACK_ROLES[o.id];
     const eyes = blinking(s, t + phase * 7) ? "sleeping" : s;
-    moving(ctx, s, t + phase, at, () => drawPackDango(ctx, at, role, eyes, dark));
+    moving(ctx, s, t + phase, at, () => drawPackDango(ctx, at, role, eyes, dark, { pose: s, atDesk: ["working", "happy", "fuming"].includes(s), t: t + phase }));
     stateExtras(ctx, s, t + phase, packExtent(at, role));
+    officeSpots.push({ r: packExtent(at, role), job: o.name || o.id, s });
   });
   layer("room-front", 1);
   layer("room-front-dusk", dusk);
   layer("room-front-night", night);
-  // The two laptops on the desk, outlined like the illustration's furniture.
-  DESK_X.forEach((left, n) => {
-    const x = left + 35 - 21;
-    rrectFill(ctx, x, 120, 42, 18, 3, "#9AA0A8");
-    ctx.beginPath();
-    ctx.roundRect(x + 0.4, 120.4, 41.2, 17.2, 2.8);
-    ctx.lineWidth = 0.8;
-    ctx.strokeStyle = "#3A3530";
-    ctx.stroke();
-    rrectFill(ctx, x + 4, 124, 34, 10, 2, "#E9EEF2");
-    if (n === 0) {
-      [3, 6, 4, 7].forEach((h, k) => rrectFill(ctx, x + 9 + k * 6, 133 - h, 3, h, 0, k === 3 ? "#2E8B57" : "#5FBF84"));
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(x + 13, 128); ctx.lineTo(x + 10, 131); ctx.lineTo(x + 13, 134);
-      ctx.moveTo(x + 25, 128); ctx.lineTo(x + 28, 131); ctx.lineTo(x + 25, 134);
-      ctx.lineWidth = 1.5;
-      ctx.lineCap = ctx.lineJoin = "round";
-      ctx.strokeStyle = "#5B6B8C";
-      ctx.stroke();
-    }
-  });
+  drawHoverLabel(ctx, W);
+  ctx.restore();
+}
+
+/// Hovering a 团子 shows its job and state, as theme.swift `drawHoverLabel`
+/// (?hover=N pins it over the N'th in a browser).
+let officeSpots = [];
+let officePointer = null;
+function drawHoverLabel(ctx, W) {
+  const pin = QUERY.has("hover") ? officeSpots[Number(QUERY.get("hover"))] : null;
+  const p = officePointer;
+  const spot = pin || (p && [...officeSpots].reverse().find(({ r }) => p.x >= r.x - 2 && p.x <= r.x + r.w + 2 && p.y >= r.y - 2 && p.y <= r.y + r.h + 2));
+  if (!spot) return;
+  const job = spot.job + " · ", state = statusName(spot.s);
+  ctx.save();
+  ctx.font = `500 11px ${SANS}`;
+  const wJob = ctx.measureText(job).width;
+  ctx.font = `600 11px ${SANS}`;
+  const w = wJob + ctx.measureText(state).width + 18, h = 20;
+  const x = Math.min(Math.max(4, spot.r.x + spot.r.w / 2 - w / 2), W - 4 - w), y = Math.max(4, spot.r.y - h - 4);
+  rrectFill(ctx, x, y, w, h, h / 2, "rgba(26,26,26,0.88)");
+  ctx.textBaseline = "middle";
+  ctx.font = `500 11px ${SANS}`;
+  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.fillText(job, x + 9, y + h / 2 + 0.5);
+  ctx.font = `600 11px ${SANS}`;
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText(state, x + 9 + wJob, y + h / 2 + 0.5);
   ctx.restore();
 }
 
@@ -185,6 +194,11 @@ function render() {
   const office = document.createElement("canvas");
   office.id = "office";
   officeCtx = sharpCanvas(office, OFFICE.w, OFFICE.h);
+  office.addEventListener("mousemove", (e) => {
+    const r = office.getBoundingClientRect();
+    officePointer = { x: ((e.clientX - r.left) * OFFICE.w) / r.width, y: ((e.clientY - r.top) * OFFICE.h) / r.height };
+  });
+  office.addEventListener("mouseleave", () => { officePointer = null; });
   content.append(office);
 
   // 3. Today, its model cost and leverage, whether it is the best day; the line.
@@ -205,7 +219,7 @@ function render() {
     const margin = L("压榨率 ", "Margin ") + ((b.margin || 0) * 100).toFixed(1) + "%";
     const full = margin + (b.margin_tier ? " · " + b.margin_tier : "");
     const box = el(`<div class="boss"><img src="art/scene/T-${esc(b.code)}.png" alt="">
-      <div class="body"><div class="name"><div><b>${esc(b.code)} </b><span>${esc(b.name)}</span></div><em>${L("老板人格", "Boss type")}</em></div>
+      <div class="body"><div class="name"><div><b>${esc(b.code)} </b><span>${esc(b.name)}</span></div><em>ABTI ›</em></div>
       <div class="pills"><span class="pill dark">${esc(L(b.scale + "级", b.scale + " tier"))}</span><span class="pill">${esc(full)}</span></div>
       <div class="roast">${esc(b.roast)}</div></div></div>`);
     content.append(box);

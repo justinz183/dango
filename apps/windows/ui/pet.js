@@ -85,7 +85,7 @@ function draw() {
   ctx.restore();
   const face = { x: BOX.x, y: BOX.y - bob, w: BOX.w, h: BOX.h };
   const job = (model.activity && model.activity.job && model.activity.job.id) || "";
-  themeDango(ctx, face, job, blinking(status, t) ? "sleeping" : status, dark);
+  themeDango(ctx, face, job, blinking(status, t) ? "sleeping" : status, dark, { pose: status, t });
   stateExtras(ctx, status, t, face);
 
   const runs = pillText();

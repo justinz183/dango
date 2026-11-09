@@ -310,8 +310,9 @@ func moving(_ status: String, _ t: Double, _ box: NSRect, _ body: () -> Void) {
     NSGraphicsContext.restoreGraphicsState()
 }
 
-/// The little things around a 团子 in a state (README): z z when asleep, a
-/// blinking "?" when it needs you, steam when fuming. `box` is the 团子's.
+/// The little things around a 团子 in a state (README): z z when asleep,
+/// steam when fuming (needing you is a raised paw now, `drawPose`). `box`
+/// is the 团子's.
 func stateExtras(_ status: String, _ t: Double, _ box: NSRect) {
     let flipped = NSGraphicsContext.current?.isFlipped ?? false
     /// A point `dx` from the left and `dy` above the top of `box`.
@@ -328,18 +329,6 @@ func stateExtras(_ status: String, _ t: Double, _ box: NSRect) {
             let pt = above(dx, dy + rise)
             put(V3.mono("z", size, .regular, color(hex: "#8A8278").withAlphaComponent(CGFloat(alpha))), pt.x, flipped ? pt.y - size : pt.y)
         }
-    case "waiting":
-        let alpha = 0.65 + 0.35 * cos(t / 1.4 * 2 * .pi)
-        let c = above(box.width + 0 * s, 8 * s)
-        let r = NSRect(x: c.x - 10 * s, y: c.y - 10 * s, width: 20 * s, height: 20 * s)
-        NSColor.white.withAlphaComponent(CGFloat(alpha)).setFill()
-        let o = NSBezierPath(ovalIn: r)
-        o.fill()
-        V3.outline.withAlphaComponent(CGFloat(alpha)).setStroke()
-        o.lineWidth = 1.5 * s
-        o.stroke()
-        let q = V3.mono("?", 12 * s, .semibold, color(hex: "#D97706").withAlphaComponent(CGFloat(alpha)))
-        put(q, r.midX, r.midY - q.size().height / 2, align: 1)
     case "fuming":
         for (k, (fx, dy, d)) in [(0.30, 6.0, 8.0), (0.50, 10.0, 10.0), (0.66, 4.0, 7.0)].enumerated() {
             let p = ((t - Double(k) * 0.4).truncatingRemainder(dividingBy: 1.3) + 1.3).truncatingRemainder(dividingBy: 1.3) / 1.3
@@ -461,7 +450,8 @@ private func packImage(_ id: String) -> NSImage? {
 /// A 团子 whose body fills `body` (dango.json's bodyRect): the body, a flush
 /// on the forehead when fuming, the state's eyes, then the role's accessory
 /// (hats, glasses and the bow tie reach past `body`). Flipped or not.
-func drawPackDango(_ body: NSRect, role: String?, status: String) {
+/// `pose` is the state the paws show when the eyes show another (a blink).
+func drawPackDango(_ body: NSRect, role: String?, status: String, pose: String? = nil, atDesk: Bool = false) {
     let l = packLayout(role)
     let k = body.width / l.body.width
     let flipped = NSGraphicsContext.current?.isFlipped ?? false
@@ -505,6 +495,153 @@ func drawPackDango(_ body: NSRect, role: String?, status: String) {
         }
     }
     if let acc, let accRect { draw(acc, in: accRect) }
+    drawPose(pose ?? status, role: role, layout: l, body: body, atDesk: atDesk)
+}
+
+/// The clock the waving paw and the alert marks move by: the office and the
+/// corner pet set it before drawing; still pictures leave it at rest.
+enum Pose {
+    static var time = 0.0
+}
+
+/// Paws and props in a state, drawn the way the website's 团子 have them
+/// (user, 2026-11-09: 「网站上的这些团子的渲染都做的更好…app也做成这样的」):
+/// round black nubs with the body's outline, a gloss and two claw lines.
+/// Working: both paws on a keyboard (a book for the researcher and the
+/// scientist); happy: one paw waving, with motion arcs; waiting: a paw up
+/// and yellow alert marks; idle: both paws resting at the front; asleep and
+/// fuming: none. At a desk the picture's laptop is the prop, so working
+/// draws nothing there. In the layout's units (dango.json, y down).
+func drawPose(_ status: String, role: String?, layout l: PackLayout, body: NSRect, atDesk: Bool) {
+    let k = body.width / l.body.width
+    let flipped = NSGraphicsContext.current?.isFlipped ?? false
+    let tr = NSAffineTransform()
+    if flipped {
+        tr.translateX(by: body.minX - l.body.minX * k, yBy: body.minY - l.body.minY * k)
+        tr.scaleX(by: k, yBy: k)
+    } else {
+        tr.translateX(by: body.minX - l.body.minX * k, yBy: body.maxY + l.body.minY * k)
+        tr.scaleX(by: k, yBy: -k)
+    }
+    let W = l.body.width, H = l.body.height
+    func pt(_ fx: CGFloat, _ fy: CGFloat) -> NSPoint { NSPoint(x: l.body.minX + fx * W, y: l.body.minY + fy * H) }
+    let dark = V3.dark
+    let fur = color(hex: dark ? "#ECECEE" : "#211F1D"), rim = color(hex: dark ? "#1D1D1E" : "#030303")
+    let gloss = color(hex: dark ? "#FFFFFF" : "#5A5853")
+    func stroke(_ p: NSBezierPath, _ c: NSColor, _ w: CGFloat) {
+        p.transform(using: tr as AffineTransform)
+        p.lineWidth = w * k
+        p.lineCapStyle = .round
+        p.lineJoinStyle = .round
+        c.setStroke()
+        p.stroke()
+    }
+    func fill(_ p: NSBezierPath, _ c: NSColor) {
+        p.transform(using: tr as AffineTransform)
+        c.setFill()
+        p.fill()
+    }
+    /// A paw centred at (fx, fy), `w` of the body wide, turned `deg` (0 =
+    /// claws down).
+    func paw(_ fx: CGFloat, _ fy: CGFloat, w: CGFloat = 0.15, deg: CGFloat = 0) {
+        let c = pt(fx, fy), pw = w * W, ph = pw * 0.78
+        let turn = AffineTransform(rotationByDegrees: deg)
+        func at(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            let p = turn.transform(NSPoint(x: x, y: y))
+            return NSPoint(x: c.x + p.x, y: c.y + p.y)
+        }
+        let blob = NSBezierPath()
+        let n = 28
+        for i in 0...n {
+            let a = CGFloat(i) / CGFloat(n) * 2 * .pi
+            // A little flatter where the claws are.
+            let ry = sin(a) > 0 ? ph / 2 * 0.9 : ph / 2
+            let p = at(cos(a) * pw / 2, sin(a) * ry)
+            i == 0 ? blob.move(to: p) : blob.line(to: p)
+        }
+        blob.close()
+        fill(blob.copy() as! NSBezierPath, fur)
+        stroke(blob, rim, 7.5)
+        let shine = NSBezierPath()
+        shine.move(to: at(-pw * 0.26, -ph * 0.12))
+        shine.curve(to: at(-pw * 0.02, -ph * 0.32), controlPoint1: at(-pw * 0.24, -ph * 0.28), controlPoint2: at(-pw * 0.14, -ph * 0.33))
+        stroke(shine, gloss, 4.5)
+        for x in [-0.14, 0.14] as [CGFloat] {
+            let claw = NSBezierPath()
+            claw.move(to: at(x * pw, ph * 0.46))
+            claw.line(to: at(x * pw, ph * 0.18))
+            stroke(claw, rim, 4)
+        }
+    }
+    switch status {
+    case "working" where !atDesk:
+        if role == "R11" || role == "R21" {
+            // An open book held up in front, like the website's researcher.
+            let top: CGFloat = 0.66, bottom: CGFloat = 0.99, mid: CGFloat = 0.5, half: CGFloat = 0.36
+            let cover = NSBezierPath()
+            cover.move(to: pt(mid, top + 0.05)); cover.line(to: pt(mid - half, top)); cover.line(to: pt(mid - half, bottom - 0.03))
+            cover.line(to: pt(mid, bottom)); cover.line(to: pt(mid + half, bottom - 0.03)); cover.line(to: pt(mid + half, top)); cover.close()
+            fill(cover.copy() as! NSBezierPath, color(hex: "#1F5C5E"))
+            stroke(cover, rim, 7)
+            let pages = NSBezierPath()
+            pages.move(to: pt(mid, top + 0.05)); pages.line(to: pt(mid - half + 0.03, top + 0.005)); pages.line(to: pt(mid - half + 0.03, top + 0.04))
+            pages.line(to: pt(mid, top + 0.09)); pages.line(to: pt(mid + half - 0.03, top + 0.04)); pages.line(to: pt(mid + half - 0.03, top + 0.005)); pages.close()
+            fill(pages.copy() as! NSBezierPath, color(hex: "#F4EEDC"))
+            stroke(pages, rim, 4)
+            let spine = NSBezierPath(); spine.move(to: pt(mid, top + 0.05)); spine.line(to: pt(mid, bottom)); stroke(spine, rim, 5)
+            let ink = color(hex: "#D9EFEC")
+            for (i, h) in [0.10, 0.17, 0.24].enumerated() {
+                let x = mid - half + 0.08 + CGFloat(i) * 0.07
+                let bar = NSBezierPath(); bar.move(to: pt(x, bottom - 0.07)); bar.line(to: pt(x, bottom - 0.07 - CGFloat(h) * 0.7)); stroke(bar, ink, 8)
+            }
+            let flask = NSBezierPath()
+            flask.move(to: pt(mid + 0.15, top + 0.12)); flask.line(to: pt(mid + 0.15, top + 0.17)); flask.line(to: pt(mid + 0.10, bottom - 0.07))
+            flask.line(to: pt(mid + 0.27, bottom - 0.07)); flask.line(to: pt(mid + 0.22, top + 0.17)); flask.line(to: pt(mid + 0.22, top + 0.12))
+            stroke(flask, ink, 5)
+            paw(0.12, 0.86, w: 0.15, deg: 70)
+            paw(0.88, 0.86, w: 0.15, deg: -70)
+        } else {
+            // A keyboard at the front, both paws on it, like the website's coder.
+            let kb = NSBezierPath(roundedRect: NSRect(x: pt(0.07, 0).x, y: pt(0, 0.85).y, width: 0.86 * W, height: 0.14 * H), xRadius: 0.025 * W, yRadius: 0.025 * W)
+            fill(kb.copy() as! NSBezierPath, color(hex: dark ? "#9EA2A8" : "#8F9399"))
+            stroke(kb, rim, 7)
+            let key = color(hex: "#D6D9DE")
+            for row in 0..<2 {
+                for i in 0..<12 {
+                    let x = 0.105 + CGFloat(i) * 0.066, y = 0.872 + CGFloat(row) * 0.052
+                    fill(NSBezierPath(roundedRect: NSRect(x: pt(x, 0).x, y: pt(0, y).y, width: 0.05 * W, height: 0.034 * H), xRadius: 0.008 * W, yRadius: 0.008 * W), key)
+                }
+            }
+            paw(0.30, 0.84, w: 0.15)
+            paw(0.70, 0.84, w: 0.15)
+        }
+    case "happy":
+        // Waving: the paw swings ±14° about its raised angle.
+        let swing = 14 * CGFloat(sin(Pose.time / 0.9 * 2 * .pi))
+        paw(0.99, 0.46, w: 0.17, deg: -145 + swing)
+        for (i, r) in [0.12, 0.17].enumerated() {
+            let arc = NSBezierPath()
+            let c = pt(0.99, 0.46)
+            arc.appendArc(withCenter: c, radius: CGFloat(r) * W, startAngle: -55, endAngle: 5)
+            stroke(arc, color(hex: dark ? "#A9AEB6" : "#7B8089").withAlphaComponent(i == 0 ? 0.9 : 0.6), 5)
+        }
+    case "waiting":
+        // A paw up, asking; the alert marks blink.
+        paw(0.01, 0.46, w: 0.17, deg: 145)
+        let blink = 0.55 + 0.45 * CGFloat(cos(Pose.time / 1.4 * 2 * .pi))
+        let c = pt(-0.03, 0.27)
+        for (dx, dy) in [(-0.09, -0.01), (-0.03, -0.09), (0.05, -0.08)] as [(CGFloat, CGFloat)] {
+            let mark = NSBezierPath()
+            mark.move(to: NSPoint(x: c.x + dx * W * 0.45, y: c.y + dy * W * 0.45))
+            mark.line(to: NSPoint(x: c.x + dx * W, y: c.y + dy * W))
+            stroke(mark, color(hex: "#F5B800").withAlphaComponent(blink), 8)
+        }
+    case "idle":
+        paw(0.30, 0.90, w: 0.13)
+        paw(0.70, 0.90, w: 0.13)
+    default:
+        break
+    }
 }
 
 /// The rect a role's whole 团子 (accessory too) takes when its body is `body`.
@@ -516,18 +653,18 @@ func packExtent(_ body: NSRect, role: String?) -> NSRect {
 }
 
 /// A role's 团子, accessory and all, fitted into `box` and centred.
-func drawFittedDango(_ box: NSRect, role: String?, status: String) {
+func drawFittedDango(_ box: NSRect, role: String?, status: String, pose: String? = nil) {
     let l = packLayout(role), e = l.extent
     let k = min(box.width / e.width, box.height / e.height)
     let flipped = NSGraphicsContext.current?.isFlipped ?? false
     let ex = box.midX - e.width * k / 2, ey = box.midY - e.height * k / 2
     let by = flipped ? ey + (l.body.minY - e.minY) * k : ey + (e.maxY - l.body.maxY) * k
-    drawPackDango(NSRect(x: ex + (l.body.minX - e.minX) * k, y: by, width: l.body.width * k, height: l.body.height * k), role: role, status: status)
+    drawPackDango(NSRect(x: ex + (l.body.minX - e.minX) * k, y: by, width: l.body.width * k, height: l.body.height * k), role: role, status: status, pose: pose)
 }
 
 /// A job's 团子 fitted into `box` (the corner card, the roster).
-func themeDango(_ box: NSRect, job: String, status: String) {
-    drawFittedDango(box, role: packRoles[job], status: status)
+func themeDango(_ box: NSRect, job: String, status: String, pose: String? = nil) {
+    drawFittedDango(box, role: packRoles[job], status: status, pose: pose)
 }
 
 private var packPictures: [String: NSImage] = [:]
@@ -558,6 +695,40 @@ final class V3OfficeView: NSView {
 
     static let height: CGFloat = 178
 
+    /// Where each 团子 was drawn last, for the pointer: hovering one shows its
+    /// job and state (user, 2026-11-09: 「鼠标放到对应团子上的时候，要有状态，
+    /// 就是在工作或者在摸鱼或者在睡觉的状态」).
+    private var spots: [(rect: NSRect, job: String, status: String)] = []
+    private var pointer: NSPoint? { didSet { needsDisplay = true } }
+    /// Snapshots: the label over this one (`--hover N`).
+    var hoverIndex: Int?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+    override func mouseMoved(with event: NSEvent) { pointer = convert(event.locationInWindow, from: nil) }
+    override func mouseEntered(with event: NSEvent) { pointer = convert(event.locationInWindow, from: nil) }
+    override func mouseExited(with event: NSEvent) { pointer = nil }
+
+    /// A dark pill over the 团子 the pointer is on: 「软件工程师 · 在干」.
+    private func drawHoverLabel() {
+        let spot: (rect: NSRect, job: String, status: String)?
+        if let i = hoverIndex, spots.indices.contains(i) { spot = spots[i] }
+        else if let p = pointer { spot = spots.last { $0.rect.insetBy(dx: -2, dy: -2).contains(p) } }
+        else { spot = nil }
+        guard let spot else { return }
+        let text = AB.join([V3.sans(spot.job + " · ", 11, .medium, NSColor.white.withAlphaComponent(0.75)), V3.sans(statusName(spot.status), 11, .semibold, .white)])
+        let w = text.size().width + 18, h: CGFloat = 20
+        let x = min(max(4, spot.rect.midX - w / 2), bounds.width - 4 - w)
+        let y = max(4, spot.rect.minY - h - 4)
+        let pill = NSRect(x: x, y: y, width: w, height: h)
+        NSColor(calibratedWhite: 0.1, alpha: 0.88).setFill()
+        NSBezierPath(roundedRect: pill, xRadius: h / 2, yRadius: h / 2).fill()
+        text.draw(at: NSPoint(x: pill.minX + 9, y: pill.minY + (h - text.size().height) / 2))
+    }
+
     /// Each one's place now and the walk to it: from, to, when it set off.
     private struct Walk { var from: NSRect; var to: NSRect; var start: Double }
     private var walks: [String: Walk] = [:]
@@ -570,8 +741,10 @@ final class V3OfficeView: NSView {
     /// Who goes where: two desks for working / happy / fuming, a place to
     /// stand for waiting, the sofa's three seats and then the door for idle
     /// and sleeping; off is outside.
-    /// The two desk places' left edges (70 wide); the laptops are centred on them.
-    static let deskX: [CGFloat] = [218, 318]
+    /// The two desk places' left edges (50 wide), centred behind the
+    /// laptops in the designer's office (tools/office_art.py: laptops at
+    /// x 234.2 and 297.6, their lids from y 117.5, the desks' tops at 133.9).
+    static let deskX: [CGFloat] = [209.2, 272.6]
 
     private func arrangement() -> [(Occupant, String, NSRect)] {
         let all = occupants.map { ($0, officeStatus($0, model)) }
@@ -579,14 +752,14 @@ final class V3OfficeView: NSView {
         let stand = all.filter { $0.1 == "waiting" }.prefix(1)
         let lounge = all.filter { ["idle", "sleeping"].contains($0.1) }.prefix(3)
         var out: [(Occupant, String, NSRect)] = []
-        let desks: [NSRect] = V3OfficeView.deskX.map { feet($0, bottom: 123, w: 70) }
-        // The one waiting stands between the desks, drawn first so the two
-        // at work are in front of it.
-        for (o, s) in stand { out.append((o, s, feet(268, bottom: 123, w: 70))) }
+        let desks: [NSRect] = V3OfficeView.deskX.map { feet($0, bottom: 131, w: 50) }
+        // The one waiting stands on the floor left of the sofa (the desks are
+        // too close together to stand between).
+        for (o, s) in stand { out.append((o, s, feet(7, bottom: 166, w: 46))) }
         for (i, (o, s)) in desk.enumerated() { out.append((o, s, desks[i])) }
-        // One on each seat cushion (x 35–82, 82–140, 140–188 between the
-        // arms), sunk 1.5 points into its top edge (y 126, room-front.png).
-        let seats: [NSRect] = [59, 111, 163].map { feet($0 - 29, bottom: 127.5, w: 58) }
+        // One on each seat cushion (centres 86.2, 122.4, 158.2 between the
+        // arms), sunk 1.5 points into its top edge (y 145.2, room-front.png).
+        let seats: [NSRect] = [86.2, 122.4, 158.2].map { feet($0 - 23, bottom: 146.7, w: 46) }
         for (i, (o, s)) in lounge.enumerated() { out.append((o, s, seats[i])) }
         return out
     }
@@ -627,8 +800,10 @@ final class V3OfficeView: NSView {
     private func drawDango(_ o: Occupant, _ s: String, _ body: NSRect, phase: Double) {
         let eyes = blinking(s, t + phase * 7) ? "sleeping" : s
         let role = packRoles[o.job.id]
+        Pose.time = t + phase
+        let atDesk = ["working", "happy", "fuming"].contains(s)
         moving(s, t + phase, body) {
-            drawPackDango(body, role: role, status: eyes)
+            drawPackDango(body, role: role, status: eyes, pose: s, atDesk: atDesk)
         }
         stateExtras(s, t + phase, packExtent(body, role: role))
     }
@@ -648,33 +823,18 @@ final class V3OfficeView: NSView {
             color(hex: "#FBF3E4").setFill()
             bounds.fill()
         }
+        spots = []
         for (i, (o, s, place)) in people.enumerated() {
             // The body a little narrower than the place, standing on its floor.
             let b = packLayout(nil).body, w = place.width * 0.86, h = w * b.height / b.width
             let at = now(o.job.id, NSRect(x: place.midX - w / 2, y: place.maxY - h, width: w, height: h))
             drawDango(o, s, at, phase: Double(i) * 0.41)
+            spots.append((packExtent(at, role: packRoles[o.job.id]), o.job.name, s))
         }
         themeImage("room-front")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: hints)
         if dusk > 0 { themeImage("room-front-dusk")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: dusk, respectFlipped: true, hints: hints) }
         if night > 0 { themeImage("room-front-night")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: night, respectFlipped: true, hints: hints) }
-        // The two laptops on the desk, each centred on its desk place and
-        // outlined like the illustration's furniture.
-        func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ rad: CGFloat, _ c: String) { fill(rrect(x, y, w, h, rad), color(hex: c)) }
-        let ink = color(hex: "#3A3530")
-        for (n, left) in V3OfficeView.deskX.enumerated() {
-            let x = left + 35 - 21
-            r(x, 120, 42, 18, 3, "#9AA0A8")
-            ink.setStroke()
-            let lid = rrect(x + 0.4, 120.4, 41.2, 17.2, 2.8)
-            lid.lineWidth = 0.8
-            lid.stroke()
-            r(x + 4, 124, 34, 10, 2, "#E9EEF2")
-            if n == 0 {
-                for (k, h) in [3.0, 6, 4, 7].enumerated() { r(x + 9 + CGFloat(k) * 6, 133 - CGFloat(h), 3, CGFloat(h), 0, k == 3 ? "#2E8B57" : "#5FBF84") }
-            } else {
-                strokePath("M\(x + 13) 128l-3 3 3 3M\(x + 25) 128l3 3-3 3", color(hex: "#5B6B8C"), 1.5)
-            }
-        }
+        drawHoverLabel()
     }
 }
 
@@ -786,7 +946,7 @@ extension DashboardView {
                 // link; French and Spanish names run long, and then the link
                 // is just its arrow.
                 let title = { (size: CGFloat) in AB.join([V3.mono(b.code + " ", size, .semibold), V3.sans(b.name, size, .semibold)]) }
-                var link = V3.mono(L("老板人格 ›", "Boss type ›"), 10, .regular, V3.secondary)
+                var link = V3.mono("ABTI ›", 10, .regular, V3.secondary)
                 if title(13).size().width > right - link.size().width - 10 - tx {
                     link = V3.mono("›", 12, .regular, V3.secondary)
                 }
@@ -1092,7 +1252,8 @@ extension PetView {
         NSGradient(colors: [NSColor.black.withAlphaComponent(0.22), NSColor.black.withAlphaComponent(0)])?
             .draw(in: NSBezierPath(ovalIn: NSRect(x: box.midX - 34 + bob, y: box.minY - 5, width: 68 - 2 * bob, height: 11)), relativeCenterPosition: .zero)
         let face = box.offsetBy(dx: 0, dy: bob)
-        themeDango(face, job: m.job?.id ?? "", status: blinking(status, t) ? "sleeping" : status)
+        Pose.time = t
+        themeDango(face, job: m.job?.id ?? "", status: blinking(status, t) ? "sleeping" : status, pose: status)
         stateExtras(status, t, face)
 
         // A pill above it now and then: news, a settled turn, or today's

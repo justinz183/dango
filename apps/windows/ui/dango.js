@@ -234,7 +234,9 @@ function fit(w, h, r) {
 /// A 团子 whose body fills `body`: the body (white when dark), a flush on
 /// the forehead when fuming, the state's eyes (one in each lens of the
 /// glasses), then the role's accessory.
-function drawPackDango(ctx, body, role, status, dark) {
+/// `opts.pose`: the state the paws show while the eyes blink; `opts.atDesk`:
+/// the picture's laptop is the prop; `opts.t`: the clock for waving.
+function drawPackDango(ctx, body, role, status, dark, opts = {}) {
   const l = packLayout(role), k = body.w / l.body.w;
   const place = (r) => ({ x: body.x + (r.x - l.body.x) * k, y: body.y + (r.y - l.body.y) * k, w: r.w * k, h: r.h * k });
   const draw = (img, f, r) => {
@@ -276,6 +278,112 @@ function drawPackDango(ctx, body, role, status, dark) {
     }
   }
   if (accRect) draw(acc, null, accRect);
+  drawPose(ctx, opts.pose || status, role, l, body, dark, !!opts.atDesk, opts.t || 0);
+}
+
+/// Paws and props in a state, the way the website's 团子 have them; the same
+/// shapes as theme.swift `drawPose` (in the layout's units, y down).
+function drawPose(ctx, status, role, l, body, dark, atDesk, t) {
+  const k = body.w / l.body.w, W = l.body.w, H = l.body.h;
+  const pt = (fx, fy) => [l.body.x + fx * W, l.body.y + fy * H];
+  const fur = dark ? "#ECECEE" : "#211F1D", rim = dark ? "#1D1D1E" : "#030303", gloss = dark ? "#FFFFFF" : "#5A5853";
+  ctx.save();
+  ctx.translate(body.x - l.body.x * k, body.y - l.body.y * k);
+  ctx.scale(k, k);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const line = (pts, color, w, close) => {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    if (close) ctx.closePath();
+    ctx.lineWidth = w;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  };
+  const shape = (pts, fillColor, w) => {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.lineWidth = w;
+    ctx.strokeStyle = rim;
+    ctx.stroke();
+  };
+  const roundRect = (x, y, w, h, r, fillColor, stroke) => {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    if (stroke) { ctx.lineWidth = stroke; ctx.strokeStyle = rim; ctx.stroke(); }
+  };
+  /// A paw centred at (fx, fy), `w` of the body wide, turned `deg` (0 = claws down).
+  const paw = (fx, fy, w = 0.15, deg = 0) => {
+    const [cx, cy] = pt(fx, fy), pw = w * W, ph = pw * 0.78;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((deg * Math.PI) / 180);
+    const pts = [];
+    for (let i = 0; i <= 28; i++) {
+      const a = (i / 28) * 2 * Math.PI, ry = Math.sin(a) > 0 ? (ph / 2) * 0.9 : ph / 2;
+      pts.push([Math.cos(a) * (pw / 2), Math.sin(a) * ry]);
+    }
+    shape(pts, fur, 7.5);
+    ctx.beginPath();
+    ctx.moveTo(-pw * 0.26, -ph * 0.12);
+    ctx.bezierCurveTo(-pw * 0.24, -ph * 0.28, -pw * 0.14, -ph * 0.33, -pw * 0.02, -ph * 0.32);
+    ctx.lineWidth = 4.5;
+    ctx.strokeStyle = gloss;
+    ctx.stroke();
+    [-0.14, 0.14].forEach((x) => line([[x * pw, ph * 0.46], [x * pw, ph * 0.18]], rim, 4));
+    ctx.restore();
+  };
+  if (status === "working" && !atDesk) {
+    if (role === "R11" || role === "R21") {
+      const top = 0.66, bottom = 0.99, mid = 0.5, half = 0.36;
+      shape([pt(mid, top + 0.05), pt(mid - half, top), pt(mid - half, bottom - 0.03), pt(mid, bottom), pt(mid + half, bottom - 0.03), pt(mid + half, top)], "#1F5C5E", 7);
+      shape([pt(mid, top + 0.05), pt(mid - half + 0.03, top + 0.005), pt(mid - half + 0.03, top + 0.04), pt(mid, top + 0.09), pt(mid + half - 0.03, top + 0.04), pt(mid + half - 0.03, top + 0.005)], "#F4EEDC", 4);
+      line([pt(mid, top + 0.05), pt(mid, bottom)], rim, 5);
+      [0.1, 0.17, 0.24].forEach((h, i) => {
+        const x = mid - half + 0.08 + i * 0.07;
+        line([pt(x, bottom - 0.07), pt(x, bottom - 0.07 - h * 0.7)], "#D9EFEC", 8);
+      });
+      line([pt(mid + 0.15, top + 0.12), pt(mid + 0.15, top + 0.17), pt(mid + 0.1, bottom - 0.07), pt(mid + 0.27, bottom - 0.07), pt(mid + 0.22, top + 0.17), pt(mid + 0.22, top + 0.12)], "#D9EFEC", 5);
+      paw(0.12, 0.86, 0.15, 70);
+      paw(0.88, 0.86, 0.15, -70);
+    } else {
+      const [x0, y0] = pt(0.07, 0.85);
+      roundRect(x0, y0, 0.86 * W, 0.14 * H, 0.025 * W, dark ? "#9EA2A8" : "#8F9399", 7);
+      for (let row = 0; row < 2; row++)
+        for (let i = 0; i < 12; i++) {
+          const [x, y] = pt(0.105 + i * 0.066, 0.872 + row * 0.052);
+          roundRect(x, y, 0.05 * W, 0.034 * H, 0.008 * W, "#D6D9DE", 0);
+        }
+      paw(0.3, 0.84, 0.15);
+      paw(0.7, 0.84, 0.15);
+    }
+  } else if (status === "happy") {
+    const swing = 14 * Math.sin((t / 0.9) * 2 * Math.PI);
+    paw(0.99, 0.46, 0.17, -145 + swing);
+    const [cx, cy] = pt(0.99, 0.46);
+    [0.12, 0.17].forEach((r, i) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * W, (-55 * Math.PI) / 180, (5 * Math.PI) / 180);
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = (dark ? "rgba(169,174,182," : "rgba(123,128,137,") + (i === 0 ? 0.9 : 0.6) + ")";
+      ctx.stroke();
+    });
+  } else if (status === "waiting") {
+    paw(0.01, 0.46, 0.17, 145);
+    const blink = 0.55 + 0.45 * Math.cos((t / 1.4) * 2 * Math.PI);
+    const [cx, cy] = pt(-0.03, 0.27);
+    [[-0.09, -0.01], [-0.03, -0.09], [0.05, -0.08]].forEach(([dx, dy]) =>
+      line([[cx + dx * W * 0.45, cy + dy * W * 0.45], [cx + dx * W, cy + dy * W]], `rgba(245,184,0,${blink})`, 8));
+  } else if (status === "idle") {
+    paw(0.3, 0.9, 0.13);
+    paw(0.7, 0.9, 0.13);
+  }
+  ctx.restore();
 }
 
 /// The rect a role's whole 团子 takes when its body is `body`.
@@ -285,14 +393,14 @@ function packExtent(body, role) {
 }
 
 /// A role's 团子, accessory and all, fitted into `box` and centred.
-function drawFittedDango(ctx, box, role, status, dark) {
+function drawFittedDango(ctx, box, role, status, dark, opts = {}) {
   const l = packLayout(role), e = extentOf(l), k = Math.min(box.w / e.w, box.h / e.h);
   const ex = box.x + box.w / 2 - (e.w * k) / 2, ey = box.y + box.h / 2 - (e.h * k) / 2;
-  drawPackDango(ctx, { x: ex + (l.body.x - e.x) * k, y: ey + (l.body.y - e.y) * k, w: l.body.w * k, h: l.body.h * k }, role, status, dark);
+  drawPackDango(ctx, { x: ex + (l.body.x - e.x) * k, y: ey + (l.body.y - e.y) * k, w: l.body.w * k, h: l.body.h * k }, role, status, dark, opts);
 }
 
 /// A job's 团子 fitted into `box` (the corner pet, the roster).
-const themeDango = (ctx, box, job, status, dark) => drawFittedDango(ctx, box, PACK_ROLES[job], status, dark);
+const themeDango = (ctx, box, job, status, dark, opts) => drawFittedDango(ctx, box, PACK_ROLES[job], status, dark, opts);
 
 // --- Motion and the little things around a 团子 (tokens.json motion) -------
 
@@ -336,7 +444,7 @@ function moving(ctx, status, t, box, body) {
   ctx.restore();
 }
 
-/// z z when asleep, a blinking "?" when it needs you, steam when fuming.
+/// z z when asleep, steam when fuming (needing you is a raised paw, `drawPose`).
 function stateExtras(ctx, status, t, box) {
   const above = (dx, dy) => ({ x: box.x + dx, y: box.y - dy });
   const s = box.w / 52;
@@ -352,21 +460,6 @@ function stateExtras(ctx, status, t, box) {
       ctx.fillStyle = `rgba(138,130,120,${alpha})`;
       ctx.fillText("z", pt.x, pt.y - size);
     });
-  } else if (status === "waiting") {
-    const alpha = 0.65 + 0.35 * Math.cos((t / 1.4) * 2 * Math.PI);
-    const c = above(box.w, 8 * s);
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, 10 * s, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-    ctx.fill();
-    ctx.lineWidth = 1.5 * s;
-    ctx.strokeStyle = `rgba(17,17,17,${alpha})`;
-    ctx.stroke();
-    ctx.font = `600 ${12 * s}px ${MONO}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = `rgba(217,119,6,${alpha})`;
-    ctx.fillText("?", c.x, c.y);
   } else if (status === "fuming") {
     [[0.3, 6, 8], [0.5, 10, 10], [0.66, 4, 7]].forEach(([fx, dy, d], k) => {
       const p = wrap(t - k * 0.4, 1.3) / 1.3;

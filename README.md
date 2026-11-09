@@ -75,13 +75,13 @@ AI 每做一步，团子就问一句：这一步该请谁来干？改代码归**
 
 不用装插件，不用改设置。团子直接读这些工具自己写在你电脑上的会话记录，装上就把以前的活也算一遍，面板上并排比谁干得多、谁杠杆高。
 
-## 现在你是老板了。你是哪种老板？
+## ABTI：现在你是老板了，你是哪种老板？
 
-不用答题。按你的 AI 真干了什么，算出**四个字母、公司规模和压榨率**，再讲一遍你的故事：最晚的一夜、最拼的一天、你的工资单。
+不用答题。按你的 AI 真干了什么，算出你的 **ABTI 人格**（四个字母），还有公司规模和压榨率，再讲一遍你的故事：最晚的一夜、最拼的一天、你的工资单。
 
 <table>
 <tr>
-<td width="300"><img src="docs/images/card-zh.jpg" width="280" alt="老板人格总卡"></td>
+<td width="300"><img src="docs/images/card-zh.jpg" width="280" alt="ABTI 人格卡"></td>
 <td>
 
 | 维度 | 一边 | 另一边 |
@@ -91,9 +91,9 @@ AI 每做一步，团子就问一句：这一步该请谁来干？改代码归**
 | 你干活的范围 | 专精 **S** | 跨界 **G** |
 | 你几点干活 | 早鸟 **L** | 夜猫 **O** |
 
-四个维度，十六型老板。公司规模按团子替你打的工分五档：个体户、小作坊、工作室、集团、上市公司。
+四个维度，16 种 ABTI 人格。公司规模按团子替你打的工分五档：个体户、小作坊、工作室、集团、上市公司。
 
-[看全部 16 型 →](https://dangoai.org/types/)
+[看全部 16 种 ABTI 人格 →](https://dangoai.org/types/)
 
 </td>
 </tr>
@@ -101,7 +101,7 @@ AI 每做一步，团子就问一句：这一步该请谁来干？改代码归**
 
 ## 每一份报告，都是一张能晒的卡。
 
-日报、周报、月报、年报和总报，**各带那段时间你自己的老板人格**。点「分享」就弹出系统分享菜单。卡上从来没有项目名、会话标题和代码。
+日报、周报、月报、年报和总报，**各带那段时间你自己的 ABTI 人格**。点「分享」就弹出系统分享菜单。卡上从来没有项目名、会话标题和代码。
 
 <p align="center"><img src="docs/images/share-zh.jpg" width="420" alt="一张周报分享图"></p>
 
@@ -121,22 +121,22 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin
 apps/widget/package.sh
 ```
 
-打开 `target/dist` 里的 `Dango-<版本>.dmg`，把 Dango 拖进「应用程序」再打开。第一次打开时 macOS 会提示无法验证开发者，去「系统设置 → 隐私与安全性」点「仍要打开」。团子会出现在屏幕右下角，先花几秒读一遍你的历史，然后放一段你的老板人格故事。之后它在后台一直记着，开机也会自己回来。
+打开 `target/dist` 里的 `Dango-<版本>.dmg`，把 Dango 拖进「应用程序」再打开。第一次打开时 macOS 会提示无法验证开发者，去「系统设置 → 隐私与安全性」点「仍要打开」。团子会出现在屏幕右下角，先花几秒读一遍你的历史，然后放一段你的ABTI 人格故事。之后它在后台一直记着，开机也会自己回来。
 
 App 界面有中文、English、한국어、日本語、Français、Español 六种语言，右键「语言」切换。
 
-**Windows（预览版）**：64 位 Windows 10 1803 或更新，要有 WebView2（Windows 11 自带）。运行 `Dango_<版本>_x64-setup.exe`，只装给你自己、不用管理员权限，装在 `%LOCALAPPDATA%\Dango`；安装包还没签名，SmartScreen 拦的时候点「更多信息 → 仍要运行」。团子在屏幕右下角，托盘图标左键开关面板、右键换语言和外观；后台记录的也是 `Dango.exe`，开机自己启动，数据在 `%USERPROFILE%\.dango`。这一版先有角落的团子、面板和托盘，老板人格的故事、报告窗口和分享图下一步做，「分享日报」先复制一份文字日报。安装包由 [Windows 工作流](.github/workflows/windows.yml) 在 Windows 上构建，步骤见 [CLAUDE.md](CLAUDE.md) 的「Windows 版」。
+**Windows（预览版）**：64 位 Windows 10 1803 或更新，要有 WebView2（Windows 11 自带）。运行 `Dango_<版本>_x64-setup.exe`，只装给你自己、不用管理员权限，装在 `%LOCALAPPDATA%\Dango`；安装包还没签名，SmartScreen 拦的时候点「更多信息 → 仍要运行」。团子在屏幕右下角，托盘图标左键开关面板、右键换语言和外观；后台记录的也是 `Dango.exe`，开机自己启动，数据在 `%USERPROFILE%\.dango`。这一版先有角落的团子、面板和托盘，ABTI 人格的故事、报告窗口和分享图下一步做，「分享日报」先复制一份文字日报。安装包由 [Windows 工作流](.github/workflows/windows.yml) 在 Windows 上构建，步骤见 [CLAUDE.md](CLAUDE.md) 的「Windows 版」。
 
 ## 开发
 
 | 目录 | 内容 |
 | --- | --- |
 | `crates/core` | 纯逻辑：话题分类、职业归类与时薪、计分 |
-| `crates/daemon` | 守护进程：跟读各个 AI 的会话记录、SQLite、老板人格、报告 |
+| `crates/daemon` | 守护进程：跟读各个 AI 的会话记录、SQLite、ABTI 人格、报告 |
 | `crates/cli` | 命令行 `dango` |
-| `apps/widget` | macOS App（Swift / AppKit）：团子、面板、办公室、老板人格、分享图 |
+| `apps/widget` | macOS App（Swift / AppKit）：团子、面板、办公室、ABTI 人格、分享图 |
 | `apps/windows` | Windows App（Tauri v2）：团子、面板、托盘；同一个 `Dango.exe --daemon` 在后台记录 |
-| `assets` | 职业表和时薪、模型单价、老板人格的门槛和文案 |
+| `assets` | 职业表和时薪、模型单价、ABTI 人格的门槛和文案 |
 | `site` | 官网 dangoai.org |
 
 构建、测试和打包看 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，完整的计算规则看 [docs/DESIGN.md](docs/DESIGN.md)。

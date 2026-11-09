@@ -75,13 +75,13 @@ A beanie for code, headphones for video. When a turn ends, a little note says wh
 
 No plugins, no setup. DANGO reads the session logs these tools already keep on your Mac, counts your past work the moment it’s installed, and puts them side by side: who did more, who gives you more leverage.
 
-## Now you’re the boss. What kind of boss are you?
+## ABTI: now you’re the boss. What kind are you?
 
-No quiz. From what your agents actually did, DANGO works out **four letters, a company size and a margin**, then tells your story: your latest night, your biggest day, your payslip.
+No quiz. From what your agents actually did, DANGO works out your **ABTI** (four letters), a company size and a margin, then tells your story: your latest night, your biggest day, your payslip.
 
 <table>
 <tr>
-<td width="300"><img src="docs/images/card-en.jpg" width="280" alt="The boss card"></td>
+<td width="300"><img src="docs/images/card-en.jpg" width="280" alt="The ABTI card"></td>
 <td>
 
 | Dimension | One side | The other |
@@ -91,9 +91,9 @@ No quiz. From what your agents actually did, DANGO works out **four letters, a c
 | How wide you go | Specialist **S** | Generalist **G** |
 | When you work | Lark **L** | Owl **O** |
 
-Four dimensions, sixteen kinds of boss. Your company size follows the work your dangos did, in five tiers: Solo Stall, Workshop, Studio, Group, Listed.
+Four dimensions, 16 ABTI types. Your company size follows the work your dangos did, in five tiers: Solo Stall, Workshop, Studio, Group, Listed.
 
-[See all 16 types →](https://dangoai.org/en/types/)
+[See all 16 ABTI types →](https://dangoai.org/en/types/)
 
 </td>
 </tr>
@@ -101,7 +101,7 @@ Four dimensions, sixteen kinds of boss. Your company size follows the work your 
 
 ## Every report is a card you can share.
 
-Day, week, month, year and all-time, **each with that period’s own boss type**. Hit share and pick where it goes. Cards never carry project names, session titles or code.
+Day, week, month, year and all-time, **each with that period’s own ABTI**. Hit share and pick where it goes. Cards never carry project names, session titles or code.
 
 <p align="center"><img src="docs/images/share-en.jpg" width="420" alt="A week’s share card"></p>
 
@@ -121,22 +121,22 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin
 apps/widget/package.sh
 ```
 
-Open `Dango-<version>.dmg` in `target/dist`, drag Dango to Applications and open it. The first time, macOS says it can’t verify the developer: go to System Settings → Privacy & Security and click Open Anyway. The dango appears in the bottom-right corner, reads your history for a few seconds, then tells your boss-type story. From then on it keeps count in the background and comes back after a restart.
+Open `Dango-<version>.dmg` in `target/dist`, drag Dango to Applications and open it. The first time, macOS says it can’t verify the developer: go to System Settings → Privacy & Security and click Open Anyway. The dango appears in the bottom-right corner, reads your history for a few seconds, then tells your ABTI story. From then on it keeps count in the background and comes back after a restart.
 
 The app speaks Chinese, English, Korean, Japanese, French and Spanish: right-click it and pick a language.
 
-**Windows (preview)**: 64-bit Windows 10 1803 or later, with WebView2 (built into Windows 11). Run `Dango_<version>_x64-setup.exe`: it installs for you only, without admin rights, into `%LOCALAPPDATA%\Dango`. The installer isn’t signed yet, so if SmartScreen stops it, click More info → Run anyway. The dango sits in the bottom-right corner; left-click the tray icon to open or close the panel, right-click it for language and appearance. The same `Dango.exe` keeps count in the background, starts at login, and keeps its data in `%USERPROFILE%\.dango`. This first version has the corner dango, the panel and the tray; the boss-type story, the report window and share images come next, and “Share today” copies a text report for now. The installer is built on Windows by the [Windows workflow](.github/workflows/windows.yml).
+**Windows (preview)**: 64-bit Windows 10 1803 or later, with WebView2 (built into Windows 11). Run `Dango_<version>_x64-setup.exe`: it installs for you only, without admin rights, into `%LOCALAPPDATA%\Dango`. The installer isn’t signed yet, so if SmartScreen stops it, click More info → Run anyway. The dango sits in the bottom-right corner; left-click the tray icon to open or close the panel, right-click it for language and appearance. The same `Dango.exe` keeps count in the background, starts at login, and keeps its data in `%USERPROFILE%\.dango`. This first version has the corner dango, the panel and the tray; the ABTI story, the report window and share images come next, and “Share today” copies a text report for now. The installer is built on Windows by the [Windows workflow](.github/workflows/windows.yml).
 
 ## Develop
 
 | Folder | What’s in it |
 | --- | --- |
 | `crates/core` | Pure logic: topics, jobs and wages, scoring |
-| `crates/daemon` | The daemon: follows each agent’s session logs, SQLite, boss type, reports |
+| `crates/daemon` | The daemon: follows each agent’s session logs, SQLite, ABTI, reports |
 | `crates/cli` | The `dango` command |
-| `apps/widget` | The macOS app (Swift / AppKit): the dango, panel, office, boss type, share cards |
+| `apps/widget` | The macOS app (Swift / AppKit): the dango, panel, office, ABTI, share cards |
 | `apps/windows` | The Windows app (Tauri v2): the dango, panel, tray; the same `Dango.exe --daemon` keeps count |
-| `assets` | Jobs and wages, model prices, boss-type thresholds and copy |
+| `assets` | Jobs and wages, model prices, ABTI thresholds and copy |
 | `site` | The website, dangoai.org |
 
 Building, testing and packaging: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The full rules: [docs/DESIGN.md](docs/DESIGN.md).
