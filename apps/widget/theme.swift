@@ -1245,7 +1245,7 @@ extension PetView {
         // The current job's state in the office, else the pet's own mood.
         let mine = m.job.flatMap { j in m.office.first { $0.job.id == j.id } }.map { officeStatus($0, m) }
         let working = m.working > 0
-        let status = mine.flatMap { ["working", "waiting", "fuming", "happy"].contains($0) ? $0 : nil }
+        let status = forcedStatus ?? mine.flatMap { ["working", "waiting", "fuming", "happy"].contains($0) ? $0 : nil }
             ?? (working ? "working" : ["happy", "proud"].contains(m.mood) ? "happy" : m.mood == "sleepy" ? "sleeping" : "idle")
         // A soft shadow on the ground, then the 团子 bobbing slowly over it.
         let bob = CGFloat(3 * (1 - cos(t / 3 * 2 * .pi)) / 2)

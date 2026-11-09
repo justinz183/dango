@@ -527,6 +527,8 @@ struct Receipt { var usd: Double; var name: String; var color: NSColor; var born
 /// finished turn (theme.swift `drawCard`). Lives in a transparent panel;
 /// only the card takes clicks.
 final class PetView: NSView {
+    /// Snapshots: the state to draw whatever the office says (`--state`).
+    var forcedStatus: String?
     static let size = NSSize(width: 230, height: 140)
     var model: Model?
     var drawBackground = false
@@ -1204,6 +1206,7 @@ if let i = args.firstIndex(of: "--snapshot-pet"), args.count > i + 1 {
     if let id = flagv("--job"), let j = m.occupations.first(where: { $0.id == id }) { m.job = j }
     if let n = flagv("--helpers").flatMap({ Int($0) }) { m.subagents = n }
     let v = PetView(frame: NSRect(origin: .zero, size: PetView.size))
+    v.forcedStatus = flagv("--state").map { ["sleepy": "sleeping", "proud": "happy"][$0] ?? $0 }
     v.drawBackground = args.contains("--backdrop")
     v.model = m
     v.t = 0.9
