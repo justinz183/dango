@@ -276,7 +276,7 @@ mod tests {
             record_usd: 1_742.0,
             leverage: Some(7.1),
             highlight: Some("晋级 黄金 II".into()),
-            lang: Default::default(),
+            lang: crate::i18n::Lang::Zh,
         };
         let b = settlement_box(&s);
         for line in b.lines() {
@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn status() {
         let s = StatusInfo {
-            lang: Default::default(),
+            lang: crate::i18n::Lang::Zh,
             total_usd: 11_724.0,
             today_usd: 327.0,
             week_usd: 1_240.0,

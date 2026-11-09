@@ -15,6 +15,14 @@ use rusqlite::Connection;
 use serde_json::Value;
 use dango_core::event::Event;
 
+/// The tests read the Chinese words; the app's default is English.
+fn zh_config() -> Config {
+    let mut c = Config::default();
+    c.general.locale = "zh-CN".into();
+    c
+}
+
+
 fn fixtures() -> Vec<Value> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/hooks/claude_code");
     let mut files: Vec<PathBuf> = fs::read_dir(dir).unwrap().flatten().map(|e| e.path()).collect();
@@ -47,7 +55,7 @@ fn events(paths: &Paths) -> Vec<Event> {
 
 fn processor(paths: &Paths) -> Processor {
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
-    Processor::new(db::open(&paths.db).unwrap(), Mode::Live, tz, Config::default())
+    Processor::new(db::open(&paths.db).unwrap(), Mode::Live, tz, zh_config())
 }
 
 /// Everything derived, in a comparable form.
@@ -173,7 +181,7 @@ fn widget_data_carries_history_without_paths() {
     p.ingest_spool(&paths).unwrap();
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
     let now = 1_793_200_000_000; // 2026-10-28, local
-    let d = daemon::widget::data(&p.conn, tz, &Config::default(), now).unwrap();
+    let d = daemon::widget::data(&p.conn, tz, &zh_config(), now).unwrap();
     assert_eq!(d["days"].as_array().unwrap().len(), 30);
     assert_eq!(d["days"][29]["day"], "2026-10-28");
     assert!(d["today"]["hours"].as_f64().unwrap() > 0.0, "{}", d["today"]);
@@ -214,7 +222,7 @@ fn day_report_from_fixtures() {
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
     let claude = paths.home.join("no-claude-dir");
     let date = chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
-    let r = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date, 1_793_200_000_000, true, None).unwrap();
+    let r = daemon::report::day(&p.conn, tz, &zh_config(), &claude, date, 1_793_200_000_000, true, None).unwrap();
     assert_eq!(r["turns"], 3, "{r}");
     assert_eq!(r["sessions"].as_array().unwrap().len(), 1);
     let s = &r["sessions"][0];
@@ -231,7 +239,7 @@ fn day_report_from_fixtures() {
     assert!(r["blocks"].as_array().unwrap().iter().all(|b| b["color"].is_string()));
     assert!(r["character"]["number"].as_str().unwrap().starts_with('$'));
     assert_eq!(r["character"]["mood"], "happy");
-    let empty = daemon::report::day(&p.conn, tz, &Config::default(), &claude, date.succ_opt().unwrap().succ_opt().unwrap(), 1_793_200_000_000, false, None).unwrap();
+    let empty = daemon::report::day(&p.conn, tz, &zh_config(), &claude, date.succ_opt().unwrap().succ_opt().unwrap(), 1_793_200_000_000, false, None).unwrap();
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
     assert!(daemon::report::day_text(&r).contains("软件工程师 · Claude Code"));
@@ -242,7 +250,7 @@ fn day_report_from_fixtures() {
     assert!((people - (r["human_hours"].as_f64().unwrap() / 8.0)).abs() < 0.06, "{}", r["people"]);
 
     // The same day in English.
-    let mut en = Config::default();
+    let mut en = zh_config();
     en.general.locale = "en".into();
     let e = daemon::report::day(&p.conn, tz, &en, &claude, date, 1_793_200_000_000, false, None).unwrap();
     assert_eq!(e["lang"], "en");
@@ -272,7 +280,7 @@ fn week_and_month_reports_from_fixtures() {
     let claude = paths.home.join("no-claude-dir");
     let now = 1_793_200_000_000; // 2026-10-28 local
     let any = chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
-    let w = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any, now, false, None).unwrap();
+    let w = daemon::report::week(&p.conn, tz, &zh_config(), &claude, any, now, false, None).unwrap();
     assert_eq!(w["kind"], "week");
     assert_eq!(w["date"], "2026-W44");
     let days = w["days"].as_array().unwrap();
@@ -288,7 +296,7 @@ fn week_and_month_reports_from_fixtures() {
     assert!(w["prev"]["usd"].as_f64().unwrap() >= 0.0 && w["record_day_usd"].as_f64().unwrap() > 0.0);
     assert!(w["sessions"].as_array().unwrap().len() <= 3);
 
-    let m = daemon::report::month(&p.conn, tz, &Config::default(), &claude, any, now, false, None).unwrap();
+    let m = daemon::report::month(&p.conn, tz, &zh_config(), &claude, any, now, false, None).unwrap();
     assert_eq!(m["date"], "2026-10");
     assert_eq!(m["days"].as_array().unwrap().len(), 31);
     assert_eq!(m["first_weekday"], 3, "2026-10-01 is a Thursday");
@@ -302,7 +310,7 @@ fn week_and_month_reports_from_fixtures() {
     let text = daemon::report::text(&m);
     assert!(text.contains("活跃 3 天"), "{text}");
 
-    let y = daemon::report::year(&p.conn, tz, &Config::default(), &claude, any, now, false, None).unwrap();
+    let y = daemon::report::year(&p.conn, tz, &zh_config(), &claude, any, now, false, None).unwrap();
     assert_eq!(y["kind"], "year");
     assert_eq!(y["date"], "2026");
     assert_eq!(y["label"], "2026 年 · 截至 10月28日");
@@ -325,16 +333,16 @@ fn week_and_month_reports_from_fixtures() {
     assert_eq!(y["turns"], m["turns"]);
     assert!(daemon::report::text(&y).contains("10月 $"), "{}", daemon::report::text(&y));
 
-    let empty = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any + chrono::Duration::days(14), now, false, None).unwrap();
+    let empty = daemon::report::week(&p.conn, tz, &zh_config(), &claude, any + chrono::Duration::days(14), now, false, None).unwrap();
     assert_eq!(empty["turns"], 0);
     assert_eq!(empty["character"]["mood"], "waiting");
-    let past = daemon::report::year(&p.conn, tz, &Config::default(), &claude, any - chrono::Duration::days(365), now, false, None).unwrap();
+    let past = daemon::report::year(&p.conn, tz, &zh_config(), &claude, any - chrono::Duration::days(365), now, false, None).unwrap();
     assert_eq!(past["label"], "2025 年");
     assert_eq!((past["prev"]["label"].as_str(), past["now_label"].as_str()), (Some("2024 年"), Some("2025 年")));
     assert_eq!((w["prev"]["label"].as_str(), w["now_label"].as_str()), (Some("上周"), Some("本周")));
-    let last = daemon::report::week(&p.conn, tz, &Config::default(), &claude, any - chrono::Duration::days(7), now, false, None).unwrap();
+    let last = daemon::report::week(&p.conn, tz, &zh_config(), &claude, any - chrono::Duration::days(7), now, false, None).unwrap();
     assert_eq!((last["prev"]["label"].as_str(), last["now_label"].as_str()), (Some("第 42 周"), Some("第 43 周")));
-    let sept = daemon::report::month(&p.conn, tz, &Config::default(), &claude, any - chrono::Duration::days(30), now, false, None).unwrap();
+    let sept = daemon::report::month(&p.conn, tz, &zh_config(), &claude, any - chrono::Duration::days(30), now, false, None).unwrap();
     assert_eq!((sept["prev"]["label"].as_str(), sept["now_label"].as_str()), (Some("8 月"), Some("9 月")));
     assert_eq!(past["character"]["mood"], "waiting");
     assert!(past["today_index"].is_null());
@@ -348,7 +356,7 @@ fn codex_history_backfills_and_splits_by_tool() {
     }
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
     processor(&paths).ingest_spool(&paths).unwrap();
-    let mut p = Processor::new(db::open(&paths.db).unwrap(), Mode::Backfill, tz, Config::default());
+    let mut p = Processor::new(db::open(&paths.db).unwrap(), Mode::Backfill, tz, zh_config());
     let codex = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/codex");
     let none = paths.home.join("no-claude-dir");
     let r = daemon::backfill::run(&mut p, &paths, &none, i64::MAX, Some((&codex, i64::MAX))).unwrap();
@@ -385,14 +393,14 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert!(!dump.contains("视频") && !dump.contains("secret") && !dump.contains("/w/vid"), "no prompts, queries or paths");
 
     let claude = paths.home.join("no-claude-dir");
-    let day = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, None).unwrap();
+    let day = daemon::report::day(&p.conn, tz, &zh_config(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, None).unwrap();
     let tools = day["tools"].as_array().unwrap();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"Codex") && names.contains(&"Claude Code"), "{names:?}");
     let share: f64 = tools.iter().map(|t| t["share"].as_f64().unwrap()).sum();
     assert!((share - 1.0).abs() < 1e-6);
     assert!(daemon::report::text(&day).contains("Codex $"));
-    let w = daemon::widget::data(&p.conn, tz, &Config::default(), 1_793_200_000_000).unwrap();
+    let w = daemon::widget::data(&p.conn, tz, &zh_config(), 1_793_200_000_000).unwrap();
     assert_eq!(w["tools_all"].as_array().unwrap().len(), 2);
 
     // Every dashboard block, per agent: the two add up to the whole.
@@ -418,7 +426,7 @@ fn codex_history_backfills_and_splits_by_tool() {
     assert!(w["tools_7d"].is_array() && w["tools_1d"].is_array());
 
     // Reports for one agent.
-    let only = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, Some("codex")).unwrap();
+    let only = daemon::report::day(&p.conn, tz, &zh_config(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, Some("codex")).unwrap();
     let both_codex = tools.iter().find(|t| t["name"] == "Codex").unwrap()["usd"].as_f64().unwrap();
     assert!((only["usd"].as_f64().unwrap() - both_codex).abs() < 1e-6);
     assert_eq!(only["tool"], "codex");
@@ -443,7 +451,7 @@ fn abti_from_fixtures() {
     p.ingest_spool(&paths).unwrap();
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
     let now = 1_793_200_000_000;
-    let r = daemon::abti::result(&p.conn, tz, &Config::default(), now).unwrap();
+    let r = daemon::abti::result(&p.conn, tz, &zh_config(), now).unwrap();
     let code = r["code"].as_str().unwrap();
     assert!(daemon::abti::config()["types"][code].is_object(), "{code}");
     assert_eq!(r["dims"].as_array().unwrap().len(), 4);
@@ -454,21 +462,21 @@ fn abti_from_fixtures() {
     assert!((share - 1.0).abs() < 1e-6, "{share}");
     assert_eq!(r["checkup"].as_array().unwrap().len(), 6);
     let nowhere = std::path::Path::new("/nonexistent/.claude");
-    let total = daemon::abti::report(&p.conn, tz, &Config::default(), nowhere, "total", tz.date(now), now).unwrap();
+    let total = daemon::abti::report(&p.conn, tz, &zh_config(), nowhere, "total", tz.date(now), now).unwrap();
     assert!((total["usd"].as_f64().unwrap() - usd).abs() < 1e-6, "the total page is the total");
     let days: f64 = total["heat"].as_array().unwrap().len() as f64;
     assert_eq!(days, total["days"].as_f64().unwrap());
     for kind in ["day", "week", "month", "year"] {
-        let v = daemon::abti::report(&p.conn, tz, &Config::default(), nowhere, kind, tz.date(now), now).unwrap();
+        let v = daemon::abti::report(&p.conn, tz, &zh_config(), nowhere, kind, tz.date(now), now).unwrap();
         assert!(v["usd"].as_f64().unwrap() <= usd + 1e-6, "{kind}");
         assert!(v["sessions"].is_array() && v["projects"].is_array(), "{kind}");
     }
-    let year = daemon::abti::report(&p.conn, tz, &Config::default(), nowhere, "year", tz.date(now), now).unwrap();
+    let year = daemon::abti::report(&p.conn, tz, &zh_config(), nowhere, "year", tz.date(now), now).unwrap();
     assert_eq!(year["monthly"].as_array().unwrap().len(), 12);
     let dump = serde_json::to_string(&r).unwrap();
     assert!(!dump.contains("/Users") && !dump.contains("secret"), "no paths or prompts");
     // In English every word the story and the card get is English.
-    let mut en = Config::default();
+    let mut en = zh_config();
     en.general.locale = "en".into();
     let r = daemon::abti::result(&p.conn, tz, &en, now).unwrap();
     let words = serde_json::to_string(&[&r["type"], &r["scale"], &r["margin_tier"], &r["match"], &r["story"], &r["checkup"], &r["crew"]]).unwrap();
@@ -733,7 +741,7 @@ fn a_followed_session_without_hooks_shows_live() {
     let (working, helpers, last) = daemon::snapshot::activity(&p.conn, t0 + 3_000).unwrap();
     assert_eq!((working, helpers), (1, 1), "at work, one helper out");
     assert!(last.is_some(), "followed events count as activity");
-    let d = daemon::widget::data(&p.conn, tz, &Config::default(), t0 + 3_000).unwrap();
+    let d = daemon::widget::data(&p.conn, tz, &zh_config(), t0 + 3_000).unwrap();
     // At work; before 5 AM (the test runs on the real clock) the 团子 is sleepy instead.
     let hour = chrono::Timelike::hour(&tz.local(t0 + 3_000));
     assert_eq!(d["character"]["mood"], if hour < 5 { "sleepy" } else { "focused" }, "{}", d["character"]);
@@ -845,7 +853,7 @@ fn old_codex_hook_events_are_not_counted() {
 fn model_usage_prices_turns_once() {
     let paths = home("usage");
     let tz = Tz::Fixed(FixedOffset::east_opt(8 * 3600).unwrap());
-    let mut p = Processor::new(db::open(&paths.db).unwrap(), Mode::Backfill, tz, Config::default());
+    let mut p = Processor::new(db::open(&paths.db).unwrap(), Mode::Backfill, tz, zh_config());
     let fx = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
     let (claude, codex) = (fx.join("claude"), fx.join("codex"));
     daemon::backfill::run(&mut p, &paths, &claude, i64::MAX, Some((&codex, i64::MAX))).unwrap();
@@ -871,7 +879,7 @@ fn model_usage_prices_turns_once() {
     assert!((p.ctr("cost:codex", "all") - c_t1).abs() < 1e-9);
     assert_eq!(daemon::usage::fill(&mut p, &claude, &codex, &claude.join("no-dsh"), &claude.join("no-wb"), i64::MAX, usize::MAX).unwrap(), 0, "each turn once");
 
-    let day = daemon::report::day(&p.conn, tz, &Config::default(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, None).unwrap();
+    let day = daemon::report::day(&p.conn, tz, &zh_config(), &claude, chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), 1_793_200_000_000, false, None).unwrap();
     let lev = day["usd"].as_f64().unwrap() / total;
     assert!((day["leverage"].as_f64().unwrap() - lev).abs() < 1e-9, "economic leverage = $ of work / $ of model");
     assert!(day["character"]["sub"].as_str().unwrap().contains("模型花费"), "{}", day["character"]);

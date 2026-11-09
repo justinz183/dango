@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::paths::{write_private, Paths};
 
 pub const DEFAULT_CONFIG: &str = r#"[general]
-locale = "zh-CN"
+locale = "en"                # zh-CN, en, ko, ja, fr, es (`dango lang`); English by default
 weekly_target = 0          # 0 = automatic (SPEC 6.3); any other value pins the target
 quiet_hours = ["23:00", "08:00"]
 autostart = true
@@ -96,7 +96,7 @@ impl Default for Config {
 }
 impl Default for General {
     fn default() -> General {
-        General { weekly_target: 0.0, locale: "zh-CN".into() }
+        General { weekly_target: 0.0, locale: "en".into() }
     }
 }
 impl Default for Sources {
@@ -178,8 +178,8 @@ mod tests {
         assert_eq!(c.general.weekly_target, 0.0);
         assert!(c.sources.claude_code && c.sources.codex);
         assert_eq!(c.ceremony.grand_cooldown_hours, 4.0);
-        assert_eq!(c.character_name(), "团子");
-        assert_eq!(c.lang(), dango_core::i18n::Lang::Zh);
+        assert_eq!(c.character_name(), "Dango");
+        assert_eq!(c.lang(), dango_core::i18n::Lang::En);
     }
 
     #[test]

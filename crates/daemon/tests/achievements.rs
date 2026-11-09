@@ -14,6 +14,14 @@ use serde_json::{json, Value};
 use dango_core::achievements::{Catalog, Store};
 use dango_core::event::{Event, GitAction, Kind, Source};
 
+/// The tests read the Chinese words; the app's default is English.
+fn zh_config() -> Config {
+    let mut c = Config::default();
+    c.general.locale = "zh-CN".into();
+    c
+}
+
+
 static N: AtomicUsize = AtomicUsize::new(0);
 
 struct Sim {
@@ -32,7 +40,7 @@ impl Sim {
         let k = N.fetch_add(1, Ordering::SeqCst);
         let paths = Paths::at(std::env::temp_dir().join(format!("sc-ach-{}-{k}", std::process::id())));
         paths.ensure().unwrap();
-        let p = Processor::new(db::open_memory().unwrap(), Mode::Live, Tz::Fixed(FixedOffset::east_opt(TZ).unwrap()), Config::default());
+        let p = Processor::new(db::open_memory().unwrap(), Mode::Live, Tz::Fixed(FixedOffset::east_opt(TZ).unwrap()), zh_config());
         let mut s = Sim { p, paths, t: 0, sid: String::new(), pid: String::new(), n: 0 };
         s.at("2026-10-26 10:00"); // a Monday
         s

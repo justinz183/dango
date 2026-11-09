@@ -32,8 +32,8 @@ let agentPlist = NSHomeDirectory() + "/Library/LaunchAgents/\(agentLabel).plist"
 let dashboardWidth: CGFloat = 440
 /// The interface language ("zh", "en", "ko", "ja", "fr" or "es"): from
 /// widget.json, or from a card's report while it is drawn; remembered for
-/// the next launch.
-var lang = UserDefaults.standard.string(forKey: "lang") ?? "zh"
+/// the next launch. English until told otherwise (user, 2026-11-09).
+var lang = UserDefaults.standard.string(forKey: "lang") ?? "en"
 /// The six languages, each named in itself (user, 2026-11-08: 「中英韩日法西」).
 let languages: [(code: String, name: String)] = [("zh", "中文"), ("en", "English"), ("ko", "한국어"), ("ja", "日本語"), ("fr", "Français"), ("es", "Español")]
 /// The text in the interface language: the Chinese or the English as

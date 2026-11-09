@@ -10,10 +10,12 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 /// Which language text is written in.
+/// English by default (user, 2026-11-09: 「请你把这个app改成默认是英文版，
+/// windows和mac都是这样」).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Lang {
-    #[default]
     Zh,
+    #[default]
     En,
     Ko,
     Ja,
@@ -25,10 +27,10 @@ impl Lang {
     /// Every language, in the order the menus list them.
     pub const ALL: [Lang; 6] = [Lang::Zh, Lang::En, Lang::Ko, Lang::Ja, Lang::Fr, Lang::Es];
 
-    /// "en-US" → English, "ja_JP" → Japanese, …; anything else is Chinese.
+    /// "zh-CN" → Chinese, "ja_JP" → Japanese, …; anything else is English.
     pub fn parse(s: &str) -> Lang {
         let s = s.trim().to_lowercase();
-        Lang::ALL.into_iter().find(|l| s.starts_with(l.code())).unwrap_or(Lang::Zh)
+        Lang::ALL.into_iter().find(|l| s.starts_with(l.code())).unwrap_or(Lang::En)
     }
 
     /// "zh", "en", "ko", "ja", "fr" or "es", as widget.json and reports carry it.
@@ -159,7 +161,9 @@ mod tests {
     fn six_languages_and_templates() {
         assert_eq!(Lang::parse("ja_JP"), Lang::Ja);
         assert_eq!(Lang::parse("es-419"), Lang::Es);
-        assert_eq!(Lang::parse("de"), Lang::Zh);
+        assert_eq!(Lang::parse("de"), Lang::En);
+        assert_eq!(Lang::parse(""), Lang::En);
+        assert_eq!(Lang::default(), Lang::En);
         for l in Lang::ALL {
             assert_eq!(Lang::parse(l.code()), l);
         }

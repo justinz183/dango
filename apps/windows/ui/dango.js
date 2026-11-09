@@ -31,7 +31,7 @@ const nowMs = () => (QUERY.has("now") ? Number(QUERY.get("now")) : Date.now());
 
 /// The interface language, as widget.json carries it.
 const LANGS = ["zh", "en", "ko", "ja", "fr", "es"];
-let lang = "zh";
+let lang = "en"; // English until widget.json says otherwise (user, 2026-11-09)
 /// The text in the interface language (one language a screen): the
 /// Chinese, the English, or the English looked up in the language's table
 /// (assets/i18n, as crates/core i18n.rs and the macOS app do).
