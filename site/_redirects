@@ -1,0 +1,8 @@
+# The old site's pages, now sections of the one page (2026-11-09).
+/en /?lang=en 301
+/en/* /?lang=en 301
+/types /#boss 301
+/types/* /#boss 301
+/t/* /#boss 301
+/how /#product 301
+/how/* /#product 301
