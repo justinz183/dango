@@ -1,0 +1,92 @@
+<!--
+title: How much is your AI coding work worth? How DANGO estimates it
+description: DANGO prices each step your AI agent takes at what hiring a person would cost: estimated minutes × the US median hourly wage for that job (BLS OEWS, May 2025). The full method, wage table, worked examples and limits.
+-->
+<h1>How much is your AI coding work worth? How DANGO estimates it</h1>
+<p class="answer"><b>DANGO estimates what your AI’s work is worth by asking, for every step it takes, who you would have hired to do it, how long that person would take, and what they are paid.</b> Minutes per step × that job’s US median hourly wage (U.S. Bureau of Labor Statistics, OEWS May 2025) = the work’s value. Divide it by what the models cost at API list prices and you get your leverage: how much work each dollar of model spend bought. It is an estimate of what the same work would cost to hire out, not income and not money saved.</p>
+
+<h2>The formula</h2>
+<pre><code>value of a turn = Σ over its steps ( minutes for that step ÷ 60 × hourly median wage of the step’s job )
+leverage        = value of the work ÷ model cost at API list prices</code></pre>
+<p>A <em>turn</em> is one request you give the agent and everything it does until it hands back. DANGO reads the session logs Claude Code, Codex, DeepSeek Harness and WorkBuddy already keep on your computer, splits them into turns, and prices each step it can see.</p>
+
+<h2>How many minutes each step is worth</h2>
+<p>Steps are matched by what they do, not by guessing from your prompt:</p>
+<div class="tw"><table>
+<thead><tr><th>Step the agent took</th><th>Job</th><th class="n">Minutes</th></tr></thead>
+<tbody>
+<tr><td>Changed a code file</td><td>Software engineer</td><td class="n">2.5 + 0.45 × lines<sup>0.8</sup></td></tr>
+<tr><td>… a test file / an HTML, CSS, TSX, Vue file / a shell script</td><td>QA / front-end / ops engineer</td><td class="n">same formula</td></tr>
+<tr><td>Wrote prose (md, txt, docx…)</td><td>Writer (product manager for PRDs, roadmaps)</td><td class="n">words ÷ 2,000 per hour, min 3</td></tr>
+<tr><td>Changed a config file (toml, yaml, json…)</td><td>Ops engineer</td><td class="n">5</td></tr>
+<tr><td>Produced an image file (svg, png…)</td><td>Graphic designer</td><td class="n">30</td></tr>
+<tr><td>git commit or merge</td><td>Software engineer</td><td class="n">20</td></tr>
+<tr><td>Ran the tests</td><td>QA engineer</td><td class="n">10</td></tr>
+<tr><td>Built the project (cargo build, tsc, make…)</td><td>Software engineer</td><td class="n">2</td></tr>
+<tr><td>Installed dependencies, docker, launchctl</td><td>Ops engineer</td><td class="n">5</td></tr>
+<tr><td>curl, sqlite, psql, duckdb, pandas / ran a Python script</td><td>Data analyst</td><td class="n">6 / 4</td></tr>
+<tr><td>ffmpeg, text-to-speech / Whisper subtitles / yt-dlp</td><td>Video editor</td><td class="n">15 / 20 / 5</td></tr>
+<tr><td>ImageMagick, Inkscape</td><td>Graphic designer</td><td class="n">15</td></tr>
+<tr><td>OCR (tesseract, ocrmypdf)</td><td>Data entry clerk</td><td class="n">15</td></tr>
+<tr><td>Web search / read a web page / read a page in a browser tool</td><td>Researcher</td><td class="n">5 / 10 / 5</td></tr>
+<tr><td>Financial data or database connectors (MCP)</td><td>Financial / data analyst</td><td class="n">10</td></tr>
+</tbody></table></div>
+<p>On top of its steps, every turn gets <b>5 minutes</b> for reading the request and reporting back, plus <b>12 minutes per subagent</b>, shared across the turn’s jobs in proportion to their minutes. A turn with no steps (just a conversation) counts as a consult with whoever the topic calls for: 5 minutes of a researcher by default, 15 for a doctor, 20 for a lawyer, 30 for a counselor. Plumbing such as <code>ls</code>, <code>cd</code> or <code>cat</code> counts for nothing. Nothing is capped.</p>
+<p>The topic of a turn can move research to a specialist: web searches in a turn about your cat’s health are a doctor’s work, data scripts in a turn about stocks a financial analyst’s. The topic is found with a keyword list (about 2,700 words in English and Chinese); only the resulting job ID is kept, never the prompt.</p>
+
+<h2>Wages: 20 jobs, U.S. median pay</h2>
+<p>Hourly wages are the U.S. national median from the Bureau of Labor Statistics’ Occupational Employment and Wage Statistics (OEWS), May 2025, by SOC code. Pay only: no benefits, no overhead, no markup.</p>
+<div class="tw"><table>
+<thead><tr><th>Job</th><th>SOC</th><th class="n">Hourly median</th></tr></thead>
+<tbody>
+<tr><td>Doctor</td><td>29-1215</td><td class="n">$117.39</td></tr>
+<tr><td>Lawyer</td><td>23-1011</td><td class="n">$76.76</td></tr>
+<tr><td>Software engineer</td><td>15-1252</td><td class="n">$65.38</td></tr>
+<tr><td>Data analyst</td><td>15-2051</td><td class="n">$57.80</td></tr>
+<tr><td>QA engineer</td><td>15-1253</td><td class="n">$50.14</td></tr>
+<tr><td>Financial analyst</td><td>13-2051</td><td class="n">$49.40</td></tr>
+<tr><td>Product manager</td><td>13-1082</td><td class="n">$49.19</td></tr>
+<tr><td>Musician</td><td>27-2042</td><td class="n">$47.80</td></tr>
+<tr><td>Architect</td><td>17-1011</td><td class="n">$47.73</td></tr>
+<tr><td>Ops engineer</td><td>15-1244</td><td class="n">$47.66</td></tr>
+<tr><td>Front-end engineer</td><td>15-1254</td><td class="n">$47.49</td></tr>
+<tr><td>Scientist</td><td>19-2000</td><td class="n">$46.29</td></tr>
+<tr><td>Researcher</td><td>13-1161</td><td class="n">$37.87</td></tr>
+<tr><td>Writer</td><td>27-3043</td><td class="n">$36.98</td></tr>
+<tr><td>Video editor</td><td>27-4032</td><td class="n">$36.26</td></tr>
+<tr><td>Graphic designer</td><td>27-1024</td><td class="n">$30.27</td></tr>
+<tr><td>Chef</td><td>35-1011</td><td class="n">$30.03</td></tr>
+<tr><td>Counselor</td><td>21-1018</td><td class="n">$28.53</td></tr>
+<tr><td>Fitness trainer</td><td>39-9031</td><td class="n">$22.67</td></tr>
+<tr><td>Data entry clerk</td><td>43-9021</td><td class="n">$19.88</td></tr>
+</tbody></table></div>
+
+<h2>Worked examples</h2>
+<div class="tw"><table>
+<thead><tr><th>What the AI did</th><th>Minutes</th><th class="n">Value</th></tr></thead>
+<tbody>
+<tr><td>Changed 120 lines in one code file</td><td>2.5 + 0.45 × 120<sup>0.8</sup> ≈ 23.2 of a software engineer</td><td class="n">$25.31</td></tr>
+<tr><td>Ran a Python script that draws a chart</td><td>4 of a data analyst</td><td class="n">$3.85</td></tr>
+<tr><td>Answered “why does my cat have an upset stomach?”</td><td>a 15-minute consult with a doctor</td><td class="n">$29.35</td></tr>
+</tbody></table></div>
+<p>A whole turn: the agent edits an 80-line source file and a 30-line test, runs the tests, commits, and uses one subagent. The steps come to 37.5 software-engineer minutes (17.5 for the code, 20 for the commit) and 19.3 QA minutes (9.3 for the test, 10 for the run). The 5-minute base and the 12-minute subagent are shared in proportion, giving 48.7 and 25.1 minutes: <b>$53.07 + $20.99 = $74.06</b> for one turn, about 74 minutes of work.</p>
+
+<h2>What the models cost, and leverage</h2>
+<p>Token counts come from the agents’ own logs: Claude Code writes the model and usage (input, cache writes, cache reads, output) on every reply; Codex writes token usage on every response. DANGO prices them at the official API list prices of Anthropic and OpenAI, including long-context prices where they apply. Models it has no price for are counted in tokens but not in dollars.</p>
+<p><b>On a subscription</b> (Claude Pro or Max, ChatGPT Plus or Pro) you don’t pay per token, so the cost DANGO shows is what those tokens would cost if you bought them through the API. Your real spend is your plan’s price, which is usually lower, so your real leverage is usually higher.</p>
+
+<h2>What this number is not</h2>
+<ul>
+<li><b>Not income, not savings.</b> It is what the same work would cost to hire out, not what you earned or saved. You might never have hired anyone for it.</li>
+<li><b>Quality isn’t judged.</b> A change you later throw away still counted when it was made.</li>
+<li><b>People differ.</b> A real engineer might be faster or slower than the formula; the minutes are a consistent yardstick, not a stopwatch.</li>
+<li><b>U.S. wages.</b> National medians, pay only. Rates are lower in most other countries and higher with benefits and overhead.</li>
+<li><b>Keyword topics can misfile.</b> A chat about a cat’s health goes to the doctor; an unusual phrasing can land with the researcher instead.</li>
+</ul>
+<p>The rules are public on GitHub: <a href="https://github.com/justinz183/dango/blob/main/crates/core/src/occupation.rs">crates/core/src/occupation.rs</a> (minutes per step) and <a href="https://github.com/justinz183/dango/blob/main/assets/occupations.toml">assets/occupations.toml</a> (jobs and wages).</p>
+
+<h2>Questions</h2>
+<details><summary>Is this how much money AI saved me?</summary><p>No. It estimates what the same work would cost if you paid people at U.S. median wages to do it. Whether that is money saved depends on whether you would have hired anyone.</p></details>
+<details><summary>I’m on a Claude Max or ChatGPT Pro subscription. How is “cost” worked out?</summary><p>At API list prices: what the same tokens would cost bought through the Anthropic or OpenAI API. Your actual spend is your subscription price, so your real leverage is usually higher than the one shown.</p></details>
+<details><summary>Why U.S. Bureau of Labor Statistics wages?</summary><p>They are public, per occupation, updated every year and widely cited. Using the median and pay only (no benefits) keeps the estimate on the conservative side.</p></details>
+<details><summary>Does DANGO read my prompts or code to do this?</summary><p>It reads them in memory only to recognise the step and the topic, then keeps numbers: minutes, line counts, which job, tokens and cost. See the <a href="/privacy/">privacy notes</a>.</p></details>

@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/?lang=ja"><b>dangoai.org</b></a> · <a href="#インストール">インストール</a> · <a href="https://dangoai.org/?lang=ja#product">計算のしくみ</a> · <a href="docs/DEVELOPMENT.md">開発</a>
+  <a href="https://dangoai.org/ja/"><b>dangoai.org</b></a> · <a href="#インストール">インストール</a> · <a href="https://dangoai.org/ja/#product">計算のしくみ</a> · <a href="docs/DEVELOPMENT.md">開発</a>
 </p>
 
 <p align="center"><sub>無料 · macOS 13 以降 · Apple シリコンと Intel · 計算はすべてあなたの Mac の中で</sub></p>
@@ -93,7 +93,7 @@ AI が一歩進むたびに、だんごは問いかけます。この仕事は�
 
 4 つの軸で、ABTI は全 16 タイプ。会社の規模は、だんごがこなした仕事で 5 段階：個人商店、小さな工房、スタジオ、グループ、上場企業。
 
-[ABTI の 16 タイプをすべて見る →](https://dangoai.org/?lang=ja#boss)
+[ABTI の 16 タイプをすべて見る →](https://dangoai.org/ja/#boss)
 
 </td>
 </tr>

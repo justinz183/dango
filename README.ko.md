@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/?lang=ko"><b>dangoai.org</b></a> · <a href="#설치">설치</a> · <a href="https://dangoai.org/?lang=ko#product">계산 방법</a> · <a href="docs/DEVELOPMENT.md">개발</a>
+  <a href="https://dangoai.org/ko/"><b>dangoai.org</b></a> · <a href="#설치">설치</a> · <a href="https://dangoai.org/ko/#product">계산 방법</a> · <a href="docs/DEVELOPMENT.md">개발</a>
 </p>
 
 <p align="center"><sub>무료 · macOS 13 이상 · Apple 실리콘과 Intel · 모든 계산은 당신의 Mac 안에서</sub></p>
@@ -93,7 +93,7 @@ AI가 한 단계를 할 때마다 당고는 묻습니다. 이 일은 누구에�
 
 네 가지 차원, 16가지 ABTI 유형. 회사 규모는 당고가 해낸 일에 따라 다섯 단계입니다: 1인 가게, 작은 공방, 스튜디오, 그룹, 상장사.
 
-[ABTI 16가지 유형 모두 보기 →](https://dangoai.org/?lang=ko#boss)
+[ABTI 16가지 유형 모두 보기 →](https://dangoai.org/ko/#boss)
 
 </td>
 </tr>

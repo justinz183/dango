@@ -32,22 +32,30 @@ python3 -m http.server 8000
 线上是 Cloudflare Pages 的 `dangoai` 项目（https://dangoai.org，www 也指过来）。在仓库根目录：
 
 ```bash
-rsync -a --delete --exclude README.md --exclude dist site/ site/dist/
+rsync -a --delete --exclude README.md --exclude dist --exclude render_app.py --exclude pages site/ site/dist/
+node tools/build-i18n.mjs site/index.html site/dist
+node tools/build-pages.mjs site/pages site/dist
 npx wrangler pages deploy site/dist --project-name dangoai --branch main --commit-dirty=true
+tools/indexnow.sh
 ```
 
-`_redirects` 把旧网站的地址（/en/、/types/、/how/、/t/…）转到这一页对应的位置，别删。
+第三步（2026-11-10，按上线文档的 GEO 一节「回答具体问题的页面」）生成回答具体问题的页面，英文在根目录、中文在 `/zh/` 下：`/claude-code-cost/`（怎么看 Claude Code、Codex 花了多少）、`/claude-code-menu-bar/`（Mac 菜单栏工具对比）、`/ai-work-value/`（值多少钱的算法、20 个职业时薪表、局限）、`/privacy/`（读哪些文件、记哪些字段）、`/abti/` 和 16 个 `/abti/<类型小写>/`（从 assets/abti.json 生成，也是分享卡的落地页）。正文在 `site/pages/<名字>.en.html` / `.zh.html`，开头注释写 title 和 description，第一个 `<p class="answer">` 是直接回答（AI 引用的就是这段），`<details>` 是 FAQ。首页底部有一排链接指向它们。最后一步把站点地图里的网址用 IndexNow 报给 Bing 等搜索引擎（钥匙是 site 里那个 32 位十六进制名字的 txt）。
+
+中间那步（2026-11-10，按「DANGO 上线准备」文档）从 `site/index.html` 生成每种语言一个网址：英文是首页 `/`，其他在 `/zh/`、`/ko/`、`/ja/`、`/fr/`、`/es/`，正文都已经翻好（不执行 JS 的爬虫也看得到），再加上 canonical、hreflang、og、JSON-LD（SoftwareApplication + FAQ）和 `sitemap.xml`。不跑这步，线上就只有一个没翻译的源页面。
+
+`_redirects` 把旧网站的地址（/types/、/how/、/t/…）转到这一页对应的位置，旧的 /en/ 转到首页，/install.sh、/install.ps1 转到 GitHub 最新版的安装脚本，别删。`robots.txt`、`llms.txt`、`404.html` 也在这里（有了 404.html，不存在的地址才返回真正的 404）。
 
 ## 上线前要改的地方
 
-1. **下载链接**：`https://www.dangoai.org/download/Dango-0.1.0.dmg`，在 `index.html` 里出现 4 次。安装包还没上传（Cloudflare Pages 单个文件上限 25 MiB，dmg 现在约 31 MB，要放 R2 或缩小），上传后核对这个地址。
+1. **下载链接**：都指向 GitHub Releases 的 latest（`Dango-macOS.dmg`、`Dango-Windows-x64-setup.exe`），发新版不用改网站。
 2. **分享图地址**：`og:image` 和 `og:url` 已经是完整网址 https://dangoai.org/。
 3. **示例数字**：页面上的金额、小时数都是示例，并已标注「示例」。
 
 ## 中英文
 
-- 右上角按钮切换语言。第一次访问时按浏览器语言自动选择，之后记住访客的选择。
-- 链接后面加 `?lang=en` 或 `?lang=zh` 可以固定语言，适合分别发给中英文用户。
+- 每种语言一个网址：英文 `/`，中文 `/zh/`，韩日法西 `/ko/`、`/ja/`、`/fr/`、`/es/`。右上角下拉框跳到对应网址。
+- 浏览器是另外五种语言的访客打开英文首页，底部会出现一个「查看中文版 →」这样的链接，不自动跳转（搜索引擎才能收录英文首页）。
+- 旧链接 `?lang=xx` 会跳到那种语言的网址。本地直接打开 `site/index.html`（没经过构建）时是英文，`?lang=` 在原地切换。
 - 英文文案都在 `index.html` 脚本里的 `var EN = {...}` 中，格式是 `"中文原文": "English"`。改中文文案时，记得同步改这里的键，否则那一句会在英文版里保持中文。
 - 16 种老板的英文名字、吐槽和绝配句在 `var TE = {...}` 里，来自产品的 abti.json。
 

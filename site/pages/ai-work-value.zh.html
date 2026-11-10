@@ -1,0 +1,92 @@
+<!--
+title: AI 编程帮我干的活值多少钱？DANGO 的估算方法
+description: DANGO 把 AI 的每一步按「请人来做要花多少」估价：估算用时 × 这个职业的美国时薪中位数（美国劳工统计局 BLS OEWS，2025 年 5 月）。完整算法、20 个职业的时薪表、算例和局限。
+-->
+<h1>AI 编程帮我干的活值多少钱？DANGO 的估算方法</h1>
+<p class="answer"><b>DANGO 对 AI 做的每一步都问三个问题：这活该请谁来做、这个人要做多久、这个职业的时薪是多少。</b>每一步的分钟数 × 这个职业的美国时薪中位数（美国劳工统计局 BLS，OEWS 2025 年 5 月）= 这些活值多少钱。再除以模型按 API 官方价算的花费，就是杠杆：每花 1 美元模型钱，换回多少钱的活。这是「同样的活请人来做要付多少工钱」的估算，不是收入，也不是省下的钱。</p>
+
+<h2>公式</h2>
+<pre><code>一个回合值多少 = Σ 每一步（这一步的分钟数 ÷ 60 × 这一步对应职业的时薪中位数）
+杠杆           = 这些活值多少 ÷ 模型按 API 官方价算的花费</code></pre>
+<p><em>回合</em>就是你交给 AI 的一个请求，加上它为此做的所有事，直到它把结果交还给你。DANGO 读 Claude Code、Codex、DeepSeek Harness、WorkBuddy 本来就存在你电脑上的会话记录，切成一个个回合，给看得见的每一步估价。</p>
+
+<h2>每一步算多少分钟</h2>
+<p>按这一步实际做了什么来认，不靠猜你的 prompt：</p>
+<div class="tw"><table>
+<thead><tr><th>AI 做的这一步</th><th>算谁的活</th><th class="n">分钟</th></tr></thead>
+<tbody>
+<tr><td>改了一个代码文件</td><td>软件工程师</td><td class="n">2.5 + 0.45 × 行数<sup>0.8</sup></td></tr>
+<tr><td>…改的是测试文件 / HTML、CSS、TSX、Vue / shell 脚本</td><td>测试 / 前端 / 运维工程师</td><td class="n">同一个公式</td></tr>
+<tr><td>写文字（md、txt、docx…）</td><td>文案（PRD、路线图归产品经理）</td><td class="n">字数 ÷ 每小时 2,000 字，至少 3</td></tr>
+<tr><td>改配置文件（toml、yaml、json…）</td><td>运维工程师</td><td class="n">5</td></tr>
+<tr><td>产出图片文件（svg、png…）</td><td>平面设计</td><td class="n">30</td></tr>
+<tr><td>git commit 或 merge</td><td>软件工程师</td><td class="n">20</td></tr>
+<tr><td>跑测试</td><td>测试工程师</td><td class="n">10</td></tr>
+<tr><td>编译（cargo build、tsc、make…）</td><td>软件工程师</td><td class="n">2</td></tr>
+<tr><td>装依赖、docker、launchctl</td><td>运维工程师</td><td class="n">5</td></tr>
+<tr><td>curl、sqlite、psql、duckdb、pandas / 跑 Python 脚本</td><td>数据分析师</td><td class="n">6 / 4</td></tr>
+<tr><td>ffmpeg、配音 / Whisper 字幕 / yt-dlp</td><td>视频剪辑</td><td class="n">15 / 20 / 5</td></tr>
+<tr><td>ImageMagick、Inkscape</td><td>平面设计</td><td class="n">15</td></tr>
+<tr><td>OCR（tesseract、ocrmypdf）</td><td>资料录入</td><td class="n">15</td></tr>
+<tr><td>网页搜索 / 读网页 / 在浏览器工具里读页面</td><td>研究员</td><td class="n">5 / 10 / 5</td></tr>
+<tr><td>金融数据、数据库类连接器（MCP）</td><td>金融 / 数据分析师</td><td class="n">10</td></tr>
+</tbody></table></div>
+<p>除了各步，每个回合再加 <b>5 分钟</b>（读需求、汇报结果），每个子 agent 再加 <b>12 分钟</b>，按各职业的分钟占比分摊。一个回合没有任何步骤（只是聊天），就算一次咨询，归话题对应的职业：默认研究员 5 分钟，医生 15 分钟，律师 20 分钟，心理咨询师 30 分钟。<code>ls</code>、<code>cd</code>、<code>cat</code> 这类杂事不算钱。不封顶。</p>
+<p>回合的话题会把研究类的活交给专科：在聊猫肚子不舒服的回合里搜网页，算医生的活；在聊股票的回合里跑数据脚本，算金融分析师的活。话题靠一张关键词表认（中英文约 2,700 个词），只留下职业 ID，prompt 本身不保存。</p>
+
+<h2>时薪：20 个职业，美国中位数</h2>
+<p>时薪取美国劳工统计局「职业就业与工资统计」（OEWS）2025 年 5 月的全国时薪中位数，按 SOC 职业代码对应。只算工资，不含福利、公司开销和中介费。</p>
+<div class="tw"><table>
+<thead><tr><th>职业</th><th>SOC</th><th class="n">时薪中位数</th></tr></thead>
+<tbody>
+<tr><td>医生</td><td>29-1215</td><td class="n">$117.39</td></tr>
+<tr><td>律师</td><td>23-1011</td><td class="n">$76.76</td></tr>
+<tr><td>软件工程师</td><td>15-1252</td><td class="n">$65.38</td></tr>
+<tr><td>数据分析师</td><td>15-2051</td><td class="n">$57.80</td></tr>
+<tr><td>测试工程师</td><td>15-1253</td><td class="n">$50.14</td></tr>
+<tr><td>金融分析师</td><td>13-2051</td><td class="n">$49.40</td></tr>
+<tr><td>产品经理</td><td>13-1082</td><td class="n">$49.19</td></tr>
+<tr><td>音乐人</td><td>27-2042</td><td class="n">$47.80</td></tr>
+<tr><td>建筑师</td><td>17-1011</td><td class="n">$47.73</td></tr>
+<tr><td>运维工程师</td><td>15-1244</td><td class="n">$47.66</td></tr>
+<tr><td>前端工程师</td><td>15-1254</td><td class="n">$47.49</td></tr>
+<tr><td>科学家</td><td>19-2000</td><td class="n">$46.29</td></tr>
+<tr><td>研究员</td><td>13-1161</td><td class="n">$37.87</td></tr>
+<tr><td>文案</td><td>27-3043</td><td class="n">$36.98</td></tr>
+<tr><td>视频剪辑</td><td>27-4032</td><td class="n">$36.26</td></tr>
+<tr><td>平面设计</td><td>27-1024</td><td class="n">$30.27</td></tr>
+<tr><td>厨师</td><td>35-1011</td><td class="n">$30.03</td></tr>
+<tr><td>心理咨询师</td><td>21-1018</td><td class="n">$28.53</td></tr>
+<tr><td>健身教练</td><td>39-9031</td><td class="n">$22.67</td></tr>
+<tr><td>资料录入</td><td>43-9021</td><td class="n">$19.88</td></tr>
+</tbody></table></div>
+
+<h2>算例</h2>
+<div class="tw"><table>
+<thead><tr><th>AI 做了什么</th><th>分钟</th><th class="n">值多少</th></tr></thead>
+<tbody>
+<tr><td>在一个代码文件里改了 120 行</td><td>2.5 + 0.45 × 120<sup>0.8</sup> ≈ 23.2 分钟软件工程师</td><td class="n">$25.31</td></tr>
+<tr><td>跑了一个画图的 Python 脚本</td><td>4 分钟数据分析师</td><td class="n">$3.85</td></tr>
+<tr><td>回答「猫为什么拉肚子」</td><td>医生的一次 15 分钟问诊</td><td class="n">$29.35</td></tr>
+</tbody></table></div>
+<p>一整个回合：AI 改了一个 80 行的源文件和一个 30 行的测试，跑了测试，提交，中间派了一个子 agent。各步合计软件工程师 37.5 分钟（代码 17.5、提交 20），测试工程师 19.3 分钟（测试文件 9.3、跑测试 10）。5 分钟基础和 12 分钟子 agent 按比例分摊后是 48.7 和 25.1 分钟：<b>$53.07 + $20.99 = $74.06</b>，一个回合大约 74 分钟的活。</p>
+
+<h2>模型花了多少，杠杆怎么算</h2>
+<p>token 数来自 AI 工具自己的记录：Claude Code 每条回复都写着模型和用量（输入、写缓存、读缓存、输出），Codex 每次响应都写着 token 用量。DANGO 按 Anthropic、OpenAI 官网的 API 价格计价，长上下文有单独价格的照单独价格算。价格表里没有的模型，只记 token 不计钱。</p>
+<p><b>如果你是包月订阅</b>（Claude Pro / Max、ChatGPT Plus / Pro），不按 token 付费，DANGO 显示的花费是「这些 token 按 API 买要多少钱」。你实际花的是订阅费，一般更低，所以实际杠杆一般更高。</p>
+
+<h2>这个数字不是什么</h2>
+<ul>
+<li><b>不是收入，也不是省下的钱。</b>它是同样的活请人来做要付的工钱，你未必真的会请人。</li>
+<li><b>不评质量。</b>后来被你丢掉的改动，做的时候也算了。</li>
+<li><b>人和人不一样。</b>真实的工程师可能比公式快，也可能慢；分钟数是一把一致的尺子，不是秒表。</li>
+<li><b>美国工资。</b>全国中位数，只含工资。多数其他国家更低，算上福利和公司开销会更高。</li>
+<li><b>关键词认话题会认错。</b>聊猫的健康归医生；说法太特别时，也可能落到研究员。</li>
+</ul>
+<p>规则都公开在 GitHub 上：<a href="https://github.com/justinz183/dango/blob/main/crates/core/src/occupation.rs">crates/core/src/occupation.rs</a>（每一步多少分钟）和 <a href="https://github.com/justinz183/dango/blob/main/assets/occupations.toml">assets/occupations.toml</a>（职业和时薪）。</p>
+
+<h2>常见问题</h2>
+<details><summary>这是 AI 帮我省了多少钱吗？</summary><p>不是。它估算的是按美国中位工资请人做同样的活要付多少。算不算省钱，要看你本来会不会请人。</p></details>
+<details><summary>我是包月订阅，不按 token 付费，「花了多少」怎么算？</summary><p>按 API 官方价格算：同样的 token 通过 Anthropic 或 OpenAI 的 API 买要多少钱。你实际花的是订阅费，所以实际杠杆一般比显示的更高。</p></details>
+<details><summary>为什么用美国劳工统计局的工资？</summary><p>它公开、按职业细分、每年更新、引用广泛。用中位数、只算工资不算福利，让估算偏保守。</p></details>
+<details><summary>算这些要读我的 prompt 或代码吗？</summary><p>只在内存里看一眼，用来认出这一步是什么、话题是什么，然后只留下数字：分钟、行数、职业、token 和花费。详见<a href="/zh/privacy/">隐私说明</a>。</p></details>

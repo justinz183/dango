@@ -1,9 +1,11 @@
-# The old site's pages, now sections of the one page (2026-11-09).
-/en /?lang=en 301
-/en/* /?lang=en 301
-/types /#boss 301
-/types/* /#boss 301
-/t/* /#boss 301
+# The old site's pages, now sections of the one page (2026-11-09); its type pages go to the ABTI
+# pages (2026-11-10, tools/build-pages.mjs). English is the home page itself
+# (2026-11-10), so the old /en/ goes there; /zh/ /ko/ /ja/ /fr/ /es/ are real pages (tools/build-i18n.mjs).
+/en / 301
+/en/* / 301
+/types /abti/ 301
+/types/* /abti/ 301
+/t/* /abti/ 301
 /how /#product 301
 /how/* /#product 301
 # The one-line installers (2026-11-10): always the latest GitHub release's.

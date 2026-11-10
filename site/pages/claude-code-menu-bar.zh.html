@@ -1,0 +1,36 @@
+<!--
+title: Mac 上有哪些 Claude Code、Codex 的菜单栏工具（2026）
+description: Mac 菜单栏里的 Claude Code、Codex 工具对比：CodexBar、ClaudeBar、Claude Usage Tracker、Usage4Claude、Claude Usage Bar、CCSeva 和 DANGO。哪些看额度，哪些看 token 和花费，哪些看这些活值多少钱。
+-->
+<h1>Mac 上有哪些 Claude Code、Codex 的菜单栏工具</h1>
+<p class="answer"><b>大多数 Claude Code 菜单栏工具是额度表：</b>CodexBar、ClaudeBar、Claude Usage Tracker、Usage4Claude、Claude Usage Bar 显示 5 小时和每周额度用了多少、什么时候重置；CodexBar 和 ClaudeBar 还支持 Codex 和很多别的服务。<b>CCSeva</b> 主要看 Claude Code 的 token 和花费。<b>DANGO</b> 回答的是另一个问题：Claude Code、Codex、DeepSeek、WorkBuddy 替你干了多少活，按 API 价花了多少，同样的活请人来做要多少钱。老是撞额度，就选额度表；想知道 AI 值不值，就选 DANGO。</p>
+
+<h2>对比</h2>
+<div class="tw"><table>
+<thead><tr><th>应用</th><th>显示什么</th><th>支持</th><th>许可 / 价格</th></tr></thead>
+<tbody>
+<tr><td><a href="https://codexbar.app">CodexBar</a></td><td>会话、每周、每月额度和重置倒计时，credits；扫描本机记录算 Codex 和 Claude 的花费</td><td>Codex、Claude 等 100 多种服务</td><td>MIT，免费</td></tr>
+<tr><td><a href="https://claudebar.tddworks.com">ClaudeBar</a></td><td>5 小时、每周、分模型额度，超额用量，今天的花费和 token，用量节奏预测（需要 macOS 15+）</td><td>Claude、Codex、Gemini、Copilot、Cursor 等</td><td>Apache-2.0，免费</td></tr>
+<tr><td><a href="https://claudetracker.com">Claude Usage Tracker</a></td><td>会话、每周、分模型额度，API Console 花费，历史图表</td><td>Claude；3.3 版起支持 Codex</td><td>MIT，免费</td></tr>
+<tr><td><a href="https://github.com/f-is-h/Usage4Claude">Usage4Claude</a></td><td>5 小时和 7 天额度、超额用量、Codex credits（只看额度）</td><td>Claude、Codex</td><td>MIT</td></tr>
+<tr><td><a href="https://github.com/Blimp-Labs/claude-usage-bar">Claude Usage Bar</a></td><td>5 小时和 7 天额度、分模型、超额用量（美元）、历史</td><td>Claude</td><td>BSD-2-Clause</td></tr>
+<tr><td><a href="https://github.com/Iamshankhadeep/ccseva">CCSeva</a></td><td>从本机记录读 token、花费、消耗速度、5 小时窗口和每周额度</td><td>Claude Code</td><td>MIT</td></tr>
+<tr><td><b><a href="/zh/">DANGO</a></b></td><td>每个岗位干了多少活、值多少钱（美国中位时薪），按 API 价的模型花费，杠杆；今天、本周、本月、总计；谁在干、谁在等你批准；日报周报和 ABTI 老板人格</td><td>Claude Code、Codex、DeepSeek、WorkBuddy</td><td>免费（macOS 13 起，Windows 预览版）</td></tr>
+</tbody></table></div>
+<p class="note">2026 年 11 月对照各项目的官网或仓库核对。功能变化很快，以链接里的为准。</p>
+
+<h2>看额度、看花费，还是看值不值？</h2>
+<ul>
+<li><b>「我是不是快撞额度了？」</b>用额度表。它从服务商那里读你套餐的用量，显示进度条和重置时间。多个工具一起用选 CodexBar、ClaudeBar；只用 Claude 选 Claude Usage Tracker、Usage4Claude 或 Claude Usage Bar。</li>
+<li><b>「我用了多少 token，按价算多少钱？」</b>用读记录的工具：菜单栏里的 CCSeva，或者命令行的 <a href="https://github.com/ccusage/ccusage">ccusage</a>。见<a href="/zh/claude-code-cost/">怎么看 Claude Code、Codex 花了多少钱</a>。</li>
+<li><b>「值不值？AI 到底替我干了什么？」</b>用 DANGO。它把 AI 的每一步归到一个岗位（代码归软件工程师，图表归数据分析师，查资料归研究员），按这个岗位的美国时薪中位数计价，再和模型花费放在一起比。<a href="/zh/ai-work-value/">怎么估算的 →</a></li>
+</ul>
+
+<h2>DANGO 在菜单栏里是什么样子</h2>
+<p>菜单栏里一个团子图标，点开是一间小办公室：坐在工位上的团子在干活，站在沙发边的在等你批准，沙发上的在摸鱼。下面是今天、本周、本月和总计各值多少钱，各自的模型花费和杠杆，以及 Claude Code、Codex 各干了多少。屏幕角落还有一只团子，不打开也看得到状态。全部在你的 Mac 上、从 AI 工具本来就有的记录里算，不上传。<a href="/zh/privacy/">隐私说明 →</a></p>
+<p>DANGO 不显示套餐额度。经常撞额度的话，可以和一个额度表一起用。</p>
+
+<h2>常见问题</h2>
+<details><summary>Mac 上有看 Claude Code 用量的菜单栏工具吗？</summary><p>有好几个。CodexBar、ClaudeBar、Claude Usage Tracker、Usage4Claude、Claude Usage Bar 看套餐额度；CCSeva 看 token 和花费；DANGO 看干了多少活、按美国中位时薪值多少钱，以及模型花费。</p></details>
+<details><summary>哪个菜单栏工具同时支持 Claude Code 和 Codex？</summary><p>CodexBar、ClaudeBar、Usage4Claude 和 DANGO 都支持；Claude Usage Tracker 从 3.3 版起也支持 Codex。</p></details>
+<details><summary>这些工具会上传我的数据吗？</summary><p>额度表要向服务商查你的用量，所以会用你的账号和 Anthropic 或 OpenAI 通信。DANGO 只读本机的记录文件，什么都不上传。</p></details>

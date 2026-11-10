@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/?lang=fr"><b>dangoai.org</b></a> · <a href="#installer">Installer</a> · <a href="https://dangoai.org/?lang=fr#product">Le calcul</a> · <a href="docs/DEVELOPMENT.md">Développer</a>
+  <a href="https://dangoai.org/fr/"><b>dangoai.org</b></a> · <a href="#installer">Installer</a> · <a href="https://dangoai.org/fr/#product">Le calcul</a> · <a href="docs/DEVELOPMENT.md">Développer</a>
 </p>
 
 <p align="center"><sub>Gratuit · macOS 13 ou plus récent · Apple silicon et Intel · tout est calculé sur votre Mac</sub></p>
@@ -93,7 +93,7 @@ Pas de questionnaire. À partir de ce que vos agents ont vraiment fait, DANGO ca
 
 Quatre axes, 16 types ABTI. La taille de votre entreprise suit le travail de vos dangos, en cinq paliers : Auto-entrepreneur, Atelier, Studio, Groupe, Société cotée.
 
-[Voir les 16 types ABTI →](https://dangoai.org/?lang=fr#boss)
+[Voir les 16 types ABTI →](https://dangoai.org/fr/#boss)
 
 </td>
 </tr>

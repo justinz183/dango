@@ -1,0 +1,60 @@
+<!--
+title: DANGO privacy: what it reads, what it keeps, what it never touches
+description: DANGO runs entirely on your computer. It reads the session logs Claude Code, Codex, DeepSeek Harness and WorkBuddy already keep, stores only numbers in a local database, and uploads nothing. The exact files, fields and limits.
+-->
+<h1>Privacy: what DANGO reads, what it keeps, what it never touches</h1>
+<p class="answer"><b>DANGO runs entirely on your computer and uploads nothing.</b> It reads the session logs that Claude Code, Codex, DeepSeek Harness and WorkBuddy already write to your home folder, turns them into numbers (minutes, turns, lines changed, which job, tokens and cost) and keeps those numbers in a local database. Your prompts, the AI’s replies, your code and your file paths are never stored. There is no account, no telemetry and no analytics in the app.</p>
+
+<h2>What it reads</h2>
+<p>Only the logs the agents keep for themselves. Nothing is installed into Claude Code or Codex.</p>
+<div class="tw"><table>
+<thead><tr><th>Agent</th><th>Files</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Claude Code</td><td><code>~/.claude/projects/</code></td><td>Session transcripts (and their subagents): the steps, line counts, models and token usage</td></tr>
+<tr><td></td><td><code>~/.claude/sessions/</code></td><td>Whether a running session is busy, done or waiting for your approval</td></tr>
+<tr><td></td><td><code>~/.claude/settings.json</code></td><td>Only to see whether DANGO’s own Claude Code plugin is on, so nothing is counted twice</td></tr>
+<tr><td>Codex</td><td><code>~/.codex/sessions/</code>, <code>~/.codex/archived_sessions/</code></td><td>Session logs: steps, token usage</td></tr>
+<tr><td></td><td><code>~/.codex/session_index.jsonl</code></td><td>The names Codex gives its threads, for your report window</td></tr>
+<tr><td>DeepSeek Harness</td><td><code>~/.dsh/sessions/</code></td><td>Session logs</td></tr>
+<tr><td>WorkBuddy</td><td><code>~/.workbuddy/projects/</code>, <code>~/.workbuddy-ai/projects/</code></td><td>Session transcripts</td></tr>
+</tbody></table></div>
+<p class="note">On Windows the same folders are under <code>%USERPROFILE%</code>.</p>
+<p>While reading, a prompt is looked at once in memory to tell what it is about (a cat’s health goes to the doctor, a stock question to the financial analyst), and a shell command to tell what kind of step it is (tests, a commit, ffmpeg). Then both are dropped. Only the resulting job, such as <code>doctor</code>, is kept.</p>
+
+<h2>What it keeps</h2>
+<p>A SQLite database at <code>~/.dango/data.db</code> (Windows: <code>%USERPROFILE%\.dango</code>), readable only by your user account:</p>
+<ul>
+<li><b>Per turn:</b> start and end time, which agent, how many files were touched, lines added and removed, whether tests ran and passed, whether it committed or merged, how many subagents, minutes per job and what they are worth, tokens per model and what they cost at API prices.</li>
+<li><b>Per session:</b> start and end time, active minutes, and a 12-character SHA-256 fingerprint of its working folder instead of the folder path.</li>
+<li><b>Session titles and project folder names</b>, read from the agents’ own logs, so the report window on your Mac can list what you worked on. They stay on your computer and are never put on a share card.</li>
+</ul>
+<p>Every other text stored must be a short token (an ID, a hash, a fixed value). The project ships a check, <code>dango privacy-scan</code>, that fails if anything stored looks like a path, code, a prompt or free text.</p>
+
+<h2>What it never touches</h2>
+<div class="tw"><table>
+<thead><tr><th>Never stored</th><th>Never done</th></tr></thead>
+<tbody>
+<tr><td>Prompts and the AI’s replies</td><td>Uploading anything: the background service has no network code and opens no network ports</td></tr>
+<tr><td>Code and file contents</td><td>Accounts, sign-in, telemetry, analytics or crash reporting</td></tr>
+<tr><td>File paths and shell commands</td><td>Leaderboards or comparing you with other people</td></tr>
+<tr><td>Web pages read and search queries</td><td>Changing your Claude Code or Codex settings</td></tr>
+</tbody></table></div>
+
+<h2>Share cards</h2>
+<p>A share card (day, week, month, year or all-time) carries numbers, jobs and your ABTI type. It never carries project names, session titles or code. A card leaves your Mac only when you share it yourself.</p>
+
+<h2>Remove everything</h2>
+<p>On a Mac, quit DANGO from its right-click menu, then in Terminal:</p>
+<pre><code>launchctl bootout gui/$(id -u)/com.dango.daemon 2>/dev/null
+launchctl bootout gui/$(id -u)/com.dango.widget 2>/dev/null
+rm -f ~/Library/LaunchAgents/com.dango.daemon.plist ~/Library/LaunchAgents/com.dango.widget.plist
+rm -rf /Applications/Dango.app ~/Applications/Dango.app ~/.dango</code></pre>
+<p>On Windows, uninstall Dango from Settings → Apps, then delete <code>%USERPROFILE%\.dango</code>. Your Claude Code and Codex logs are not touched either way.</p>
+
+<h2>The website</h2>
+<p>dangoai.org sets no cookies and runs no analytics. The home page loads its fonts from Google Fonts. We count downloads only from the public download numbers GitHub shows for each release.</p>
+
+<h2>Questions</h2>
+<details><summary>Does DANGO upload my code or conversations?</summary><p>No. Everything is computed on your computer. Prompts are read once in memory to recognise the topic and then dropped; code, file paths and replies are never stored or sent anywhere.</p></details>
+<details><summary>Does DANGO need an account or an internet connection?</summary><p>No. It has no account and works offline. The background service has no network code at all.</p></details>
+<details><summary>Can I check this myself?</summary><p>Yes. The source is on GitHub (github.com/justinz183/dango), the database is a plain SQLite file in ~/.dango, and dango privacy-scan checks that it holds only numbers and short tokens.</p></details>

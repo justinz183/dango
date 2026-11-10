@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/?lang=zh"><b>官网 dangoai.org</b></a> · <a href="#安装">安装</a> · <a href="https://dangoai.org/?lang=zh#product">怎么算的</a> · <a href="docs/DEVELOPMENT.md">开发</a>
+  <a href="https://dangoai.org/zh/"><b>官网 dangoai.org</b></a> · <a href="#安装">安装</a> · <a href="https://dangoai.org/zh/#product">怎么算的</a> · <a href="docs/DEVELOPMENT.md">开发</a>
 </p>
 
 <p align="center"><sub>免费 · macOS 13 起 · Apple 芯片和 Intel · 全在你的 Mac 上算</sub></p>
@@ -93,7 +93,7 @@ AI 每做一步，团子就问一句：这一步该请谁来干？改代码归**
 
 四个维度，16 种 ABTI 人格。公司规模按团子替你打的工分五档：个体户、小作坊、工作室、集团、上市公司。
 
-[看全部 16 种 ABTI 人格 →](https://dangoai.org/?lang=zh#boss)
+[看全部 16 种 ABTI 人格 →](https://dangoai.org/zh/#boss)
 
 </td>
 </tr>

@@ -1,0 +1,44 @@
+<!--
+title: 怎么看 Claude Code、Codex 花了多少钱、用了多少 token
+description: Claude Code 里输入 /usage（/cost 也行）看本次会话的花费和 token；Codex 里用 /status 和 /usage。要看跨天、跨工具的总数，用 ccusage 或 DANGO 读本机记录。各自显示什么、记录存在哪、包月订阅的「花费」是什么意思。
+-->
+<h1>怎么看 Claude Code、Codex 花了多少钱、用了多少 token</h1>
+<p class="answer"><b>Claude Code 里输入 <code>/usage</code></b>（<code>/cost</code>、<code>/stats</code> 是它的别名）：显示本次会话的估算花费、改了多少行、每个模型的 token；Pro、Max 用户还能看到额度用了多少。<b>Codex 里输入 <code>/status</code></b>，看本次会话的 token、剩余上下文和 5 小时、每周额度；<code>/usage</code> 看按天、按周的 token 用量。要看跨天、跨项目、两个工具合起来的总数，就得读它们存在你电脑上的记录：<code>npx ccusage@latest</code> 打印 token 和花费报表，<a href="/zh/">DANGO</a> 在菜单栏里一直帮你记着，还会估算这些活值多少钱。</p>
+
+<h2>Claude Code</h2>
+<div class="tw"><table>
+<thead><tr><th>命令</th><th>显示什么</th></tr></thead>
+<tbody>
+<tr><td><code>/usage</code>（或 <code>/cost</code>、<code>/stats</code>）</td><td>本次会话：按 API 官方价估算的花费、时长、改了多少行、每个模型的输入 / 输出 / 缓存 token。Pro、Max、Team、Enterprise 用户还能看到套餐额度用了多少、用在了哪。</td></tr>
+<tr><td><code>/context</code></td><td>上下文窗口用了多少，画成彩色格子。</td></tr>
+<tr><td><code>/status</code></td><td>版本、模型、账号和连接状态，不显示花费和 token。</td></tr>
+</tbody></table></div>
+<p>Anthropic 文档写明，会话花费这个数字是给 API 用户看的；Pro、Max 订阅用户实际并不按它计费。API 用户还可以在 Claude Console 里看花费，或者用 OpenTelemetry 导出 <code>claude_code.cost.usage</code> 和 <code>claude_code.token.usage</code>（设置 <code>CLAUDE_CODE_ENABLE_TELEMETRY=1</code>）。来源：<a href="https://code.claude.com/docs/en/costs">Manage costs</a>、<a href="https://code.claude.com/docs/en/monitoring-usage">Monitoring</a>。</p>
+<p><b>记录存在哪：</b>每个会话是 <code>~/.claude/projects/&lt;项目&gt;/</code> 下的一个 JSONL 文件。每条 AI 回复都带着模型名和 <code>usage</code>（输入、写缓存、读缓存、输出）。注意同一条回复可能写成好几行、message ID 相同，只能算一次。</p>
+
+<h2>Codex</h2>
+<div class="tw"><table>
+<thead><tr><th>命令</th><th>显示什么</th></tr></thead>
+<tbody>
+<tr><td><code>/status</code></td><td>模型、审批模式、剩余上下文、本次会话的 token 用量、5 小时和每周额度、credits。</td></tr>
+<tr><td><code>/usage</code></td><td>ChatGPT 账号按天、按周或累计的 token 用量。</td></tr>
+<tr><td><code>/statusline</code></td><td>把模型、上下文、额度和 token 计数放到底部状态栏。</td></tr>
+</tbody></table></div>
+<p><b>记录存在哪：</b><code>~/.codex/sessions/年/月/日/rollout-….jsonl</code>（旧的会移到 <code>~/.codex/archived_sessions/</code>）。每个 rollout 里都记着 token 计数：会话累计，以及上一次响应的用量（输入、缓存输入、输出、推理）。来源：<a href="https://learn.chatgpt.com/docs/developer-commands?surface=cli">Codex 命令</a>、<a href="https://github.com/openai/codex">openai/codex</a>。</p>
+
+<h2>跨天、跨项目、跨工具</h2>
+<p>自带的命令回答的是「这一次会话」和「我的套餐」。想看上个月，或者把 Claude Code 和 Codex 放在一起比，就要读本机的记录：</p>
+<ul>
+<li><b><a href="https://github.com/ccusage/ccusage">ccusage</a></b>（MIT，命令行）：<code>npx ccusage@latest daily</code> 按天、按月或按会话打印 token 和花费，支持 Claude Code、Codex 等；只看 Codex 用 <code>ccusage codex daily</code>。</li>
+<li><b>DANGO</b>（免费 Mac 应用，Windows 预览版）：在后台读同样的记录，菜单栏里分工具记着今天、本周、本月和总计。模型花费旁边，还有同样的活请人来做要付多少，所以看到的是杠杆，不只是开销。<a href="/zh/ai-work-value/">怎么估算的 →</a></li>
+<li><b>菜单栏额度工具</b>，比如 CodexBar、ClaudeBar，显示你离套餐额度还有多远。<a href="/zh/claude-code-menu-bar/">对比一下 →</a></li>
+</ul>
+
+<h2>包月订阅的「花费」是什么意思</h2>
+<p>Claude Pro / Max、ChatGPT Plus / Pro 是固定月费，不按 token 收钱。读本机记录的工具（包括 DANGO）都按 API 官方价格给 token 计价：同样的用量通过 API 买要多少钱。拿来比较不同的天、工具和模型很有用，但它不是你的账单，你的账单是套餐价。</p>
+
+<h2>常见问题</h2>
+<details><summary>Claude Code 看花费的命令是什么？</summary><p>/usage，/cost 和 /stats 是它的别名。它显示本次会话的估算花费和每个模型的 token；Pro、Max 用户还能看到额度。</p></details>
+<details><summary>Codex 怎么看 token 用量？</summary><p>输入 /status 看本次会话的 token、剩余上下文和 5 小时、每周额度；输入 /usage 看按天、按周的用量。</p></details>
+<details><summary>怎么看 Claude Code 一整个月的用量？</summary><p>自带命令只管本次会话和套餐额度。要看一个月，用 npx ccusage@latest monthly 读 ~/.claude/projects 里的本机记录，或者让 DANGO 在菜单栏里帮你记总数。</p></details>
+<details><summary>我是 Claude Max，显示的花费准吗？</summary><p>那是你这些 token 的 API 官方价，不是你实际付的钱。Max 用户付的是套餐价，这个数字适合拿来比较用量，不是账单。</p></details>

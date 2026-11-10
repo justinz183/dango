@@ -1,0 +1,36 @@
+<!--
+title: Mac menu bar apps for Claude Code and Codex (2026)
+description: The Mac menu bar apps for Claude Code and Codex, compared: CodexBar, ClaudeBar, Claude Usage Tracker, Usage4Claude, Claude Usage Bar, CCSeva and DANGO. Which ones show plan limits, which show tokens and cost, and which show what the work was worth.
+-->
+<h1>Mac menu bar apps for Claude Code and Codex</h1>
+<p class="answer"><b>Most Claude Code menu bar apps are limit meters:</b> CodexBar, ClaudeBar, Claude Usage Tracker, Usage4Claude and Claude Usage Bar show how much of your 5-hour and weekly plan limits you have used and when they reset; CodexBar and ClaudeBar also cover Codex and many other providers. <b>CCSeva</b> focuses on Claude Code tokens and cost. <b>DANGO</b> answers a different question: how much work Claude Code, Codex, DeepSeek and WorkBuddy did for you, what it cost at API prices, and what the same work would cost to hire out. Pick a limit meter if you keep hitting caps; pick DANGO if you want to know whether the AI is worth it.</p>
+
+<h2>Compared</h2>
+<div class="tw"><table>
+<thead><tr><th>App</th><th>Shows</th><th>Agents</th><th>Licence / price</th></tr></thead>
+<tbody>
+<tr><td><a href="https://codexbar.app">CodexBar</a></td><td>Session, weekly and monthly limits with reset countdowns, credits; local cost scans for Codex and Claude</td><td>Codex, Claude and 100+ other providers</td><td>MIT, free</td></tr>
+<tr><td><a href="https://claudebar.tddworks.com">ClaudeBar</a></td><td>5-hour, weekly and per-model limits, extra usage, today’s cost and tokens, a pace forecast (macOS 15+)</td><td>Claude, Codex, Gemini, Copilot, Cursor and more</td><td>Apache-2.0, free</td></tr>
+<tr><td><a href="https://claudetracker.com">Claude Usage Tracker</a></td><td>Session, weekly and per-model limits, API console spend, history charts</td><td>Claude; Codex since v3.3</td><td>MIT, free</td></tr>
+<tr><td><a href="https://github.com/f-is-h/Usage4Claude">Usage4Claude</a></td><td>5-hour and 7-day limits, extra usage, Codex credits (limits only)</td><td>Claude, Codex</td><td>MIT</td></tr>
+<tr><td><a href="https://github.com/Blimp-Labs/claude-usage-bar">Claude Usage Bar</a></td><td>5-hour and 7-day limits, per-model breakdown, extra usage in USD, history</td><td>Claude</td><td>BSD-2-Clause</td></tr>
+<tr><td><a href="https://github.com/Iamshankhadeep/ccseva">CCSeva</a></td><td>Tokens, cost, burn rate, 5-hour blocks and weekly limits, from the local logs</td><td>Claude Code</td><td>MIT</td></tr>
+<tr><td><b><a href="/">DANGO</a></b></td><td>Work done per job and what it’s worth (U.S. median wages), model cost at API prices, leverage; today, week, month, all-time; who is working or waiting for your approval; reports and an ABTI boss type</td><td>Claude Code, Codex, DeepSeek, WorkBuddy</td><td>Free (macOS 13+, Windows preview)</td></tr>
+</tbody></table></div>
+<p class="note">Checked against each project’s site or repository in November 2026. Features change quickly; follow the links for the current state.</p>
+
+<h2>Limits, cost, or worth: which do you need?</h2>
+<ul>
+<li><b>“Am I about to hit my limit?”</b> A limit meter. It reads your plan’s usage from the provider and shows bars and reset times. CodexBar and ClaudeBar if you use several agents; Claude Usage Tracker, Usage4Claude or Claude Usage Bar for Claude alone.</li>
+<li><b>“How many tokens did I use, and what would that cost?”</b> A log reader: CCSeva in the menu bar, or <a href="https://github.com/ccusage/ccusage">ccusage</a> on the command line. See <a href="/claude-code-cost/">how to see Claude Code and Codex cost</a>.</li>
+<li><b>“Is it worth it? What did the AI actually do for me?”</b> DANGO. It files every step your agents take under a job (code to a software engineer, charts to a data analyst, research to a researcher), prices it at that job’s U.S. median wage, and sets it against the model cost. <a href="/ai-work-value/">How that is estimated →</a></li>
+</ul>
+
+<h2>What DANGO looks like in the menu bar</h2>
+<p>A dango icon in the menu bar opens a little office: dangos at their desks are working, one standing by the sofa is waiting for your approval, the ones on the sofa are idle. Below it: what today, this week, this month and all time were worth, each with its model cost and leverage, and how much Claude Code and Codex each did. A dango in the corner of the screen shows status without opening anything. Everything is computed on your Mac from the logs the agents already keep; nothing is uploaded. <a href="/privacy/">Privacy notes →</a></p>
+<p>DANGO doesn’t show your plan limits. If you hit them often, run a limit meter next to it.</p>
+
+<h2>Questions</h2>
+<details><summary>Is there a Mac menu bar app for Claude Code usage?</summary><p>Yes, several. CodexBar, ClaudeBar, Claude Usage Tracker, Usage4Claude and Claude Usage Bar show your plan limits; CCSeva shows tokens and cost; DANGO shows the work done, its worth at U.S. median wages and the model cost.</p></details>
+<details><summary>Which menu bar app works with both Claude Code and Codex?</summary><p>CodexBar, ClaudeBar, Usage4Claude and DANGO cover both; Claude Usage Tracker added Codex in version 3.3.</p></details>
+<details><summary>Do these apps upload my data?</summary><p>Limit meters ask the provider for your usage, so they talk to Anthropic or OpenAI with your account. DANGO only reads local log files and uploads nothing.</p></details>

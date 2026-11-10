@@ -1,0 +1,49 @@
+# DANGO
+
+> DANGO is a free Mac menu bar app that tallies how much work Claude Code, Codex and other AI tools did for you, what it cost and what it's worth.
+
+It shows that work as a little office of busy "dango" characters: who's working, what got done and how much, all at a glance. Windows is in preview. Everything is computed on your own computer and nothing is uploaded.
+
+DANGO 是一个免费的 Mac 菜单栏应用，帮你统计 Claude Code、Codex 等 AI 工具替你干了多少活、花了多少钱、值多少钱。它是住在你 Mac 上的 AI 团队小办公室，Windows 版为预览版。你在 Claude Code、Codex、DeepSeek、WorkBuddy 里交给 AI 的工作，都由忙碌的团子来呈现：谁在干活、做了什么、完成了多少，抬眼就能看见。全部在本机计算，不上传。
+
+## Key facts
+
+- Price: free.
+- Platforms: macOS 13+ (Apple silicon and Intel); Windows 10 1803+, 64-bit (preview).
+- Works with: Claude Code, Codex, DeepSeek, WorkBuddy. You keep using them as usual; DANGO reads their usage logs on your computer and keeps only the numbers. Nothing to install inside those tools.
+- Where it lives: a dango sits in the corner of your screen; click it and your little office opens, with today's output, this week, this month and all time.
+- Roles: each piece of work goes to one of 20 roles (software engineer, data analyst, researcher, writer, product manager, designer, video editor, doctor and more), and the dango dresses for it.
+- Reports: daily, weekly, monthly and yearly reports are made automatically, each as a card you can share.
+- "What it's worth": time per role multiplied by the US Bureau of Labor Statistics (BLS) median hourly pay for that occupation. It is an estimate, not real income. DANGO puts it next to what you spent on models to show your leverage.
+- ABTI: 16 boss types, worked out from your work log, with no quiz. Four dimensions: Hands-off (share of turns where AI ran on its own), Build (share of code written in new files), Generalist (how many roles take over 10% of the work), Owl (share of work time between 8 PM and 8 AM).
+- Model cost: tokens from the agents' own logs, priced at Anthropic's and OpenAI's API list prices. On a subscription (Claude Pro/Max, ChatGPT Plus/Pro) that is what the same tokens would cost through the API, not your bill.
+- Privacy: DANGO keeps numbers only: time, turns, lines changed, role, tokens and cost. It never stores prompts, AI replies, code or file paths. Session titles and project folder names stay on your computer for the local report window and never appear on share cards. Nothing is uploaded; there is no account, telemetry or analytics.
+- Source and releases: https://github.com/justinz183/dango
+
+## Install
+
+- Download: https://github.com/justinz183/dango/releases/latest
+- macOS, in Terminal: `curl -fsSL https://dangoai.org/install.sh | sh`
+- Windows, in PowerShell: `irm https://dangoai.org/install.ps1 | iex`
+- The scripts download the latest release from GitHub, check its SHA-256 and open the app.
+
+## Pages
+
+- [DANGO (English)](https://dangoai.org/)
+- [DANGO (中文)](https://dangoai.org/zh/)
+- [DANGO (日本語)](https://dangoai.org/ja/)
+- [DANGO (한국어)](https://dangoai.org/ko/)
+- [DANGO (Français)](https://dangoai.org/fr/)
+- [DANGO (Español)](https://dangoai.org/es/)
+- [How to see what Claude Code and Codex cost and how many tokens they use](https://dangoai.org/claude-code-cost/) · [中文](https://dangoai.org/zh/claude-code-cost/)
+- [Mac menu bar apps for Claude Code and Codex, compared](https://dangoai.org/claude-code-menu-bar/) · [中文](https://dangoai.org/zh/claude-code-menu-bar/)
+- [How much is your AI coding work worth? The method, wage table and limits](https://dangoai.org/ai-work-value/) · [中文](https://dangoai.org/zh/ai-work-value/)
+- [ABTI: the 16 AI boss types and how they are worked out](https://dangoai.org/abti/) · [中文](https://dangoai.org/zh/abti/) (each type has its own page, e.g. https://dangoai.org/abti/hbgo/)
+- [Privacy: what DANGO reads, keeps and never touches](https://dangoai.org/privacy/) · [中文](https://dangoai.org/zh/privacy/)
+
+## FAQ
+
+- Does it cost anything? No, it's free.
+- Will it upload my code or conversations? No. Everything is computed on your computer. DANGO keeps only numbers such as time and role, never stores code or prompts, and share cards never include project names.
+- I'm on a subscription, not paying per token. How is "cost" worked out? At API list prices: what the same tokens would cost through the Anthropic or OpenAI API. Your real spend is your plan price, so your real leverage is usually higher.
+- How is "what it's worth" calculated? Each stretch of time is assigned to a role based on the kind of work, then multiplied by the BLS median hourly pay for that occupation. It is an estimate, not real income.

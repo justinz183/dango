@@ -1,0 +1,44 @@
+<!--
+title: How to see what Claude Code and Codex cost and how many tokens they use
+description: In Claude Code, type /usage (also /cost) for the session's cost and tokens; in Codex, /status and /usage. For history across days and agents, read the local logs with ccusage or DANGO. What each shows, where the logs live, and what “cost” means on a subscription.
+-->
+<h1>How to see what Claude Code and Codex cost and how many tokens they use</h1>
+<p class="answer"><b>In Claude Code, type <code>/usage</code></b> (<code>/cost</code> and <code>/stats</code> are aliases): it shows the session’s estimated cost, lines changed and tokens per model, and on a Pro or Max plan your usage limits. <b>In Codex, type <code>/status</code></b> for this session’s token usage, context left and your 5-hour and weekly limits, or <code>/usage</code> for daily and weekly token activity. For totals across days, projects and both agents, read the logs they keep on your computer: <code>npx ccusage@latest</code> prints token and cost reports, and <a href="/">DANGO</a> keeps a running count in your menu bar and also estimates what the work was worth.</p>
+
+<h2>Claude Code</h2>
+<div class="tw"><table>
+<thead><tr><th>Command</th><th>What it shows</th></tr></thead>
+<tbody>
+<tr><td><code>/usage</code> (or <code>/cost</code>, <code>/stats</code>)</td><td>The current session: estimated cost at API list prices, duration, lines changed, input / output / cache tokens per model. On Pro, Max, Team and Enterprise plans: how much of your plan limits you have used, and what used them.</td></tr>
+<tr><td><code>/context</code></td><td>How full the context window is, as a coloured grid.</td></tr>
+<tr><td><code>/status</code></td><td>Version, model, account and connection; no cost or tokens.</td></tr>
+</tbody></table></div>
+<p>Anthropic’s docs note that the session cost figure is meant for API users; on a Pro or Max subscription it isn’t what you are billed. API users can also see spending in the Claude Console and export <code>claude_code.cost.usage</code> and <code>claude_code.token.usage</code> through OpenTelemetry (<code>CLAUDE_CODE_ENABLE_TELEMETRY=1</code>). Sources: <a href="https://code.claude.com/docs/en/costs">Manage costs</a>, <a href="https://code.claude.com/docs/en/monitoring-usage">Monitoring</a>.</p>
+<p><b>Where the logs are:</b> every session is a JSONL transcript under <code>~/.claude/projects/&lt;project&gt;/</code>. Each assistant reply carries its model and a <code>usage</code> block (input, cache writes, cache reads, output). Note that one reply can be written as several lines with the same message ID; count it once.</p>
+
+<h2>Codex</h2>
+<div class="tw"><table>
+<thead><tr><th>Command</th><th>What it shows</th></tr></thead>
+<tbody>
+<tr><td><code>/status</code></td><td>Model, approval mode, context window left, this session’s token usage, your 5-hour and weekly limits and credits.</td></tr>
+<tr><td><code>/usage</code></td><td>Your ChatGPT token activity by day, week or in total.</td></tr>
+<tr><td><code>/statusline</code></td><td>Puts model, context, limits and token counters in the footer.</td></tr>
+</tbody></table></div>
+<p><b>Where the logs are:</b> <code>~/.codex/sessions/YYYY/MM/DD/rollout-….jsonl</code> (older ones move to <code>~/.codex/archived_sessions/</code>). Each rollout records token counts with a running session total and the last response’s usage (input, cached input, output, reasoning). Sources: <a href="https://learn.chatgpt.com/docs/developer-commands?surface=cli">Codex commands</a>, <a href="https://github.com/openai/codex">openai/codex</a>.</p>
+
+<h2>Across days, projects and agents</h2>
+<p>The built-in commands answer “this session” and “my plan”. To see last month, or Claude Code and Codex side by side, you read the local logs:</p>
+<ul>
+<li><b><a href="https://github.com/ccusage/ccusage">ccusage</a></b> (MIT, command line): <code>npx ccusage@latest daily</code> prints tokens and cost by day, month or session, for Claude Code, Codex and other agents; <code>ccusage codex daily</code> for Codex alone.</li>
+<li><b>DANGO</b> (free Mac app, Windows preview): reads the same logs in the background and keeps today, this week, this month and all-time in your menu bar, per agent. Next to the model cost it shows what the work would cost to hire out, so you see leverage, not just spend. <a href="/ai-work-value/">How that is estimated →</a></li>
+<li><b>Menu bar limit meters</b> such as CodexBar or ClaudeBar show how close you are to your plan’s limits. <a href="/claude-code-menu-bar/">Compare them →</a></li>
+</ul>
+
+<h2>What “cost” means on a subscription</h2>
+<p>On Claude Pro or Max, or ChatGPT Plus or Pro, you pay a flat price, not per token. Tools that read the logs, DANGO included, price the tokens at the official API list prices: what the same usage would cost through the API. That is useful for comparing days, agents and models, but it isn’t your bill. Your bill is the plan price.</p>
+
+<h2>Questions</h2>
+<details><summary>What is the Claude Code command to see cost?</summary><p>/usage. /cost and /stats are aliases for it. It shows the current session’s estimated cost and tokens per model; on Pro and Max plans it also shows your usage limits.</p></details>
+<details><summary>How do I see token usage in Codex?</summary><p>Type /status for the current session’s token usage, context left and your 5-hour and weekly limits, or /usage for daily and weekly activity.</p></details>
+<details><summary>How do I see Claude Code usage for the whole month?</summary><p>The built-in command covers the current session and your plan limits. For a month, read the local logs in ~/.claude/projects with npx ccusage@latest monthly, or let DANGO keep the totals in your menu bar.</p></details>
+<details><summary>Is the cost shown accurate if I’m on Claude Max?</summary><p>It is the API list price of your tokens, not what you pay. On Max you pay the plan price, so the figure is a way to compare usage, not your bill.</p></details>

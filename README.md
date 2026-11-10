@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/?lang=en"><b>dangoai.org</b></a> · <a href="#install">Install</a> · <a href="https://dangoai.org/?lang=en#product">How it’s worked out</a> · <a href="docs/DEVELOPMENT.md">Develop</a>
+  <a href="https://dangoai.org/"><b>dangoai.org</b></a> · <a href="#install">Install</a> · <a href="https://dangoai.org/#product">How it’s worked out</a> · <a href="docs/DEVELOPMENT.md">Develop</a>
 </p>
 
 <p align="center"><sub>Free · macOS 13+ · Apple silicon and Intel · runs entirely on your Mac</sub></p>
@@ -93,7 +93,7 @@ No quiz. From what your agents actually did, DANGO works out your **ABTI** (four
 
 Four dimensions, 16 ABTI types. Your company size follows the work your dangos did, in five tiers: Solo Stall, Workshop, Studio, Group, Listed.
 
-[See all 16 ABTI types →](https://dangoai.org/?lang=en#boss)
+[See all 16 ABTI types →](https://dangoai.org/#boss)
 
 </td>
 </tr>

@@ -1,0 +1,7 @@
+# DANGO · https://dangoai.org
+# Every search engine and AI crawler is welcome.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://dangoai.org/sitemap.xml
