@@ -6,3 +6,6 @@
 /t/* /#boss 301
 /how /#product 301
 /how/* /#product 301
+# The one-line installers (2026-11-10): always the latest GitHub release's.
+/install.sh https://github.com/justinz183/dango/releases/latest/download/install.sh 302
+/install.ps1 https://github.com/justinz183/dango/releases/latest/download/install.ps1 302
