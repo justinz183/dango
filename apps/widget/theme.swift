@@ -327,7 +327,7 @@ func stateExtras(_ status: String, _ t: Double, _ box: NSRect) {
             let alpha = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) / 0.7
             let rise = CGFloat(-3 + 11 * p) * s
             let pt = above(dx, dy + rise)
-            put(V3.mono("z", size, .regular, color(hex: "#8A8278").withAlphaComponent(CGFloat(alpha))), pt.x, flipped ? pt.y - size : pt.y)
+            put(V3.mono("z", size, .regular, color(hex: V3.dark ? "#D6D1C8" : "#8A8278").withAlphaComponent(CGFloat(alpha))), pt.x, flipped ? pt.y - size : pt.y)
         }
     case "fuming":
         for (k, (fx, dy, d)) in [(0.30, 6.0, 8.0), (0.50, 10.0, 10.0), (0.66, 4.0, 7.0)].enumerated() {
@@ -815,10 +815,25 @@ final class V3OfficeView: NSView {
         let room = themeImage("room")
         let (dusk, night) = Appearance.sky()
         let hints: [NSImageRep.HintKey: Any] = [.interpolation: NSImageInterpolation.high.rawValue]
+        // The dark theme's 团子 are white and the picture is a light room, so
+        // there the room goes darker, less at night when it already is (user,
+        // 2026-11-09: 「暗色背景这个办公室和白团子的对比不够明显」).
+        let dim = V3.dark ? 0.45 - 0.2 * night : 0
+        func dimmed(_ draw: () -> Void) {
+            guard dim > 0, let cg = NSGraphicsContext.current?.cgContext else { return draw() }
+            cg.beginTransparencyLayer(auxiliaryInfo: nil)
+            draw()
+            cg.setBlendMode(.sourceAtop)
+            cg.setFillColor(color(hex: "#0F1424").withAlphaComponent(dim).cgColor)
+            cg.fill(bounds)
+            cg.endTransparencyLayer()
+        }
         if let room {
-            room.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: hints)
-            if dusk > 0 { themeImage("room-dusk")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: dusk, respectFlipped: true, hints: hints) }
-            if night > 0 { themeImage("room-night")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: night, respectFlipped: true, hints: hints) }
+            dimmed {
+                room.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: hints)
+                if dusk > 0 { themeImage("room-dusk")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: dusk, respectFlipped: true, hints: hints) }
+                if night > 0 { themeImage("room-night")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: night, respectFlipped: true, hints: hints) }
+            }
         } else {
             color(hex: "#FBF3E4").setFill()
             bounds.fill()
@@ -831,9 +846,11 @@ final class V3OfficeView: NSView {
             drawDango(o, s, at, phase: Double(i) * 0.41)
             spots.append((packExtent(at, role: packRoles[o.job.id]), o.job.name, s))
         }
-        themeImage("room-front")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: hints)
-        if dusk > 0 { themeImage("room-front-dusk")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: dusk, respectFlipped: true, hints: hints) }
-        if night > 0 { themeImage("room-front-night")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: night, respectFlipped: true, hints: hints) }
+        dimmed {
+            themeImage("room-front")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: hints)
+            if dusk > 0 { themeImage("room-front-dusk")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: dusk, respectFlipped: true, hints: hints) }
+            if night > 0 { themeImage("room-front-night")?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: night, respectFlipped: true, hints: hints) }
+        }
         drawHoverLabel()
     }
 }

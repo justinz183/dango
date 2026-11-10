@@ -457,7 +457,7 @@ function stateExtras(ctx, status, t, box) {
       const pt = above(dx, dy + (-3 + 11 * p) * s);
       ctx.font = `${size}px ${MONO}`;
       ctx.textBaseline = "top";
-      ctx.fillStyle = `rgba(138,130,120,${alpha})`;
+      ctx.fillStyle = isDark() ? `rgba(214,209,200,${alpha})` : `rgba(138,130,120,${alpha})`;
       ctx.fillText("z", pt.x, pt.y - size);
     });
   } else if (status === "fuming") {

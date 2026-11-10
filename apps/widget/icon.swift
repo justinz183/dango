@@ -1,7 +1,7 @@
 // Renders the app icon (1024×1024 PNG) for bundle.sh: the 团子 of the word
 // mark (assets/theme-b/logo-dango.png: the design pack's body with its idle
-// eyes) on a white rounded square, like the corner card, with the word
-// mark's blue mark above it, looking up at it.
+// eyes) on a white rounded square, like the corner card. (Until 2026-11-10 the
+// word mark's blue mark sat above it; user: 「logo的这个部分都不需要了」.)
 // Usage: icon <out.png> <logo-dango.png>
 
 import AppKit
@@ -33,21 +33,9 @@ NSColor.black.withAlphaComponent(0.06).setStroke()
 plate.lineWidth = 3
 plate.stroke()
 
-// The 团子, 600 wide, a little below the middle (y up).
+// The 团子, 600 wide, in the middle of the plate (y up).
 let w: CGFloat = 600, h = w * dango.size.height / dango.size.width
-dango.draw(in: NSRect(x: 512 - w / 2, y: 1024 - 330 - h, width: w, height: h))
-
-// The blue mark (AB.wordmark's "M3 3l4 3M2 8h5M3 13l4-3" on a 16 grid), up right.
-let k: CGFloat = 150 / 16, ox: CGFloat = 700, oy: CGFloat = 1024 - 196
-let p = NSBezierPath()
-for (a, b) in [((3, 3), (7, 6)), ((2, 8), (7, 8)), ((3, 13), (7, 10))] as [((CGFloat, CGFloat), (CGFloat, CGFloat))] {
-    p.move(to: NSPoint(x: ox + a.0 * k, y: oy - a.1 * k))
-    p.line(to: NSPoint(x: ox + b.0 * k, y: oy - b.1 * k))
-}
-p.lineWidth = 2.6 * k
-p.lineCapStyle = .round
-NSColor(srgbRed: 0x2F / 255.0, green: 0x7B / 255.0, blue: 0xF5 / 255.0, alpha: 1).setStroke()
-p.stroke()
+dango.draw(in: NSRect(x: 512 - w / 2, y: 512 - h / 2, width: w, height: h))
 NSGraphicsContext.restoreGraphicsState()
 
 guard let png = rep.representation(using: .png, properties: [:]) else { exit(1) }

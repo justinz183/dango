@@ -32,7 +32,6 @@ body.page #wrap { position: relative; inset: auto; width: 440px; margin: 12px; }
 .wordmark { display: inline-flex; align-items: flex-end; font: 900 17px/1 var(--sans); letter-spacing: -0.34px; }
 .wordmark img { height: 11.1px; margin: 0 0.85px 0.35px 0.7px; }
 :root.dark .wordmark img { filter: drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff); }
-.wordmark svg { width: 11.4px; height: 11.4px; margin-left: 4.8px; align-self: center; }
 .day { font: 11px var(--mono); color: var(--secondary); margin-left: 10px; margin-top: 3px; }
 
 /* 2. The office */

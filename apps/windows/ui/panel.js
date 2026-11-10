@@ -40,6 +40,7 @@ const OFFICE = { w: 392, h: 178 };
 /// designer's office (tools/office_art.py); the same as theme.swift.
 const DESK_X = [209.2, 272.6];
 let officeCtx = null;
+let dimCanvas = null;
 const walks = new Map();
 
 const feet = (x, bottom, w) => ({ x, y: bottom - (w * 110) / 120, w, h: (w * 110) / 120 });
@@ -90,18 +91,36 @@ function drawOffice() {
   ctx.roundRect(0, 0, W, H, 24);
   ctx.clip();
   const [dusk, night] = sky();
-  const layer = (name, alpha) => {
+  // The dark theme's 团子 are white and the picture is a light room, so there
+  // the room goes darker, less at night when it already is (theme.swift
+  // `drawRoom`; user, 2026-11-09: 「暗色背景这个办公室和白团子的对比不够明显」).
+  const dim = dark ? 0.45 - 0.2 * night : 0;
+  const layer = (c, name, alpha) => {
     const i = art(name);
     if (alpha > 0 && ready(i)) {
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(i, 0, 0, W, H);
-      ctx.globalAlpha = 1;
+      c.globalAlpha = alpha;
+      c.drawImage(i, 0, 0, W, H);
+      c.globalAlpha = 1;
     }
   };
+  // Draws the layers on their own canvas, darkens only what they cover, and
+  // puts that on the office.
+  const dimmed = (names) => {
+    if (!dim) return names.forEach(([name, alpha]) => layer(ctx, name, alpha));
+    const k = ctx.getTransform().a;
+    const off = (dimCanvas ||= document.createElement("canvas"));
+    off.width = Math.round(W * k);
+    off.height = Math.round(H * k);
+    const c = off.getContext("2d");
+    c.setTransform(k, 0, 0, k, 0, 0);
+    names.forEach(([name, alpha]) => layer(c, name, alpha));
+    c.globalCompositeOperation = "source-atop";
+    c.fillStyle = `rgba(15,20,36,${dim})`;
+    c.fillRect(0, 0, W, H);
+    ctx.drawImage(off, 0, 0, W, H);
+  };
   if (ready(art("room"))) {
-    layer("room", 1);
-    layer("room-dusk", dusk);
-    layer("room-night", night);
+    dimmed([["room", 1], ["room-dusk", dusk], ["room-night", night]]);
   } else {
     ctx.fillStyle = "#FBF3E4";
     ctx.fillRect(0, 0, W, H);
@@ -120,9 +139,7 @@ function drawOffice() {
     stateExtras(ctx, s, t + phase, packExtent(at, role));
     officeSpots.push({ r: packExtent(at, role), job: o.name || o.id, s });
   });
-  layer("room-front", 1);
-  layer("room-front-dusk", dusk);
-  layer("room-front-night", night);
+  dimmed([["room-front", 1], ["room-front-dusk", dusk], ["room-front-night", night]]);
   drawHoverLabel(ctx, W);
   ctx.restore();
 }
@@ -156,7 +173,7 @@ function drawHoverLabel(ctx, W) {
 
 // --- The rest of the panel ---------------------------------------------------
 
-const WORDMARK = `<span class="wordmark">D<img src="art/theme-b/logo-dango.png" alt="">NGO<svg viewBox="0 0 16 16"><path d="M3 3l4 3M2 8h5M3 13l4-3" fill="none" stroke="var(--brand)" stroke-width="2.4" stroke-linecap="round"/></svg></span>`;
+const WORDMARK = `<span class="wordmark">D<img src="art/theme-b/logo-dango.png" alt="">NGO</span>`;
 const CHEVRON = `<svg width="12" height="7" viewBox="0 0 12 7"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /// "2026-10-29" → "10/29".

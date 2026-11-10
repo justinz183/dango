@@ -203,8 +203,9 @@ enum AB {
     }
 
     /// The word mark: D, the 团子 as its A (theme-b/logo-dango.png, the app
-    /// icon's), NGO, and the blue mark; returns the width. On a dark ground
-    /// (`c` light) the 团子 gets a white edge so it does not vanish.
+    /// icon's), NGO; returns the width. On a dark ground (`c` light) the 团子
+    /// gets a white edge so it does not vanish. No blue mark after it any more
+    /// (user, 2026-11-10: 「logo的这个部分都不需要了」).
     @discardableResult
     static func wordmark(_ x: CGFloat, _ y: CGFloat, size: CGFloat = 18, color c: NSColor = ink) -> CGFloat {
         let font = NSFont.systemFont(ofSize: size, weight: .heavy)
@@ -229,16 +230,7 @@ enum AB {
             put(sans("A", size, .heavy, c), o.minX, y)
         }
         put(rest, o.maxX + size * 0.05, y)
-        let mx = o.maxX + size * 0.05 + rest.size().width + size * 0.28
-        let ms = size * 0.67
-        inDrawing(NSRect(x: mx, y: y + d.size().height / 2 - ms / 2, width: ms, height: ms), 16, 16) {
-            let p = svgPath("M3 3l4 3M2 8h5M3 13l4-3")
-            p.lineWidth = 2.4
-            p.lineCapStyle = .round
-            V3.brand.setStroke()
-            p.stroke()
-        }
-        return mx + ms - x
+        return o.maxX + size * 0.05 + rest.size().width - x
     }
 
     /// A pill: dark (black, white words) or light (white, outlined); returns its rect.
