@@ -400,6 +400,12 @@ pub struct Rollout {
 
 impl Rollout {
     pub fn new(path: &Path) -> Rollout {
+        // The path goes into the start and end events' ids, so it is spelled
+        // one way however the caller built it: on Windows "a/b" joined onto
+        // "C:\x" keeps its "/" while a walked folder gives "\" (the windows
+        // workflow's replay tests, 2026-11-10). Rebuilding it from its parts
+        // uses the system's separator; a Mac path comes out the same.
+        let path: PathBuf = path.components().collect();
         Rollout { path: path.display().to_string(), ..Default::default() }
     }
 
