@@ -1,0 +1,57 @@
+# Installs the published release on clean GitHub machines, the way the
+# website and README tell people to: the one-line installers on macOS and
+# Windows, and the plain downloads. Run by hand after a release
+# (tools/release.sh --publish) and after a website deploy.
+name: install
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Where install.sh and install.ps1 are served"
+        default: "https://dangoai.org"
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: curl | sh, as on the website
+        run: curl -fsSL "${{ inputs.site }}/install.sh" | DANGO_NO_OPEN=1 sh
+      - name: The app is there, whole and signed
+        run: |
+          app=/Applications/Dango.app
+          [ -d "$app" ] || app="$HOME/Applications/Dango.app"
+          test -x "$app/Contents/MacOS/Dango"
+          test -x "$app/Contents/Helpers/dango"
+          codesign --verify --deep --strict "$app"
+          lipo -archs "$app/Contents/MacOS/Dango"
+          "$app/Contents/Helpers/dango" --version
+      - name: The dmg link works
+        run: |
+          curl -fsSL -o Dango-macOS.dmg https://github.com/${{ github.repository }}/releases/latest/download/Dango-macOS.dmg
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/dango Dango-macOS.dmg
+          test -d /tmp/dango/Dango.app
+          hdiutil detach /tmp/dango
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: irm | iex, as on the website
+        shell: powershell
+        run: |
+          $env:DANGO_NO_OPEN = "1"
+          irm "${{ inputs.site }}/install.ps1" | iex
+      - name: The app is there
+        shell: powershell
+        run: |
+          $app = Join-Path $env:LOCALAPPDATA "Dango\Dango.exe"
+          if (-not (Test-Path $app)) { throw "no $app" }
+          Get-Item $app | Format-List FullName, Length, LastWriteTime
+          $cli = Join-Path $env:LOCALAPPDATA "Dango\bin\dango.exe"
+          if (-not (Test-Path $cli)) { throw "no $cli" }
+      - name: The installer link works
+        shell: powershell
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+          Invoke-WebRequest -UseBasicParsing -OutFile setup.exe "https://github.com/${{ github.repository }}/releases/latest/download/Dango-Windows-x64-setup.exe"
+          if ((Get-Item setup.exe).Length -lt 1MB) { throw "setup.exe is too small" }
