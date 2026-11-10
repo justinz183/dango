@@ -40,7 +40,11 @@ jobs:
         shell: powershell
         run: |
           $env:DANGO_NO_OPEN = "1"
-          irm "${{ inputs.site }}/install.ps1" | iex
+          $script = irm "${{ inputs.site }}/install.ps1"
+          if ($script -match '[^\x00-\x7F]') { throw "install.ps1 is not plain ASCII; Windows PowerShell 5.1 garbles it" }
+          $out = & { $script | iex } 6>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch 'Downloading DANGO \d') { throw "the version did not print: $out" }
       - name: The app is there
         shell: powershell
         run: |
