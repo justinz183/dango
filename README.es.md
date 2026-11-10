@@ -10,17 +10,17 @@
 <p align="center">DANGO pone precio a cada paso de tu IA: lo que cobraría una persona por hacer el mismo trabajo.</p>
 
 <p align="center">
-  <a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.fr.md">Français</a> · <b>Español</b>
+  <a href="README.md">English</a> · <a href="README.zh.md">中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.fr.md">Français</a> · <b>Español</b>
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/en/"><b>dangoai.org</b></a> · <a href="#instalar">Instalar</a> · <a href="https://dangoai.org/en/how/">Cómo se calcula</a> · <a href="docs/DEVELOPMENT.md">Desarrollo</a>
+  <a href="https://dangoai.org/?lang=es"><b>dangoai.org</b></a> · <a href="#instalar">Instalar</a> · <a href="https://dangoai.org/?lang=es#product">Cómo se calcula</a> · <a href="docs/DEVELOPMENT.md">Desarrollo</a>
 </p>
 
 <p align="center"><sub>Gratis · macOS 13 o posterior · Apple silicon e Intel · todo se calcula en tu Mac</sub></p>
 
 <p align="center">
-  <img src="docs/images/office.jpg" alt="La oficina de los dangos: unos en su escritorio, otros en el sofá">
+  <img src="docs/images/office.png" alt="La oficina de los dangos: unos en su escritorio, otros en el sofá">
 </p>
 
 ## Tu factura dice cuánto costó. No cuánto vale.
@@ -67,7 +67,7 @@ Los salarios por hora vienen del **Bureau of Labor Statistics** de EE. UU. (OEWS
 
 Un gorro para programar, auriculares para editar video. Al terminar cada turno, una burbuja dice lo que ganó. **Un clic y se abre toda la oficina**: quién está en su escritorio, quién espera tu aprobación, quién holgazanea en el sofá o se quedó dormido; cuánto valen hoy, esta semana, este mes y el total, con el costo de los modelos y el apalancamiento. La oficina sigue el reloj de tu Mac, del día al atardecer y a la noche, y hay un tema oscuro con dangos blancos.
 
-<p align="center"><img src="docs/images/desk-en.jpg" alt="El dango en la esquina y el panel que abre"></p>
+<p align="center"><img src="docs/images/desk-es.jpg" alt="El dango en la esquina y el panel que abre"></p>
 
 ## Cuatro agentes. Una sola oficina.
 
@@ -81,7 +81,7 @@ Sin cuestionarios. A partir de lo que tus agentes hicieron de verdad, DANGO calc
 
 <table>
 <tr>
-<td width="300"><img src="docs/images/card-en.jpg" width="280" alt="La tarjeta ABTI"></td>
+<td width="300"><img src="docs/images/card-es.jpg" width="280" alt="La tarjeta ABTI"></td>
 <td>
 
 | Dimensión | Un lado | El otro |
@@ -93,7 +93,7 @@ Sin cuestionarios. A partir de lo que tus agentes hicieron de verdad, DANGO calc
 
 Cuatro dimensiones, 16 tipos ABTI. El tamaño de tu empresa depende del trabajo de tus dangos, en cinco niveles: Puesto propio, Taller, Estudio, Grupo, Empresa cotizada.
 
-[Ver los 16 tipos ABTI →](https://dangoai.org/en/types/)
+[Ver los 16 tipos ABTI →](https://dangoai.org/?lang=es#boss)
 
 </td>
 </tr>
@@ -103,7 +103,7 @@ Cuatro dimensiones, 16 tipos ABTI. El tamaño de tu empresa depende del trabajo 
 
 Día, semana, mes, año y total, **cada uno con el ABTI de ese periodo**. Toca «Compartir» y elige adónde va. Las tarjetas nunca llevan nombres de proyectos, títulos de sesión ni código.
 
-<p align="center"><img src="docs/images/share-en.jpg" width="420" alt="Una tarjeta de la semana"></p>
+<p align="center"><img src="docs/images/share-es.jpg" width="420" alt="Una tarjeta de la semana"></p>
 
 ## Todo se calcula en tu Mac. No se sube nada.
 
@@ -113,19 +113,50 @@ Día, semana, mes, año y total, **cada uno con el ABTI de ese periodo**. Toca �
 
 ## Instalar
 
-El instalador llegará pronto a [dangoai.org](https://dangoai.org/en/). Por ahora puedes empaquetarlo desde el código fuente (necesitas Rust y las herramientas de línea de comandos de Xcode):
+macOS 13 o posterior (Apple silicon e Intel), o Windows 10 1803 o posterior de 64 bits (versión preliminar). Tres formas; elige una.
 
-```bash
-git clone https://github.com/justinz183/dango.git && cd dango
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-apps/widget/package.sh
+### 1. Descargar
+
+| | |
+| --- | --- |
+| **macOS** | [**Dango-macOS.dmg**](https://github.com/justinz183/dango/releases/latest/download/Dango-macOS.dmg) · Arrastra Dango a Aplicaciones y ábrelo. Aún no está notarizada: la primera vez, macOS avisa que no puede verificar al desarrollador; ve a Ajustes del Sistema → Privacidad y seguridad y pulsa «Abrir igualmente». |
+| **Windows** (versión preliminar) | [**Dango-Windows-x64-setup.exe**](https://github.com/justinz183/dango/releases/latest/download/Dango-Windows-x64-setup.exe) · Ejecútalo; se instala solo para ti, sin permisos de administrador. Aún no está firmado: si SmartScreen lo bloquea, haz clic en Más información → Ejecutar de todas formas. |
+
+### 2. Pídeselo a tu IA
+
+Pega esto en Claude Code, Codex o cualquier asistente de programación:
+
+```text
+Instala DANGO (https://github.com/justinz183/dango) en este ordenador.
+En macOS, ejecuta en una terminal: curl -fsSL https://dangoai.org/install.sh | sh
+En Windows, ejecuta en PowerShell: irm https://dangoai.org/install.ps1 | iex
+El script descarga la última versión desde GitHub, comprueba su SHA-256 y abre la app.
+Cuando termine, dime dónde se instaló Dango y si está en marcha.
 ```
 
-Abre `Dango-<versión>.dmg` en `target/dist`, arrastra Dango a Aplicaciones y ábrelo. La primera vez, macOS avisa que no puede verificar al desarrollador: ve a Ajustes del Sistema → Privacidad y seguridad y pulsa «Abrir igualmente». El dango aparece en la esquina inferior derecha, lee tu historial durante unos segundos y luego cuenta la historia de tu ABTI. Desde entonces lleva la cuenta en segundo plano y vuelve tras reiniciar.
+### 3. Línea de comandos
 
-La app habla chino, inglés, coreano, japonés, francés y español: haz clic derecho en el dango para elegir el idioma.
+```bash
+# macOS (Terminal)
+curl -fsSL https://dangoai.org/install.sh | sh
+```
 
-**Windows (versión preliminar)**: Windows 10 1803 o posterior de 64 bits, con WebView2 (incluido en Windows 11). Ejecuta `Dango_<versión>_x64-setup.exe`: se instala solo para ti, sin permisos de administrador, en `%LOCALAPPDATA%\Dango`. El instalador aún no está firmado; si SmartScreen lo bloquea, haz clic en Más información → Ejecutar de todas formas. El dango aparece en la esquina inferior derecha; clic izquierdo en el icono de la bandeja para abrir o cerrar el panel, clic derecho para el idioma y la apariencia. El mismo `Dango.exe` lleva la cuenta en segundo plano, se abre al iniciar sesión y guarda sus datos en `%USERPROFILE%\.dango`. Esta primera versión trae el dango de la esquina, el panel y la bandeja; la historia del ABTI, la ventana de informes y las imágenes para compartir llegan después, y «Compartir hoy» copia por ahora un informe de texto. El instalador lo compila en Windows el [flujo de trabajo de Windows](.github/workflows/windows.yml).
+```powershell
+# Windows (PowerShell)
+irm https://dangoai.org/install.ps1 | iex
+```
+
+El script descarga la última [versión](https://github.com/justinz183/dango/releases) desde GitHub, comprueba su SHA-256, instala Dango y lo abre; ejecútalo de nuevo para actualizar. Instalada así, la app se abre sin el aviso de Gatekeeper ni de SmartScreen.
+
+### Después de instalar
+
+El dango aparece en la esquina inferior derecha, lee tu historial durante unos segundos y luego cuenta la historia de tu ABTI. Desde entonces lleva la cuenta en segundo plano y vuelve tras reiniciar. No hay que instalar nada en Claude Code ni en Codex.
+
+La app habla inglés, chino, coreano, japonés, francés y español: haz clic derecho en el dango para elegir el idioma.
+
+**Windows (versión preliminar)** necesita WebView2 (incluido en Windows 11). Dango se instala en `%LOCALAPPDATA%\Dango`; clic izquierdo en el icono de la bandeja para abrir o cerrar el panel, clic derecho para el idioma y la apariencia. El mismo `Dango.exe` lleva la cuenta en segundo plano, se abre al iniciar sesión y guarda sus datos en `%USERPROFILE%\.dango`. Esta primera versión trae el dango de la esquina, el panel y la bandeja; la historia del ABTI, la ventana de informes y las imágenes para compartir llegan después, y «Compartir hoy» copia por ahora un informe de texto.
+
+**Desde el código fuente** (necesitas Rust y las herramientas de línea de comandos de Xcode): `apps/widget/package.sh` genera el dmg en `target/dist`; consulta [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). El instalador de Windows lo compila en Windows el [flujo de trabajo de Windows](.github/workflows/windows.yml).
 
 ## Desarrollo
 

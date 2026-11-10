@@ -10,17 +10,17 @@
 <p align="center">DANGO は、AI がこなす一歩一歩を、同じ仕事を人に頼んだら払う給料に換算します。</p>
 
 <p align="center">
-  <a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a>
+  <a href="README.md">English</a> · <a href="README.zh.md">中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a>
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/en/"><b>dangoai.org</b></a> · <a href="#インストール">インストール</a> · <a href="https://dangoai.org/en/how/">計算のしくみ</a> · <a href="docs/DEVELOPMENT.md">開発</a>
+  <a href="https://dangoai.org/?lang=ja"><b>dangoai.org</b></a> · <a href="#インストール">インストール</a> · <a href="https://dangoai.org/?lang=ja#product">計算のしくみ</a> · <a href="docs/DEVELOPMENT.md">開発</a>
 </p>
 
 <p align="center"><sub>無料 · macOS 13 以降 · Apple シリコンと Intel · 計算はすべてあなたの Mac の中で</sub></p>
 
 <p align="center">
-  <img src="docs/images/office.jpg" alt="だんごのオフィス：デスクで働くだんごと、ソファでサボるだんご">
+  <img src="docs/images/office.png" alt="だんごのオフィス：デスクで働くだんごと、ソファでサボるだんご">
 </p>
 
 ## 請求書は、いくら使ったかしか教えてくれない。どれだけの価値かは教えてくれない。
@@ -67,7 +67,7 @@ AI が一歩進むたびに、だんごは問いかけます。この仕事は�
 
 コードを書くときはニット帽、動画を編集するときはヘッドホン。1 ターン終わるたびに、今回いくら稼いだかが頭の上にふわっと出ます。**クリックすれば、オフィス全体が開きます。**誰がデスクで働いているか、誰があなたの承認を待っているか、誰がソファでサボって眠っているか。今日、今週、今月、累計の価値と、モデル費用、レバレッジ。オフィスは Mac の時計に合わせて昼、夕焼け、夜と移り変わり、ダークテーマでは白いだんごになります。
 
-<p align="center"><img src="docs/images/desk-en.jpg" alt="画面の隅のだんごと、クリックで開くパネル"></p>
+<p align="center"><img src="docs/images/desk-ja.jpg" alt="画面の隅のだんごと、クリックで開くパネル"></p>
 
 ## 4 つの AI を、ひとつのオフィスで。
 
@@ -81,7 +81,7 @@ AI が一歩進むたびに、だんごは問いかけます。この仕事は�
 
 <table>
 <tr>
-<td width="300"><img src="docs/images/card-en.jpg" width="280" alt="ABTI カード"></td>
+<td width="300"><img src="docs/images/card-ja.jpg" width="280" alt="ABTI カード"></td>
 <td>
 
 | 軸 | 一方 | もう一方 |
@@ -93,7 +93,7 @@ AI が一歩進むたびに、だんごは問いかけます。この仕事は�
 
 4 つの軸で、ABTI は全 16 タイプ。会社の規模は、だんごがこなした仕事で 5 段階：個人商店、小さな工房、スタジオ、グループ、上場企業。
 
-[ABTI の 16 タイプをすべて見る →](https://dangoai.org/en/types/)
+[ABTI の 16 タイプをすべて見る →](https://dangoai.org/?lang=ja#boss)
 
 </td>
 </tr>
@@ -103,7 +103,7 @@ AI が一歩進むたびに、だんごは問いかけます。この仕事は�
 
 日報、週報、月報、年報、累計のそれぞれに、**その期間のあなたの ABTI**がつきます。「共有」を押せばシステムの共有メニューが開きます。カードにプロジェクト名、セッションのタイトル、コードが載ることはありません。
 
-<p align="center"><img src="docs/images/share-en.jpg" width="420" alt="週報の共有カード"></p>
+<p align="center"><img src="docs/images/share-ja.jpg" width="420" alt="週報の共有カード"></p>
 
 ## 計算はすべて Mac の中で。何もアップロードしません。
 
@@ -113,19 +113,50 @@ AI が一歩進むたびに、だんごは問いかけます。この仕事は�
 
 ## インストール
 
-インストーラーはまもなく [dangoai.org](https://dangoai.org/en/) で公開します。いまはソースからパッケージを作れます（Rust と Xcode コマンドラインツールが必要）：
+macOS 13 以降（Apple シリコンと Intel）、または 64 ビット版 Windows 10 1803 以降（プレビュー版）。3 つの方法から選んでください。
 
-```bash
-git clone https://github.com/justinz183/dango.git && cd dango
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-apps/widget/package.sh
+### 1. ダウンロード
+
+| | |
+| --- | --- |
+| **macOS** | [**Dango-macOS.dmg**](https://github.com/justinz183/dango/releases/latest/download/Dango-macOS.dmg) · Dango を「アプリケーション」にドラッグして起動します。まだ公証を受けていないため、初回は macOS が開発元を確認できないと表示します。「システム設定 → プライバシーとセキュリティ」で「このまま開く」を押してください。 |
+| **Windows** （プレビュー版） | [**Dango-Windows-x64-setup.exe**](https://github.com/justinz183/dango/releases/latest/download/Dango-Windows-x64-setup.exe) · 実行すると、管理者権限なしで自分だけにインストールされます。まだ署名されていないため、SmartScreen に止められたら「詳細情報 → 実行」を押してください。 |
+
+### 2. AI に頼む
+
+次の文を Claude Code や Codex などの AI コーディングアシスタントに送ってください：
+
+```text
+このコンピューターに DANGO（https://github.com/justinz183/dango）をインストールして。
+macOS ならターミナルで実行：curl -fsSL https://dangoai.org/install.sh | sh
+Windows なら PowerShell で実行：irm https://dangoai.org/install.ps1 | iex
+スクリプトが GitHub から最新版をダウンロードし、SHA-256 を確認してアプリを開きます。
+終わったら、Dango がどこにインストールされたか、起動しているかを教えて。
 ```
 
-`target/dist` にある `Dango-<バージョン>.dmg` を開き、Dango を「アプリケーション」にドラッグして起動します。初回は macOS が開発元を確認できないと表示するので、「システム設定 → プライバシーとセキュリティ」で「このまま開く」を押してください。だんごが画面の右下に現れ、数秒で履歴を読み込んでから、あなたの ABTI の物語を見せてくれます。その後はバックグラウンドで記録を続け、再起動しても戻ってきます。
+### 3. コマンドライン
 
-アプリの画面は中国語、英語、韓国語、日本語、フランス語、スペイン語に対応しています。だんごを右クリックして言語を選んでください。
+```bash
+# macOS (ターミナル)
+curl -fsSL https://dangoai.org/install.sh | sh
+```
 
-**Windows（プレビュー版）**：64 ビット版 Windows 10 1803 以降、WebView2 が必要です（Windows 11 は標準搭載）。`Dango_<バージョン>_x64-setup.exe` を実行すると、管理者権限なしで自分だけに `%LOCALAPPDATA%\Dango` へインストールされます。インストーラーはまだ署名されていないため、SmartScreen に止められたら「詳細情報 → 実行」を押してください。だんごは画面の右下にいて、トレイアイコンを左クリックするとパネルが開閉し、右クリックで言語と外観を変えられます。バックグラウンドの記録も同じ `Dango.exe` が担当し、ログイン時に起動して、データは `%USERPROFILE%\.dango` に保存されます。このバージョンには隅のだんご、パネル、トレイがあり、ABTI の物語、レポート画面、共有画像は次の段階です。「今日を共有」は当面テキストのレポートをコピーします。インストーラーは [Windows ワークフロー](.github/workflows/windows.yml) が Windows 上でビルドします。
+```powershell
+# Windows (PowerShell)
+irm https://dangoai.org/install.ps1 | iex
+```
+
+スクリプトは GitHub から最新の[リリース](https://github.com/justinz183/dango/releases)をダウンロードし、SHA-256 を確認してインストールし、そのまま開きます。もう一度実行すればアップデートです。この方法なら、Gatekeeper や SmartScreen の警告なしで開けます。
+
+### インストールしたら
+
+だんごが画面の右下に現れ、数秒で履歴を読み込んでから、あなたの ABTI の物語を見せてくれます。その後はバックグラウンドで記録を続け、再起動しても戻ってきます。Claude Code や Codex には何もインストールする必要はありません。
+
+アプリの画面は英語、中国語、韓国語、日本語、フランス語、スペイン語に対応しています。だんごを右クリックして言語を選んでください。
+
+**Windows（プレビュー版）** には WebView2 が必要です（Windows 11 は標準搭載）。`%LOCALAPPDATA%\Dango` にインストールされ、トレイアイコンを左クリックするとパネルが開閉し、右クリックで言語と外観を変えられます。バックグラウンドの記録も同じ `Dango.exe` が担当し、ログイン時に起動して、データは `%USERPROFILE%\.dango` に保存されます。このバージョンには隅のだんご、パネル、トレイがあり、ABTI の物語、レポート画面、共有画像は次の段階です。「今日を共有」は当面テキストのレポートをコピーします。
+
+**ソースからパッケージを作る**（Rust と Xcode コマンドラインツールが必要）：`apps/widget/package.sh` が `target/dist` に dmg を作ります。詳しくは [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。Windows のインストーラーは [Windows ワークフロー](.github/workflows/windows.yml) が Windows 上でビルドします。
 
 ## 開発
 
