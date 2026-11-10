@@ -40,12 +40,14 @@ jobs:
         continue-on-error: true
         run: cargo test -p daemon --test replay a_followed_session_without_hooks_shows_live
 
+      # Before the app: its build script needs target\release\dango.exe,
+      # which the installer carries, even for the app's tests.
+      - name: Build dango.exe
+        run: cargo build --release -p cli
+
       - name: Test the app
         working-directory: apps/windows
         run: cargo test
-
-      - name: Build dango.exe
-        run: cargo build --release -p cli
 
       - uses: actions/setup-node@v4
         with:
