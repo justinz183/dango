@@ -7,17 +7,17 @@
 <meta name="description" content="DANGO is a little office that lives on your Mac. Code, research, charts: every job you hand to AI shows up as a busy dango. Who's working, what got done and how much, all at a glance.">
 <meta name="theme-color" content="#F2F3F5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0F1014" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="favicon.png" type="image/png">
+<link rel="icon" href="favicon.png?v=20261110" type="image/png">
 <style>html.i18n body{visibility:hidden}</style>
 <noscript><style>html.i18n body{visibility:visible}</style></noscript>
 <script>setTimeout(function () { document.documentElement.classList.remove('i18n'); }, 2500);</script>
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=20261110">
 <!-- 分享卡片：完整网址，有些平台只认完整地址 -->
 <meta property="og:url" content="https://dangoai.org/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="DANGO · Turn your AI into a team you can see">
 <meta property="og:description" content="Your AI team's little office on your Mac. Who's working, what got done and how much, at a glance.">
-<meta property="og:image" content="https://dangoai.org/og.png">
+<meta property="og:image" content="https://dangoai.org/og.png?v=20261110">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -489,7 +489,7 @@ img{max-width:100%}
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#top" aria-label="DANGO 首页"><img class="lg-l" src="img/logo-light.webp" width="147" height="28" alt=""><img class="lg-d" src="img/logo-dark.webp" width="144" height="28" alt=""></a>
+    <a class="brand" href="#top" aria-label="DANGO 首页"><img class="lg-l" src="img/logo-light.webp?v=20261110" width="147" height="28" alt=""><img class="lg-d" src="img/logo-dark.webp?v=20261110" width="144" height="28" alt=""></a>
     <nav aria-label="主导航">
       <a class="nl" href="#boss">ABTI 人格</a>
       <a class="nl gh" href="https://github.com/justinz183/dango" aria-label="GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>GitHub</span></a>
@@ -610,9 +610,9 @@ img{max-width:100%}
     </div>
     <div class="mac" id="mac" aria-hidden="true">
       <div class="mac-bar"><span class="mac-dots"><i></i><i></i><i></i></span><span class="mac-r"><span class="mac-ico"><img src="img/mark.webp" width="22" height="15" alt=""></span><span class="pn-mono">周日 9:41</span></span></div>
-      <div class="pn-view"><div class="pn" id="pn"><img id="pn-img" src="img/app/panel-zh.webp" width="440" height="1367" alt=""><div class="pn-hl" id="pn-hl"></div></div></div>
+      <div class="pn-view"><div class="pn" id="pn"><img id="pn-img" src="img/app/panel-zh.webp?v=20261110" width="440" height="1367" alt=""><div class="pn-hl" id="pn-hl"></div></div></div>
       <div class="wg">
-        <div class="wg-i"><img id="wg-img" src="img/app/pet-zh.webp" width="230" height="140" alt=""></div>
+        <div class="wg-i"><img id="wg-img" src="img/app/pet-zh.webp?v=20261110" width="230" height="140" alt=""></div>
       </div>
     </div>
   </div>
@@ -1137,7 +1137,7 @@ Windows 在 PowerShell 里运行：irm https://dangoai.org/install.ps1 | iex
     document.title = pick({ zh: 'DANGO 小办公室 · 把你的 AI，变成看得见的团队', en: 'DANGO · Turn your AI into a team you can see',
       ko: 'DANGO · 당신의 AI를 눈에 보이는 팀으로', ja: 'DANGO · あなたの AI を、見えるチームに',
       fr: 'DANGO · Votre IA devient une équipe visible', es: 'DANGO · Tu IA, convertida en un equipo visible' });
-    $('pn-img').src = 'img/app/panel-' + LANG + '.webp'; $('jfri').src = 'img/j/' + (LANG === 'zh' ? 'fri' : 'fri-v8') + '.webp'; $('wg-img').src = 'img/app/pet-' + LANG + '.webp';
+    $('pn-img').src = 'img/app/panel-' + LANG + '.webp?v=20261110'; $('jfri').src = 'img/j/' + (LANG === 'zh' ? 'fri' : 'fri-v8') + '.webp'; $('wg-img').src = 'img/app/pet-' + LANG + '.webp?v=20261110';
     tr(document.body);
     paintNow(); paintDex(); showType(cur, false); setStep(si0);
     A.forEach(function (a) { a.mode = '__'; }); render(progress());
