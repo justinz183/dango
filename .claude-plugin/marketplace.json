@@ -1,16 +1,16 @@
 {
   "name": "dango",
   "owner": {
-    "name": "Dango"
+    "name": "DANGO"
   },
   "metadata": {
-    "description": "打工团子 Dango：你的 AI 替你干了多少活、请人来做要花多少钱。"
+    "description": "DANGO: how much work your AI did for you, and what it would cost to hire people for it."
   },
   "plugins": [
     {
       "name": "dango",
       "source": "./plugins/claude-code",
-      "description": "打工团子 Dango：把 agent 完成的每一步折算成请人来做要花多少钱（按职业 × BLS 时薪），结算框、日报卡、桌面宠物。"
+      "description": "Optional plugin for DANGO: a settle box after each Claude Code turn and a status line. The DANGO app works without it."
     }
   ]
 }

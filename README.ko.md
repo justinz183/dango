@@ -9,12 +9,20 @@
 
 <p align="center">DANGO는 AI가 하는 모든 단계를, 같은 일을 사람에게 맡겼을 때 줘야 할 임금으로 환산합니다.</p>
 
+<p align="center"><b>DANGO는 Claude Code, Codex 등 AI 도구가 나 대신 얼마나 일했는지, 얼마를 썼는지, 그 일이 얼마의 가치인지 집계해 주는 무료 Mac 메뉴 막대 앱이에요.</b></p>
+
 <p align="center">
   <a href="README.md">English</a> · <a href="README.zh.md">中文</a> · <b>한국어</b> · <a href="README.ja.md">日本語</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a>
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/ko/"><b>dangoai.org</b></a> · <a href="#설치">설치</a> · <a href="https://dangoai.org/ko/#product">계산 방법</a> · <a href="docs/DEVELOPMENT.md">개발</a>
+  <a href="https://dangoai.org/ko/"><b>dangoai.org</b></a> · <a href="#설치">설치</a> · <a href="https://dangoai.org/ai-work-value/">계산 방법</a> · <a href="docs/DEVELOPMENT.md">개발</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/justinz183/dango/releases/latest"><img src="https://img.shields.io/github/v/release/justinz183/dango?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20Windows%20(preview)-555" alt="macOS 13+ | Windows (preview)">
+  <a href="https://github.com/justinz183/dango/commits"><img src="https://img.shields.io/github/last-commit/justinz183/dango" alt="Last commit"></a>
 </p>
 
 <p align="center"><sub>무료 · macOS 13 이상 · Apple 실리콘과 Intel · 모든 계산은 당신의 Mac 안에서</sub></p>
@@ -29,7 +37,7 @@
 
 | 모델 청구서 | 당고가 해낸 일 | 레버리지 |
 | :---: | :---: | :---: |
-| **$998** | **$18,588** | **18.6×** |
+| **$326** | **$4,834** | **14.8×** |
 | 토큰을 쓴 만큼 돈이 나갑니다. | 같은 일을 사람에게 맡기면 줘야 할 임금. | 모델에 쓴 1달러가 해낸 일의 가치. |
 
 <sub>예시 데이터입니다. 설치하면 당신의 숫자가 나옵니다.</sub>
@@ -169,5 +177,6 @@ irm https://dangoai.org/install.ps1 | iex
 | `apps/windows` | Windows 앱(Tauri v2): 당고, 패널, 트레이. 같은 `Dango.exe --daemon`이 백그라운드에서 기록 |
 | `assets` | 직업과 시급, 모델 단가, ABTI 유형의 기준과 문구 |
 | `site` | 웹사이트 dangoai.org |
+| `plugins/claude-code` | 개발할 때 쓰는 선택 사항인 Claude Code 플러그인(턴이 끝날 때 정산 상자, 상태 표시줄). 앱에는 필요 없어요 |
 
 빌드, 테스트, 패키징: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). 전체 계산 규칙: [docs/DESIGN.md](docs/DESIGN.md).

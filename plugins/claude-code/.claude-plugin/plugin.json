@@ -1,9 +1,9 @@
 {
   "name": "dango",
   "version": "0.3.0",
-  "description": "打工团子 Dango：把 agent 完成的每一步折算成请人来做要花多少钱（按职业 × BLS 时薪）。需要 PATH 上有 dango 二进制。",
+  "description": "Optional plugin for DANGO: a settle box after each turn and a status line. Needs the dango command on PATH; the DANGO app works without it.",
   "author": {
-    "name": "Dango"
+    "name": "DANGO"
   },
   "keywords": [
     "productivity",

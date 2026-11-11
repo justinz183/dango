@@ -9,12 +9,20 @@
 
 <p align="center">DANGO prices every step your AI takes at what a person would be paid to do it.</p>
 
+<p align="center"><b>DANGO is a free Mac menu bar app that tallies how much work Claude Code, Codex and other AI tools did for you, what it cost and what it's worth.</b></p>
+
 <p align="center">
   <b>English</b> · <a href="README.zh.md">中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a>
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/"><b>dangoai.org</b></a> · <a href="#install">Install</a> · <a href="https://dangoai.org/#product">How it’s worked out</a> · <a href="docs/DEVELOPMENT.md">Develop</a>
+  <a href="https://dangoai.org/"><b>dangoai.org</b></a> · <a href="#install">Install</a> · <a href="https://dangoai.org/ai-work-value/">How it’s worked out</a> · <a href="docs/DEVELOPMENT.md">Develop</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/justinz183/dango/releases/latest"><img src="https://img.shields.io/github/v/release/justinz183/dango?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20Windows%20(preview)-555" alt="macOS 13+ | Windows (preview)">
+  <a href="https://github.com/justinz183/dango/commits"><img src="https://img.shields.io/github/last-commit/justinz183/dango" alt="Last commit"></a>
 </p>
 
 <p align="center"><sub>Free · macOS 13+ · Apple silicon and Intel · runs entirely on your Mac</sub></p>
@@ -29,7 +37,7 @@ Every day you hand work to Claude Code, Codex and friends: code, spreadsheets, v
 
 | Model bill | Work your dangos did | Leverage |
 | :---: | :---: | :---: |
-| **$998** | **$18,588** | **18.6×** |
+| **$326** | **$4,834** | **14.8×** |
 | Tokens in, money out. | What you’d pay people to do the same work. | What each dollar of model spend buys in work. |
 
 <sub>Sample numbers. Yours show up once it’s installed.</sub>
@@ -169,5 +177,6 @@ The app speaks English, Chinese, Korean, Japanese, French and Spanish: right-cli
 | `apps/windows` | The Windows app (Tauri v2): the dango, panel, tray; the same `Dango.exe --daemon` keeps count |
 | `assets` | Jobs and wages, model prices, ABTI thresholds and copy |
 | `site` | The website, dangoai.org |
+| `plugins/claude-code` | An optional Claude Code plugin used in development (a settle box after each turn, a status line); the app doesn’t need it |
 
 Building, testing and packaging: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The full rules: [docs/DESIGN.md](docs/DESIGN.md).

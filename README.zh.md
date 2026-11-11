@@ -9,12 +9,20 @@
 
 <p align="center">打工团子 DANGO 把 AI 干的每一步，换算成一个真人要拿的工钱。</p>
 
+<p align="center"><b>DANGO 是一个免费的 Mac 菜单栏应用，帮你统计 Claude Code、Codex 等 AI 工具替你干了多少活、花了多少钱、值多少钱。</b></p>
+
 <p align="center">
   <a href="README.md">English</a> · <b>中文</b> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a>
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/zh/"><b>官网 dangoai.org</b></a> · <a href="#安装">安装</a> · <a href="https://dangoai.org/zh/#product">怎么算的</a> · <a href="docs/DEVELOPMENT.md">开发</a>
+  <a href="https://dangoai.org/zh/"><b>官网 dangoai.org</b></a> · <a href="#安装">安装</a> · <a href="https://dangoai.org/zh/ai-work-value/">怎么算的</a> · <a href="docs/DEVELOPMENT.md">开发</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/justinz183/dango/releases/latest"><img src="https://img.shields.io/github/v/release/justinz183/dango?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20Windows%20(preview)-555" alt="macOS 13+ | Windows (preview)">
+  <a href="https://github.com/justinz183/dango/commits"><img src="https://img.shields.io/github/last-commit/justinz183/dango" alt="Last commit"></a>
 </p>
 
 <p align="center"><sub>免费 · macOS 13 起 · Apple 芯片和 Intel · 全在你的 Mac 上算</sub></p>
@@ -29,7 +37,7 @@
 
 | 模型账单 | 团子替你打的工 | 杠杆 |
 | :---: | :---: | :---: |
-| **$998** | **$18,588** | **18.6×** |
+| **$326** | **$4,834** | **14.8×** |
 | token 用了多少，就扣多少钱。 | 同样的活，请人来干要付的工钱。 | 每花 1 美元模型钱，换回的活值多少。 |
 
 <sub>示例数据。装上就是你自己的数字。</sub>
@@ -169,5 +177,6 @@ App 界面有 English、中文、한국어、日本語、Français、Español �
 | `apps/windows` | Windows App（Tauri v2）：团子、面板、托盘；同一个 `Dango.exe --daemon` 在后台记录 |
 | `assets` | 职业表和时薪、模型单价、ABTI 人格的门槛和文案 |
 | `site` | 官网 dangoai.org |
+| `plugins/claude-code` | 开发时用的可选 Claude Code 插件（每个回合结束的结算框、状态栏）；App 不需要它 |
 
 构建、测试和打包看 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，完整的计算规则看 [docs/DESIGN.md](docs/DESIGN.md)。

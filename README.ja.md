@@ -9,12 +9,20 @@
 
 <p align="center">DANGO は、AI がこなす一歩一歩を、同じ仕事を人に頼んだら払う給料に換算します。</p>
 
+<p align="center"><b>DANGO は、Claude Code や Codex などの AI ツールがあなたの代わりにどれだけ働き、いくらかかり、どれだけの価値があったかを集計する無料の Mac メニューバーアプリです。</b></p>
+
 <p align="center">
   <a href="README.md">English</a> · <a href="README.zh.md">中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a>
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/ja/"><b>dangoai.org</b></a> · <a href="#インストール">インストール</a> · <a href="https://dangoai.org/ja/#product">計算のしくみ</a> · <a href="docs/DEVELOPMENT.md">開発</a>
+  <a href="https://dangoai.org/ja/"><b>dangoai.org</b></a> · <a href="#インストール">インストール</a> · <a href="https://dangoai.org/ai-work-value/">計算のしくみ</a> · <a href="docs/DEVELOPMENT.md">開発</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/justinz183/dango/releases/latest"><img src="https://img.shields.io/github/v/release/justinz183/dango?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20Windows%20(preview)-555" alt="macOS 13+ | Windows (preview)">
+  <a href="https://github.com/justinz183/dango/commits"><img src="https://img.shields.io/github/last-commit/justinz183/dango" alt="Last commit"></a>
 </p>
 
 <p align="center"><sub>無料 · macOS 13 以降 · Apple シリコンと Intel · 計算はすべてあなたの Mac の中で</sub></p>
@@ -29,7 +37,7 @@
 
 | モデルの請求 | だんごがこなした仕事 | レバレッジ |
 | :---: | :---: | :---: |
-| **$998** | **$18,588** | **18.6×** |
+| **$326** | **$4,834** | **14.8×** |
 | トークンを使った分だけお金が出ていく。 | 同じ仕事を人に頼んだら払う給料。 | モデルに払った 1 ドルが生んだ仕事の価値。 |
 
 <sub>サンプルデータです。インストールすれば、あなた自身の数字になります。</sub>
@@ -169,5 +177,6 @@ irm https://dangoai.org/install.ps1 | iex
 | `apps/windows` | Windows アプリ（Tauri v2）：だんご、パネル、トレイ。同じ `Dango.exe --daemon` がバックグラウンドで記録 |
 | `assets` | 職業と時給、モデル単価、ABTI のしきい値と文言 |
 | `site` | ウェブサイト dangoai.org |
+| `plugins/claude-code` | 開発用の任意の Claude Code プラグイン（ターンごとの精算ボックス、ステータスライン）。アプリには不要です |
 
 ビルド、テスト、パッケージ：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。計算ルールの全体：[docs/DESIGN.md](docs/DESIGN.md)。

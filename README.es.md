@@ -9,12 +9,20 @@
 
 <p align="center">DANGO pone precio a cada paso de tu IA: lo que cobraría una persona por hacer el mismo trabajo.</p>
 
+<p align="center"><b>DANGO es una app gratuita para la barra de menús del Mac que cuenta cuánto trabajo hicieron por ti Claude Code, Codex y otras herramientas de IA, cuánto costó y cuánto vale.</b></p>
+
 <p align="center">
   <a href="README.md">English</a> · <a href="README.zh.md">中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.fr.md">Français</a> · <b>Español</b>
 </p>
 
 <p align="center">
-  <a href="https://dangoai.org/es/"><b>dangoai.org</b></a> · <a href="#instalar">Instalar</a> · <a href="https://dangoai.org/es/#product">Cómo se calcula</a> · <a href="docs/DEVELOPMENT.md">Desarrollo</a>
+  <a href="https://dangoai.org/es/"><b>dangoai.org</b></a> · <a href="#instalar">Instalar</a> · <a href="https://dangoai.org/ai-work-value/">Cómo se calcula</a> · <a href="docs/DEVELOPMENT.md">Desarrollo</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/justinz183/dango/releases/latest"><img src="https://img.shields.io/github/v/release/justinz183/dango?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20Windows%20(preview)-555" alt="macOS 13+ | Windows (preview)">
+  <a href="https://github.com/justinz183/dango/commits"><img src="https://img.shields.io/github/last-commit/justinz183/dango" alt="Last commit"></a>
 </p>
 
 <p align="center"><sub>Gratis · macOS 13 o posterior · Apple silicon e Intel · todo se calcula en tu Mac</sub></p>
@@ -29,7 +37,7 @@ Cada día le pasas trabajo a Claude Code, Codex y compañía: código, hojas de 
 
 | Factura de modelos | Trabajo de tus dangos | Apalancamiento |
 | :---: | :---: | :---: |
-| **$998** | **$18,588** | **18.6×** |
+| **$326** | **$4,834** | **14.8×** |
 | Tokens que entran, dinero que sale. | Lo que pagarías a personas por el mismo trabajo. | Cuánto trabajo compra cada dólar en modelos. |
 
 <sub>Datos de ejemplo. Tus propios números aparecen al instalarlo.</sub>
@@ -169,5 +177,6 @@ La app habla inglés, chino, coreano, japonés, francés y español: haz clic de
 | `apps/windows` | La app de Windows (Tauri v2): el dango, el panel, la bandeja; el mismo `Dango.exe --daemon` lleva la cuenta |
 | `assets` | Oficios y salarios, precios de modelos, umbrales y textos del ABTI |
 | `site` | El sitio web dangoai.org |
+| `plugins/claude-code` | Un plugin opcional de Claude Code para el desarrollo (un resumen al final de cada turno, una línea de estado); la app no lo necesita |
 
 Compilar, probar y empaquetar: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Todas las reglas de cálculo: [docs/DESIGN.md](docs/DESIGN.md).
