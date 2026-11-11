@@ -471,5 +471,7 @@ fn daily_report(st: tauri::State<Shared>, kind: Option<String>) -> Result<String
         _ => daemon::report::day,
     };
     let r = report(&conn, tz, &cfg, Path::new(&claude), tz.date(now), now, false, None).map_err(|e| e.to_string())?;
-    Ok(daemon::report::text(&r))
+    // Ends with the website, like the share images (user, 2026-11-11:
+    // 「每一个分享截图的底下要写官网地址」).
+    Ok(format!("{}\n\ndangoai.org", daemon::report::text(&r).trim_end()))
 }

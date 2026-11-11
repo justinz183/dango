@@ -233,6 +233,18 @@ enum AB {
         return o.maxX + size * 0.05 + rest.size().width - x
     }
 
+    /// The website at the bottom of every exported image (user, 2026-11-11:
+    /// 「每一个分享截图的底下要写官网地址」); nothing on screen in the app.
+    /// After a footer note `noteW` wide at `x0`: on its line, right-aligned at
+    /// `x0 + w`, or on the line under it when both don't fit; `center` puts it
+    /// in the middle of the `w` from `x0`.
+    static func siteMark(_ x0: CGFloat, _ y: CGFloat, _ w: CGFloat, noteW: CGFloat = 0, center: Bool = false, color c: NSColor = ink) {
+        guard exportingImage else { return }
+        let s = mono("dangoai.org", 11, .semibold, c)
+        if center { return put(s, x0 + w / 2, y, align: 1) }
+        put(s, x0 + w, noteW + 16 + s.size().width <= w ? y : y + 17, align: 2)
+    }
+
     /// A pill: dark (black, white words) or light (white, outlined); returns its rect.
     @discardableResult
     static func pill(_ text: String, _ x: CGFloat, _ y: CGFloat, dark: Bool, size: CGFloat = 12, padX: CGFloat = 10, padY: CGFloat = 3, draw: Bool = true,
@@ -395,6 +407,10 @@ enum AB {
 class ABPage: NSView {
     var data = JV(nil)
     override var isFlipped: Bool { true }
+    /// How tall the page needs to be for everything it drew, the website line
+    /// under the last words included; an exported image grows to it (French
+    /// and Spanish run longer than the page). Nil: the page always fits.
+    var neededHeight: CGFloat?
 
     convenience init(size: NSSize, data: JV) {
         self.init(frame: NSRect(origin: .zero, size: size))
@@ -559,13 +575,16 @@ final class BossCardView: ABPage {
         let tag = L(line + "。@ 一个这样的朋友来看看", line + " Tag one.")
         AB.sans(tag, 12, .regular, AB.gray).draw(with: NSRect(x: mx, y: box.minY + 28, width: box.maxX - 12 - mx, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
 
-        // 9. How it's counted, at the bottom (no link or QR code: the
-        // domain isn't ours, user 2026-11-07: 「不需要二维码dango.app，啥都不需要」).
-        // A footer like the share images': a rule, then the line.
+        // 9. How it's counted, at the bottom, and in an exported image the
+        // website (dangoai.org; 2026-11-07 the user wanted no link because
+        // the address then was dango.app, not ours). A footer like the share
+        // images': a rule, then the line.
         let fy = bounds.height - 72
         AB.line.setFill()
         NSRect(x: x0, y: fy, width: W, height: 1).fill()
-        put(AB.sans(L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded"), 11, .regular, AB.gray), x0, fy + 26)
+        let note = AB.sans(L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded"), 11, .regular, AB.gray)
+        put(note, x0, fy + 26)
+        AB.siteMark(x0, fy + 26, W, noteW: note.size().width)
     }
 }
 
@@ -613,6 +632,8 @@ final class TypesView: ABPage {
         }
         y += CGFloat(left.count) * (rowH + gap) + 4
         put(AB.sans(L("每种 ABTI 人格一个招牌动作；你的职业角色在结果卡「团子构成」里另外显示", "One signature move per ABTI type; your job roles show on the card's crew"), 10.5, .regular, AB.gray), x0, y)
+        neededHeight = y + 47
+        AB.siteMark(x0, bounds.height - 26, W)
     }
 }
 
@@ -672,6 +693,8 @@ final class ScaleView: ABPage {
         }
         y += 8
         put(AB.sans(L("只看比例：花 $5 的个体户也能是黑心老板。", "Only the ratio counts: a $5 solo stall can be ruthless too."), 10.5, .regular, AB.gray), x0, y)
+        neededHeight = y + 47
+        AB.siteMark(x0, bounds.height - 26, W)
     }
 }
 
@@ -722,14 +745,26 @@ final class RolesView: ABPage {
         let note = jobs > 0 ? L("跨界 = 有 3 个以上角色各占 10% 以上。算钱仍按 \(jobs) 个职业各自的 BLS 时薪。", "Generalist = 3+ roles at 10% or more each. Money still uses each of the \(jobs) jobs' BLS wage.")
                             : L("跨界 = 有 3 个以上角色各占 10% 以上。算钱仍按每个职业各自的 BLS 时薪。", "Generalist = 3+ roles at 10% or more each. Money still uses each job's BLS wage.")
         AB.fitLine({ AB.sans(note, $0, .regular, AB.gray) }, 10.5, x0, y, W, least: 8.5)
+        neededHeight = y + 47
+        AB.siteMark(x0, bounds.height - 26, W)
     }
 }
 
 // MARK: - Export
 
+/// True while `exportPage` draws: pages then put the website at the bottom.
+var exportingImage = false
+
 /// Renders a page at 2× into a PNG; copies it to the clipboard when asked.
 @discardableResult
 func exportPage(_ v: NSView, _ path: String, copy: Bool = false) -> Bool {
+    exportingImage = true
+    defer { exportingImage = false }
+    // Drawn once to see whether its words run past the bottom; then taller.
+    if let p = v as? ABPage, let rep = p.bitmapImageRepForCachingDisplay(in: p.bounds) {
+        p.cacheDisplay(in: p.bounds, to: rep)
+        if let need = p.neededHeight, need > p.bounds.height { p.setFrameSize(NSSize(width: p.bounds.width, height: ceil(need))) }
+    }
     let size = v.bounds.size
     v.frame = NSRect(origin: .zero, size: NSSize(width: size.width * 2, height: size.height * 2))
     v.scaleUnitSquare(to: NSSize(width: 2, height: 2))
@@ -1090,11 +1125,12 @@ final class ShareView: ABPage {
         let y = bounds.height - 82
         AB.line.setFill()
         NSRect(x: 30, y: y, width: 480, height: 1).fill()
-        // How it's counted; no link or QR code (the domain isn't ours, user
-        // 2026-11-07: 「不需要二维码dango.app，啥都不需要」).
-        let note = total ? L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded")
-                         : L("全在本机算 · 按 BLS 各职业中位时薪折算 · 不含项目名", "Runs on your Mac · BLS median wages · no project names")
-        put(AB.sans(note, 11, .regular, AB.gray), 30, y + 30)
+        // How it's counted, and the website (dangoai.org; 2026-11-07 the user
+        // wanted no link because the address then was dango.app, not ours).
+        let note = AB.sans(total ? L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded")
+                                 : L("全在本机算 · 按 BLS 各职业中位时薪折算 · 不含项目名", "Runs on your Mac · BLS median wages · no project names"), 11, .regular, AB.gray)
+        put(note, 30, y + 30)
+        AB.siteMark(30, y + 30, 480, noteW: note.size().width)
     }
 }
 

@@ -80,6 +80,8 @@ final class StoryView: NSView {
         case 5: checkupScreen()
         default: matchScreen()
         }
+        // A shared screen ends with the website where the buttons were.
+        if bare { AB.siteMark(0, H - 44, W, center: true, color: dark ? .white : AB.ink) }
         drawToast()
     }
 
