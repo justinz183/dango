@@ -572,6 +572,7 @@ final class StoryWindow {
         w.standardWindowButton(.miniaturizeButton)?.isHidden = true
         w.standardWindowButton(.zoomButton)?.isHidden = true
         w.standardWindowButton(.closeButton)?.isHidden = true
+        w.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         w.isReleasedWhenClosed = false
         w.appearance = NSAppearance(named: .aqua)
         let v = StoryView(frame: NSRect(origin: .zero, size: size))
@@ -775,10 +776,12 @@ private final class InvitePanel: NSWindow {
 final class InviteWindow {
     static var shared: NSWindow?
 
-    /// Asks once per launch; nothing when the story has been seen or the
-    /// result can't be read yet.
-    static func show() {
-        guard shared == nil, !abtiStorySeen, let data = dangoJSON(["abti", "--json"]) else { return }
+    /// Asks once per launch; false when the story has been seen or the
+    /// result can't be read yet (the caller tries again a little later).
+    @discardableResult
+    static func show() -> Bool {
+        if shared != nil { return true }
+        guard !abtiStorySeen, let data = dangoJSON(["abti", "--json"]) else { return false }
         let v = InviteView(frame: NSRect(origin: .zero, size: InviteView.size))
         v.data = data
         let w = InvitePanel(contentRect: v.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -786,6 +789,10 @@ final class InviteWindow {
         w.backgroundColor = .clear
         w.hasShadow = true
         w.level = .floating
+        // On whatever desktop the person is on, over a full-screen app too,
+        // like the corner 团子 (2026-11-11, a tester: 「有时候有，有时候没有」:
+        // without this it opened on a desktop they weren't looking at).
+        w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         w.isReleasedWhenClosed = false
         w.appearance = NSAppearance(named: .aqua)
         w.contentView = v
@@ -805,5 +812,6 @@ final class InviteWindow {
         w.makeKeyAndOrderFront(nil)
         w.makeFirstResponder(v)
         v.animate()
+        return true
     }
 }

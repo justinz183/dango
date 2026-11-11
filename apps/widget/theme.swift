@@ -1434,8 +1434,10 @@ extension PetView {
             text = AB.join([V3.sans(L("今天 ", "Today "), 11.5, .medium, NSColor.white.withAlphaComponent(0.7)), V3.mono(fmtUSD(m.todayUSD), 11.5, .semibold, .white)])
         }
         if let text {
+            // It stays put while the 团子 bobs under it: text that moves is hard
+            // to read (2026-11-11, a tester: 「不需要做这个动效」).
             let w = min(bounds.width - 8, text.size().width + 20), h: CGFloat = 22
-            let pill = NSRect(x: (bounds.width - w) / 2, y: face.maxY + 12, width: w, height: h)
+            let pill = NSRect(x: (bounds.width - w) / 2, y: box.maxY + 3 + 12, width: w, height: h)
             NSColor(calibratedWhite: 0.1, alpha: 0.86).setFill()
             NSBezierPath(roundedRect: pill, xRadius: h / 2, yRadius: h / 2).fill()
             // A faint rim so it still reads on a dark wallpaper.

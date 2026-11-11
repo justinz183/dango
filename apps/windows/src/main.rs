@@ -85,7 +85,7 @@ fn main() {
     if lock.try_lock().is_err() {
         return;
     }
-    let fresh = ensure_daemon(&paths);
+    ensure_daemon(&paths);
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![widget, appearance, toggle_panel, close_panel, panel_height, pet_menu, daily_report])
@@ -151,15 +151,6 @@ fn main() {
                     }
                 })
                 .build(app)?;
-            if fresh {
-                let h = handle.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_secs(1));
-                    let l = h.state::<Shared>().lang();
-                    let text = l.t("团子们在翻你的 Claude Code、Codex 和 DeepSeek 历史…", "Your dangos are reading your Claude Code, Codex and DeepSeek history…");
-                    let _ = h.emit_to("pet", "flash", text);
-                });
-            }
             let h = handle.clone();
             std::thread::spawn(move || watch(h));
             Ok(())
@@ -173,14 +164,13 @@ fn main() {
 /// The daemon is this program with --daemon. Its login item points here,
 /// unless it points at another dango that exists (a developer's own build,
 /// as with ~/.local/bin/dango on a Mac); the first time, the 团子 starts at
-/// login too. Starts the daemon when none runs. True when the login item
-/// was just written (the history is being read).
-fn ensure_daemon(paths: &Paths) -> bool {
+/// login too. Starts the daemon when none runs.
+fn ensure_daemon(paths: &Paths) {
     if !cfg!(windows) {
         // On a Mac launchd runs the daemon (apps/widget); this build is for looking.
-        return false;
+        return;
     }
-    let Ok(exe) = std::env::current_exe() else { return false };
+    let Ok(exe) = std::env::current_exe() else { return };
     let mine = format!("\"{}\" --daemon", exe.display());
     let current = autostart::get(autostart::DAEMON);
     let other = current.clone().filter(|c| autostart::program(c).map(PathBuf::from).is_some_and(|p| p != exe && p.is_file()));
@@ -194,7 +184,6 @@ fn ensure_daemon(paths: &Paths) -> bool {
     if !daemon_running(paths) {
         start(other.as_deref().unwrap_or(&mine));
     }
-    fresh
 }
 
 /// A daemon holds the processor lock while it runs.

@@ -97,7 +97,7 @@ function draw() {
     tw += r.w;
   }
   const w = Math.min(W - 8, tw + 20), h = 22;
-  const p = { x: (W - w) / 2, y: face.y - 12 - h };
+  const p = { x: (W - w) / 2, y: BOX.y - 3 - 12 - h }; // still while the 团子 bobs (macOS theme.swift drawCard)
   ctx.beginPath();
   ctx.roundRect(p.x, p.y, w, h, h / 2);
   ctx.fillStyle = "rgba(26,26,26,0.86)";

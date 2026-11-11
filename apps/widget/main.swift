@@ -1096,9 +1096,6 @@ final class App: NSObject, NSApplicationDelegate {
         run("/bin/launchctl", ["bootstrap", "gui/\(uid)", daemonPlist])
         UserDefaults.standard.set(stamp, forKey: "daemonStamp")
         if !fm.fileExists(atPath: agentPlist) { toggleAutostart() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            self?.pet?.flash(L("团子们在翻你的 Claude Code、Codex 和 DeepSeek 历史…", "Your dangos are reading your Claude Code, Codex and DeepSeek history…"))
-        }
     }
 
     /// Runs a command to the end; its exit status, -1 if it could not start.
@@ -1116,7 +1113,10 @@ final class App: NSObject, NSApplicationDelegate {
 
     // MARK: data
 
-    private var storyTried = false
+    /// The invitation showed this launch; until then it is tried at most
+    /// every 30 s (reading the result can fail while the daemon is busy).
+    private var invited = false
+    private var inviteAgain = Date.distantPast
 
     func reload() {
         guard let m = loadModel() else { return }
@@ -1132,11 +1132,11 @@ final class App: NSObject, NSApplicationDelegate {
         }
         last = m
         // The first scan with anything in it asks whether to see the result
-        // (the invitation, then the story page by page): one try per launch
+        // (the invitation, then the story page by page): once per launch
         // until the story has shown once (StoryWindow sets the flag).
-        if m.totalUSD > 0 && !storyTried && !abtiStorySeen {
-            storyTried = true
-            DispatchQueue.main.async { InviteWindow.show() }
+        if m.totalUSD > 0 && !invited && !abtiStorySeen && Date() >= inviteAgain {
+            inviteAgain = Date().addingTimeInterval(30)
+            DispatchQueue.main.async { self.invited = InviteWindow.show() }
         }
     }
 }
