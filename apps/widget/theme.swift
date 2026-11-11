@@ -953,7 +953,28 @@ extension DashboardView {
         // 3b. Who you are as a boss, the way the total report shows it,
         //     right under the numbers; it opens the boss card (2026-11-07,
         //     user: 「加到主页面去，能显眼一些」).
-        if let b = m.boss {
+        //     Until the story has been seen it doesn't give the result away:
+        //     a "ready to view" card that opens the story from its first page
+        //     (2026-11-11, user: 「如果第一次进入abti的话应该是个准备查看abti」).
+        if m.boss != nil, !abtiStorySeen {
+            let box = NSRect(x: padX, y: y, width: inner, height: 116)
+            if draw {
+                AB.round(box, 20, V3.tile)
+                let art = NSRect(x: box.minX + 10, y: box.minY + 12, width: 116, height: 92)
+                AB.round(art, 16, V3.raised)
+                drawFittedDango(art.insetBy(dx: 18, dy: 12), role: nil, status: "happy")
+                let tx = box.minX + 136, right = box.maxX - 14
+                let link = V3.mono("ABTI ›", 10, .regular, V3.secondary)
+                put(link, right, box.minY + 10, align: 2)
+                put(V3.sans(L("你的 ABTI 出来了", "Your ABTI is ready"), 16, .semibold), tx, box.minY + 14)
+                AB.pill(L("查看我的 ABTI →", "See my ABTI →"), tx, box.minY + 42, dark: true, size: 11, fill: V3.ink, ink: V3.onInk)
+                AB.para(V3.sans(L("团子们翻完了你的工作记录。点开，一页一页看你是哪一种老板。",
+                                  "Your dangos have been through your work. Open it and go page by page to see what kind of boss you are."),
+                                12, .regular, V3.secondary), tx, box.minY + 70, right - tx, lineHeight: 16)
+            }
+            v3Hits.append(("boss", box))
+            y += box.height + 14
+        } else if let b = m.boss {
             let box = NSRect(x: padX, y: y, width: inner, height: 116)
             if draw {
                 AB.round(box, 20, V3.tile)

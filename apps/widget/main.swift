@@ -1134,7 +1134,7 @@ final class App: NSObject, NSApplicationDelegate {
         // The first scan with anything in it asks whether to see the result
         // (the invitation, then the story page by page): one try per launch
         // until the story has shown once (StoryWindow sets the flag).
-        if m.totalUSD > 0 && !storyTried && !UserDefaults.standard.bool(forKey: "abtiShown") {
+        if m.totalUSD > 0 && !storyTried && !abtiStorySeen {
             storyTried = true
             DispatchQueue.main.async { InviteWindow.show() }
         }
@@ -1369,7 +1369,11 @@ if let i = args.firstIndex(of: "--snapshot-roles"), args.count > i + 1 {
 }
 
 // One instance at a time: a second launch (double-clicking the app again,
-// `dango widget`) just exits while the first keeps the lock.
+// `dango widget`) just exits while the first keeps the lock. The folder is
+// made first: on a Mac that never had DANGO there is no ~/.dango yet, and
+// until 0.1.2 opening the lock failed there and the app quit at once
+// (user report, 2026-11-11: 「重新下载后并没有出现abti的流程」).
+try? FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
 let lockFD = open(home + "/widget.lock", O_CREAT | O_RDWR, 0o600)
 if lockFD < 0 || flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
     exit(0)

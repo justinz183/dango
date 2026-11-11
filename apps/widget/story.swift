@@ -583,8 +583,10 @@ final class StoryWindow {
         shared = w
         // The story plays once; after that the result is the card, and ‹
         // walks back through the story.
-        let seen = UserDefaults.standard.bool(forKey: "abtiShown")
-        UserDefaults.standard.set(true, forKey: "abtiShown")
+        let seen = abtiStorySeen
+        abtiStorySeen = true
+        // The panel's card turns from "ready to view" into the result.
+        (NSApp.delegate as? App)?.dashboard?.needsDisplay = true
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
         w.makeFirstResponder(v)
@@ -669,6 +671,15 @@ final class PageWindow: NSObject {
 /// the scan, page by page to the card) or “Later” (asked again at the next
 /// launch, until the story has been seen once; the right-click menu has it
 /// any time). Return starts, Esc is later.
+/// Whether the ABTI story has been seen (it then opens on the card, and the
+/// panel shows the result). Since 0.1.2 under a new name: 0.1.0 opened the
+/// story by itself and set `abtiShown`, so people updating get the
+/// invitation and the story once more.
+var abtiStorySeen: Bool {
+    get { UserDefaults.standard.bool(forKey: "abtiStorySeen") }
+    set { UserDefaults.standard.set(newValue, forKey: "abtiStorySeen") }
+}
+
 final class InviteView: NSView {
     var data = JV(nil)
     var onStart: (() -> Void)?
@@ -767,7 +778,7 @@ final class InviteWindow {
     /// Asks once per launch; nothing when the story has been seen or the
     /// result can't be read yet.
     static func show() {
-        guard shared == nil, !UserDefaults.standard.bool(forKey: "abtiShown"), let data = dangoJSON(["abti", "--json"]) else { return }
+        guard shared == nil, !abtiStorySeen, let data = dangoJSON(["abti", "--json"]) else { return }
         let v = InviteView(frame: NSRect(origin: .zero, size: InviteView.size))
         v.data = data
         let w = InvitePanel(contentRect: v.frame, styleMask: [.borderless], backing: .buffered, defer: false)
