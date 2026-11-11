@@ -476,5 +476,9 @@
  "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "Vos dangos ont parcouru {} jours de votre travail avec l’IA : {} de travail en tout. Envie de savoir quel patron vous êtes ?",
  "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "Vos dangos ont parcouru votre travail avec l’IA : {} de travail en tout. Envie de savoir quel patron vous êtes ?",
  "See it →": "Voir →",
- "Later": "Plus tard"
+ "Later": "Plus tard",
+ "Share this week": "Partager la semaine",
+ "Share this month": "Partager le mois",
+ "Copy this week's report": "Copier le rapport de la semaine",
+ "Copy this month's report": "Copier le rapport du mois"
 }

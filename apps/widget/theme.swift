@@ -1165,9 +1165,11 @@ extension DashboardView {
         y += chartH + 8 + 16 + 24
 
         // 9. One row: where the money comes from, the report window, and
-        //    share today's report (right-click it: copy, other periods, the folder).
+        //    share the report of the range on top: 1 day the day's, 7 days the
+        //    week's, 30 days the month's (user, 2026-11-11: 「7天，30天的弹窗应该是
+        //    分享周报，分享月报」; right-click it: copy, other periods, the folder).
         let rowH: CGFloat = 36
-        let shareText = V3.sans("⇪  " + L("分享日报", "Share today"), 13, .semibold, V3.onInk)
+        let shareText = V3.sans("⇪  " + shareLabel, 13, .semibold, V3.onInk)
         let shareR = NSRect(x: W - padX - shareText.size().width - 32, y: y, width: shareText.size().width + 32, height: rowH)
         let reportText = V3.sans(L("报告", "Reports"), 13, .medium)
         let reportR = NSRect(x: shareR.minX - 8 - reportText.size().width - 28, y: y, width: reportText.size().width + 28, height: rowH)
@@ -1221,6 +1223,17 @@ extension DashboardView {
     /// The share button, where the share menu and its right-click menu open.
     var exportButton: NSRect? { v3Hits.last { $0.0 == "export" }?.1 }
 
+    /// The report the share button shares: the range on top's (1, 7, 30 days →
+    /// the day's, this week's, this month's).
+    var shareKind: String { range == 1 ? "day" : range == 7 ? "week" : "month" }
+    var shareLabel: String {
+        switch shareKind {
+        case "week": return L("分享周报", "Share this week")
+        case "month": return L("分享月报", "Share this month")
+        default: return L("分享日报", "Share today")
+        }
+    }
+
     func v3MouseDown(_ p: NSPoint) {
         guard let (id, _) = v3Hits.last(where: { $0.1.contains(p) }) else { return }
         switch id {
@@ -1236,7 +1249,7 @@ extension DashboardView {
         case "boss":
             StoryWindow.show()
         case "export":
-            (NSApp.delegate as? App)?.makeCard(kind: "day", shareFrom: exportButton.map { (self, $0) })
+            (NSApp.delegate as? App)?.makeCard(kind: shareKind, shareFrom: exportButton.map { (self, $0) })
         default:
             if id.hasPrefix("range:"), let days = Int(id.dropFirst(6)), days != range {
                 range = days

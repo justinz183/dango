@@ -891,8 +891,10 @@ final class App: NSObject, NSApplicationDelegate {
     /// periods, and the folder the images go to.
     func exportButtonMenu() -> NSMenu {
         let menu = NSMenu()
-        let copy = NSMenuItem(title: L("复制今日日报", "Copy today's report"), action: #selector(exportFromMenu(_:)), keyEquivalent: "")
-        copy.representedObject = "day:0:copy"
+        let kind = dashboard.shareKind
+        let copy = NSMenuItem(title: ["week": L("复制本周周报", "Copy this week's report"), "month": L("复制本月月报", "Copy this month's report")][kind] ?? L("复制今日日报", "Copy today's report"),
+                              action: #selector(exportFromMenu(_:)), keyEquivalent: "")
+        copy.representedObject = "\(kind):0:copy"
         copy.target = self
         menu.addItem(copy)
         menu.addItem(.separator())

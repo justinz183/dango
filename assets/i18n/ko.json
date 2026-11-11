@@ -476,5 +476,9 @@
  "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "당고들이 AI와 함께한 {}일 치 작업 기록을 다 살펴봤어요. 모두 {}어치 일을 해냈어요. 당신은 어떤 사장일까요?",
  "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "당고들이 AI와 함께한 작업 기록을 다 살펴봤어요. 모두 {}어치 일을 해냈어요. 당신은 어떤 사장일까요?",
  "See it →": "보러 가기 →",
- "Later": "나중에"
+ "Later": "나중에",
+ "Share this week": "이번 주 공유",
+ "Share this month": "이번 달 공유",
+ "Copy this week's report": "이번 주 리포트 복사",
+ "Copy this month's report": "이번 달 리포트 복사"
 }

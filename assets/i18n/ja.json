@@ -476,5 +476,9 @@
  "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "だんごたちが、あなたと AI の {} 日分の仕事の記録を読み終えました。こなした仕事は全部で {} 分。あなたはどんな社長でしょう？",
  "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "だんごたちが、あなたと AI の仕事の記録を読み終えました。こなした仕事は全部で {} 分。あなたはどんな社長でしょう？",
  "See it →": "見てみる →",
- "Later": "あとで"
+ "Later": "あとで",
+ "Share this week": "今週を共有",
+ "Share this month": "今月を共有",
+ "Copy this week's report": "今週のレポートをコピー",
+ "Copy this month's report": "今月のレポートをコピー"
 }

@@ -337,11 +337,14 @@ function render() {
     <div class="bars">${bars.map((u, i) => `<i class="${i === current ? "now" : u > 0 ? "" : "zero"}" style="height:${u > 0 ? Math.max(4, (90 * u) / maxU) : 2}px"></i>`).join("")}</div>
     <div class="axis"><span>${first}</span><span>${middle}</span><b>${esc(last)} · ${fmtUSD(nowUSD)}</b></div></div>`));
 
-  // 9. Where the money comes from, and share today's report.
+  // 9. Where the money comes from, and share the report of the range on top:
+  //    1 day the day's, 7 days the week's, 30 days the month's (macOS theme.swift `shareKind`).
+  const kind = range === 1 ? "day" : range === 7 ? "week" : "month";
+  const label = { day: L("分享日报", "Share today"), week: L("分享周报", "Share this week"), month: L("分享月报", "Share this month") }[kind];
   const row = el(`<div class="row bottom"><span class="note">${L("按 BLS 中位时薪折算", "At BLS median wages")}</span>
-    <button class="share">⇪&nbsp; ${L("分享日报", "Share today")}</button></div>`);
+    <button class="share">⇪&nbsp; ${label}</button></div>`);
   const share = row.querySelector(".share");
-  share.onclick = () => shareToday(share);
+  share.onclick = () => shareReport(share, kind);
   content.append(row);
 
   drawOffice();
@@ -350,13 +353,13 @@ function render() {
 
 /// Today's report as text on the clipboard (the 4:5 share image comes in a
 /// later version): no session titles or project names.
-async function shareToday(btn) {
+async function shareReport(btn, kind) {
   const was = btn.innerHTML;
   try {
-    const text = await invoke("daily_report");
+    const text = await invoke("daily_report", { kind });
     if (!text) throw new Error("no report");
     await copy(text);
-    btn.textContent = L("日报已复制 ✓", "Copied ✓");
+    btn.textContent = { day: L("日报已复制 ✓", "Copied ✓"), week: L("周报已复制 ✓", "Copied ✓"), month: L("月报已复制 ✓", "Copied ✓") }[kind];
   } catch (_) {
     btn.textContent = L("没复制成功", "Couldn't copy");
   }

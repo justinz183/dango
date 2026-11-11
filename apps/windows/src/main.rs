@@ -465,15 +465,22 @@ fn pet_menu(app: AppHandle, window: tauri::Window) {
     }
 }
 
-/// Today's report as text, for the clipboard: no session titles or
-/// project names (`dango report` without --names).
+/// The day's, this week's or this month's report as text (`kind`: the
+/// panel's range), for the clipboard: no session titles or project names
+/// (`dango report` without --names).
 #[tauri::command]
-fn daily_report(st: tauri::State<Shared>) -> Result<String, String> {
+fn daily_report(st: tauri::State<Shared>, kind: Option<String>) -> Result<String, String> {
     let paths = &st.paths;
     let _ = daemon::server::request(paths, &json!({ "op": "flush" }), Duration::from_secs(3));
     let conn = daemon::db::open(&paths.db).map_err(|e| e.to_string())?;
     let (cfg, tz, now) = (Config::load(paths), daemon::ingest::Tz::from_env(), daemon::server::now_ms());
     let claude = daemon::paths::user_home().unwrap_or_default().join(".claude");
-    let r = daemon::report::day(&conn, tz, &cfg, Path::new(&claude), tz.date(now), now, false, None).map_err(|e| e.to_string())?;
+    // The panel's range: 1 day → today's, 7 days → this week's, 30 days → this month's.
+    let report = match kind.as_deref() {
+        Some("week") => daemon::report::week,
+        Some("month") => daemon::report::month,
+        _ => daemon::report::day,
+    };
+    let r = report(&conn, tz, &cfg, Path::new(&claude), tz.date(now), now, false, None).map_err(|e| e.to_string())?;
     Ok(daemon::report::text(&r))
 }
