@@ -26,6 +26,17 @@ jobs:
           codesign --verify --deep --strict "$app"
           lipo -archs "$app/Contents/MacOS/Dango"
           "$app/Contents/Helpers/dango" --version
+      - name: It opens on a Mac that never had DANGO, and stays open
+        # 0.1.0 and 0.1.1 quit at once when ~/.dango did not exist yet (fixed in 0.1.2).
+        run: |
+          app=/Applications/Dango.app
+          [ -d "$app" ] || app="$HOME/Applications/Dango.app"
+          test ! -e "$HOME/.dango"
+          "$app/Contents/MacOS/Dango" > dango.log 2>&1 &
+          sleep 15
+          pgrep -x Dango || { cat dango.log; echo "Dango quit on its own"; exit 1; }
+          test -d "$HOME/.dango"
+          pkill -x Dango
       - name: The dmg link works
         run: |
           curl -fsSL -o Dango-macOS.dmg https://github.com/${{ github.repository }}/releases/latest/download/Dango-macOS.dmg
