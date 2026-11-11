@@ -471,5 +471,10 @@
  "─ Output ": "─ Production ",
  "★ Legend": "★ Légende",
  "✓ Healthy": "✓ En forme",
- "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  Que des chiffres : tours, temps, lignes modifiées, argent dépensé. Ne lit jamais votre code ni vos prompts. Rien n’est envoyé."
+ "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  Que des chiffres : tours, temps, lignes modifiées, argent dépensé. Ne lit jamais votre code ni vos prompts. Rien n’est envoyé.",
+ "Your ABTI is ready": "Votre ABTI est prêt",
+ "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "Vos dangos ont parcouru {} jours de votre travail avec l’IA : {} de travail en tout. Envie de savoir quel patron vous êtes ?",
+ "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "Vos dangos ont parcouru votre travail avec l’IA : {} de travail en tout. Envie de savoir quel patron vous êtes ?",
+ "See it →": "Voir →",
+ "Later": "Plus tard"
 }

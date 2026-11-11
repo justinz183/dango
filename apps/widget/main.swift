@@ -1129,11 +1129,12 @@ final class App: NSObject, NSApplicationDelegate {
             dashboard.needsDisplay = true
         }
         last = m
-        // The first scan with anything in it opens the story: one try per
-        // launch until the window has shown once (StoryWindow sets the flag).
+        // The first scan with anything in it asks whether to see the result
+        // (the invitation, then the story page by page): one try per launch
+        // until the story has shown once (StoryWindow sets the flag).
         if m.totalUSD > 0 && !storyTried && !UserDefaults.standard.bool(forKey: "abtiShown") {
             storyTried = true
-            DispatchQueue.main.async { StoryWindow.show() }
+            DispatchQueue.main.async { InviteWindow.show() }
         }
     }
 }
@@ -1221,12 +1222,18 @@ if args.contains("--print-daemon-agent") {
     exit(0)
 }
 if let i = args.firstIndex(of: "--abti"), args.count > i + 2 {
-    // --abti RESULT.json out.png [--page card|types|scale|roles] [--lang zh|en] [--copy]:
+    // --abti RESULT.json out.png [--page card|types|scale|roles|share|report|story|invite] [--lang zh|en|…] [--copy]:
     // the boss card and its pages, from `dango abti --json`.
     _ = NSApplication.shared
     let d = JV.load(args[i + 1])
     let flagv = { (f: String) -> String? in args.firstIndex(of: f).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
     lang = flagv("--lang") ?? (d["lang"].s.isEmpty ? lang : d["lang"].s)
+    if flagv("--page") == "invite" {
+        // The first-run invitation (story.swift InviteView), one still frame.
+        let v = InviteView(frame: NSRect(origin: .zero, size: InviteView.size))
+        v.data = d
+        exit(exportPage(v, args[i + 2]) ? 0 : 1)
+    }
     if flagv("--page") == "story" {
         // --screen N (1–7) [--t SEC] [--bare]: one story screen.
         let s = StoryView(frame: NSRect(x: 0, y: 0, width: 540, height: 960))

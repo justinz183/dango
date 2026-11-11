@@ -471,5 +471,10 @@
  "─ Output ": "─ 成果 ",
  "★ Legend": "★ 伝説",
  "✓ Healthy": "✓ 健康",
- "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  数字だけ：ターン、時間、変更した行、使ったお金。コードもプロンプトも読まず、何もアップロードしません。"
+ "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  数字だけ：ターン、時間、変更した行、使ったお金。コードもプロンプトも読まず、何もアップロードしません。",
+ "Your ABTI is ready": "あなたの ABTI が出ました",
+ "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "だんごたちが、あなたと AI の {} 日分の仕事の記録を読み終えました。こなした仕事は全部で {} 分。あなたはどんな社長でしょう？",
+ "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "だんごたちが、あなたと AI の仕事の記録を読み終えました。こなした仕事は全部で {} 分。あなたはどんな社長でしょう？",
+ "See it →": "見てみる →",
+ "Later": "あとで"
 }

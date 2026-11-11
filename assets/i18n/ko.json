@@ -471,5 +471,10 @@
  "─ Output ": "─ 산출 ",
  "★ Legend": "★ 전설",
  "✓ Healthy": "✓ 건강",
- "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  숫자만: 턴, 시간, 바뀐 줄, 쓴 돈. 코드와 프롬프트는 절대 읽지 않고, 아무것도 업로드하지 않아요."
+ "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  숫자만: 턴, 시간, 바뀐 줄, 쓴 돈. 코드와 프롬프트는 절대 읽지 않고, 아무것도 업로드하지 않아요.",
+ "Your ABTI is ready": "당신의 ABTI가 나왔어요",
+ "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "당고들이 AI와 함께한 {}일 치 작업 기록을 다 살펴봤어요. 모두 {}어치 일을 해냈어요. 당신은 어떤 사장일까요?",
+ "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "당고들이 AI와 함께한 작업 기록을 다 살펴봤어요. 모두 {}어치 일을 해냈어요. 당신은 어떤 사장일까요?",
+ "See it →": "보러 가기 →",
+ "Later": "나중에"
 }

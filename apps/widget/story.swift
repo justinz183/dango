@@ -660,3 +660,139 @@ final class PageWindow: NSObject {
         }
     }
 }
+
+/// The first time there is a result, a small window asks first instead of
+/// the story opening by itself (user, 2026-11-11: 「进入之后，有个小弹窗邀请
+/// 用户进入看他的abti结果，然后一页一页看，最后到他的结果」「在安装完第一
+/// 次打开的时候有一个abti的过程」): a waving 团子, how much history was read
+/// and what the work came to, and “See it” (the story from its first screen,
+/// the scan, page by page to the card) or “Later” (asked again at the next
+/// launch, until the story has been seen once; the right-click menu has it
+/// any time). Return starts, Esc is later.
+final class InviteView: NSView {
+    var data = JV(nil)
+    var onStart: (() -> Void)?
+    var onLater: (() -> Void)?
+    private var hits: [(String, NSRect)] = []
+    private var timer: Timer?
+    private var t = 0.0
+
+    static let size = NSSize(width: 360, height: 318)
+
+    override var isFlipped: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// The waving paw moves; a snapshot draws one still frame.
+    func animate() {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.t += 1.0 / 30.0
+            self.needsDisplay = true
+        }
+    }
+
+    func stop() { timer?.invalidate(); timer = nil }
+
+    /// The sentence under the title: days read and the work's worth.
+    var line: String {
+        let days = data["scan_days"].i, usd = fmtUSD(data["usd"].d)
+        return days > 1
+            ? L("团子们翻完了你 \(days) 天的工作记录，一共替你打了 \(usd) 的工。来看看你是哪一种老板？",
+                "Your dangos went through \(days) days of your work with AI: \(usd) of work in all. Want to see what kind of boss you are?")
+            : L("团子们翻完了你的工作记录，一共替你打了 \(usd) 的工。来看看你是哪一种老板？",
+                "Your dangos went through your work with AI: \(usd) of work in all. Want to see what kind of boss you are?")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        hits = []
+        let W = bounds.width, H = bounds.height
+        AB.round(NSRect(x: 0, y: 0, width: W, height: H), 18, .white)
+        AB.stroke(NSRect(x: 0, y: 0, width: W, height: H), 18, AB.line)
+        // The close cross: later.
+        let x = AB.sans("✕", 13, .regular, AB.gray)
+        let xr = NSRect(x: W - 34, y: 12, width: 22, height: 22)
+        put(x, xr.midX - x.size().width / 2, xr.midY - x.size().height / 2)
+        hits.append(("later", xr))
+        // A waving 团子 on a soft tile.
+        AB.round(NSRect(x: W / 2 - 64, y: 26, width: 128, height: 92), 22, AB.tile)
+        Pose.time = t
+        drawFittedDango(NSRect(x: W / 2 - 46, y: 32, width: 92, height: 80), role: nil, status: "happy")
+        // ABTI, the title, the line.
+        let label = AB.mono("ABTI", 11, .semibold, AB.gray, kern: 1.2)
+        put(label, W / 2 - label.size().width / 2, 132)
+        let title = AB.sans(L("你的 ABTI 出来了", "Your ABTI is ready"), 22, .heavy)
+        AB.para(title, 24, 150, W - 48, align: .center)
+        AB.para(AB.sans(line, 13, .regular, AB.gray), 30, 184, W - 60, lineHeight: 19, align: .center)
+        // See it (dark), later (light).
+        let start = AB.pill(L("开始看 →", "See it →"), 0, 0, dark: true, size: 14, padX: 22, padY: 8, draw: false)
+        let later = AB.pill(L("稍后", "Later"), 0, 0, dark: false, size: 14, padX: 18, padY: 8, draw: false)
+        let gap: CGFloat = 10, y = H - 24 - start.height
+        let x0 = W / 2 - (start.width + gap + later.width) / 2
+        hits.append(("start", AB.pill(L("开始看 →", "See it →"), x0, y, dark: true, size: 14, padX: 22, padY: 8)))
+        hits.append(("later", AB.pill(L("稍后", "Later"), x0 + start.width + gap, y, dark: false, size: 14, padX: 18, padY: 8)))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        guard let hit = hits.last(where: { $0.1.insetBy(dx: -4, dy: -4).contains(p) }) else {
+            window?.performDrag(with: event)
+            return
+        }
+        hit.0 == "start" ? onStart?() : onLater?()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 36, 76: onStart?()
+        case 53: onLater?()
+        default: super.keyDown(with: event)
+        }
+    }
+
+    override func resetCursorRects() {
+        hits.forEach { addCursorRect($0.1, cursor: .pointingHand) }
+    }
+}
+
+/// Borderless, so it needs telling that it may take the keyboard (Return, Esc).
+private final class InvitePanel: NSWindow {
+    override var canBecomeKey: Bool { true }
+}
+
+final class InviteWindow {
+    static var shared: NSWindow?
+
+    /// Asks once per launch; nothing when the story has been seen or the
+    /// result can't be read yet.
+    static func show() {
+        guard shared == nil, !UserDefaults.standard.bool(forKey: "abtiShown"), let data = dangoJSON(["abti", "--json"]) else { return }
+        let v = InviteView(frame: NSRect(origin: .zero, size: InviteView.size))
+        v.data = data
+        let w = InvitePanel(contentRect: v.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.hasShadow = true
+        w.level = .floating
+        w.isReleasedWhenClosed = false
+        w.appearance = NSAppearance(named: .aqua)
+        w.contentView = v
+        let close = {
+            v.stop()
+            w.orderOut(nil)
+            shared = nil
+        }
+        v.onLater = close
+        v.onStart = {
+            close()
+            StoryWindow.show()
+        }
+        w.center()
+        shared = w
+        NSApp.activate(ignoringOtherApps: true)
+        w.makeKeyAndOrderFront(nil)
+        w.makeFirstResponder(v)
+        v.animate()
+    }
+}
