@@ -180,3 +180,7 @@ irm https://dangoai.org/install.ps1 | iex
 | `plugins/claude-code` | 개발할 때 쓰는 선택 사항인 Claude Code 플러그인(턴이 끝날 때 정산 상자, 상태 표시줄). 앱에는 필요 없어요 |
 
 빌드, 테스트, 패키징: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). 전체 계산 규칙: [docs/DESIGN.md](docs/DESIGN.md).
+
+## 라이선스
+
+소스는 DANGO가 내 데이터를 어떻게 다루는지 읽고 확인할 수 있도록 공개되어 있지만, 오픈 소스는 아니며 모든 권리를 보유합니다. 코드를 읽고, 직접 빌드해 써 보고, 이슈나 풀 리퀘스트를 보낼 수 있어요. 그 밖의 용도는 사전 허락이 필요합니다. 자세한 내용은 [LICENSE](LICENSE)를 보세요.

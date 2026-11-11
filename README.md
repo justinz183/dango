@@ -180,3 +180,7 @@ The app speaks English, Chinese, Korean, Japanese, French and Spanish: right-cli
 | `plugins/claude-code` | An optional Claude Code plugin used in development (a settle box after each turn, a status line); the app doesn’t need it |
 
 Building, testing and packaging: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The full rules: [docs/DESIGN.md](docs/DESIGN.md).
+
+## License
+
+The source is public so you can read it and check what DANGO does with your data, but it is not open source: all rights reserved. You may read it, build it for yourself, and open issues or pull requests; anything else needs permission. See [LICENSE](LICENSE).

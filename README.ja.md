@@ -180,3 +180,7 @@ irm https://dangoai.org/install.ps1 | iex
 | `plugins/claude-code` | 開発用の任意の Claude Code プラグイン（ターンごとの精算ボックス、ステータスライン）。アプリには不要です |
 
 ビルド、テスト、パッケージ：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。計算ルールの全体：[docs/DESIGN.md](docs/DESIGN.md)。
+
+## ライセンス
+
+ソースは、DANGO があなたのデータをどう扱うかを読んで確かめられるように公開していますが、オープンソースではなく、すべての権利を留保します。コードを読むこと、自分でビルドして試すこと、Issue やプルリクエストを送ることはできます。それ以外の利用には事前の許可が必要です。詳しくは [LICENSE](LICENSE) をご覧ください。

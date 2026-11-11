@@ -180,3 +180,7 @@ La app habla inglés, chino, coreano, japonés, francés y español: haz clic de
 | `plugins/claude-code` | Un plugin opcional de Claude Code para el desarrollo (un resumen al final de cada turno, una línea de estado); la app no lo necesita |
 
 Compilar, probar y empaquetar: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Todas las reglas de cálculo: [docs/DESIGN.md](docs/DESIGN.md).
+
+## Licencia
+
+El código fuente es público para que puedas leerlo y comprobar qué hace DANGO con tus datos, pero no es software libre: todos los derechos reservados. Puedes leerlo, compilarlo para ti y abrir issues o pull requests; cualquier otro uso necesita permiso. Consulta [LICENSE](LICENSE).

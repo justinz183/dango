@@ -180,3 +180,7 @@ L’app parle anglais, chinois, coréen, japonais, français et espagnol : clic 
 | `plugins/claude-code` | Un plugin Claude Code facultatif, utilisé pour le développement (un récapitulatif à la fin de chaque tour, une ligne d’état) ; l’app n’en a pas besoin |
 
 Construire, tester et empaqueter : [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Toutes les règles de calcul : [docs/DESIGN.md](docs/DESIGN.md).
+
+## Licence
+
+Le code source est public pour que vous puissiez le lire et vérifier ce que DANGO fait de vos données, mais ce n’est pas un logiciel libre : tous droits réservés. Vous pouvez le lire, le compiler pour vous-même et ouvrir des issues ou des pull requests ; tout autre usage demande une autorisation. Voir [LICENSE](LICENSE).

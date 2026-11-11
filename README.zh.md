@@ -180,3 +180,7 @@ App 界面有 English、中文、한국어、日本語、Français、Español �
 | `plugins/claude-code` | 开发时用的可选 Claude Code 插件（每个回合结束的结算框、状态栏）；App 不需要它 |
 
 构建、测试和打包看 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，完整的计算规则看 [docs/DESIGN.md](docs/DESIGN.md)。
+
+## 许可
+
+源码公开，方便你阅读、核对 DANGO 怎么处理你的数据，但它不是开源软件，保留所有权利。你可以阅读、自己编译试用、提 issue 和 pull request；其他用途需要事先取得许可。详见 [LICENSE](LICENSE)。
