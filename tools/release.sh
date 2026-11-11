@@ -55,7 +55,10 @@ cat "$out/SHA256SUMS.txt"
 [ "${1:-}" = --publish ] || { echo "assets in $out (add --publish to put them on GitHub as $tag)"; exit 0; }
 
 notes="$tmp/notes.md"
-cat > "$notes" <<EOF
+# What changed in this version, if docs/releases/v<version>.md says, comes first.
+: > "$notes"
+[ -f "docs/releases/$tag.md" ] && { cat "docs/releases/$tag.md"; echo; } >> "$notes"
+cat >> "$notes" <<EOF
 DANGO turns what your AI does into a team you can see: a little office on your desktop, every step priced at the real U.S. median wage of the person you would hire for it. Works with Claude Code, Codex, DeepSeek and WorkBuddy. Everything is computed on your computer; nothing is uploaded.
 
 ## Install
