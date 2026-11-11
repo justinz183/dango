@@ -652,6 +652,135 @@ func packExtent(_ body: NSRect, role: String?) -> NSRect {
     return NSRect(x: body.minX + (e.minX - l.body.minX) * k, y: y, width: e.width * k, height: e.height * k)
 }
 
+/// The panel's ABTI card before the story has been seen: the designer's
+/// "to be revealed" card (user, 2026-11-11: 「请你用这个进行待揭晓部分的替换」).
+/// Two type scenes fanned out behind a blue card with a question mark, four
+/// "?" tiles for the four letters, the title, “Reveal →” and a line beside
+/// it, and an orange dot by “ABTI ›”. Laid out on the design's 1176 × 408
+/// at a third (the card is 392 × 136 pt); flipped, y down.
+func drawRevealCard(_ box: NSRect) {
+    let ctx = NSGraphicsContext.current
+    AB.round(box, 20, V3.tile)
+    let o = box.origin
+    func at(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: o.x + x, y: o.y + y) }
+    func shadow(_ blur: CGFloat, _ dy: CGFloat, _ a: CGFloat) {
+        let s = NSShadow()
+        s.shadowBlurRadius = blur
+        s.shadowOffset = NSSize(width: 0, height: -dy)   // flipped: down
+        s.shadowColor = NSColor.black.withAlphaComponent(a)
+        s.set()
+    }
+
+    // A card turned by `deg` about its centre `c`, drawn by `body` in its own frame.
+    func card(_ c: NSPoint, _ size: NSSize, _ deg: CGFloat, _ body: (NSRect) -> Void) {
+        ctx?.saveGraphicsState()
+        let t = NSAffineTransform()
+        t.translateX(by: c.x, yBy: c.y)
+        t.rotate(byDegrees: deg)
+        t.concat()
+        body(NSRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
+        ctx?.restoreGraphicsState()
+    }
+    // A type's scene in a white frame, the picture cropped to fill it.
+    func scene(_ code: String, _ r: NSRect) {
+        ctx?.saveGraphicsState()
+        shadow(6, 2, 0.16)
+        AB.round(r, 8, .white)
+        ctx?.restoreGraphicsState()
+        let inner = r.insetBy(dx: 2.5, dy: 2.5)
+        ctx?.saveGraphicsState()
+        NSBezierPath(roundedRect: inner, xRadius: 6, yRadius: 6).addClip()
+        color(hex: "#F3EBDD").setFill()
+        inner.fill()
+        if let img = abtiImage("scene/T-" + code), img.size.width > 0 {
+            let k = max(inner.width / img.size.width, inner.height / img.size.height)
+            let sz = NSSize(width: img.size.width * k, height: img.size.height * k)
+            img.draw(in: NSRect(x: inner.midX - sz.width / 2, y: inner.midY - sz.height / 2, width: sz.width, height: sz.height),
+                     from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        }
+        ctx?.restoreGraphicsState()
+    }
+    // A four-point sparkle.
+    func sparkle(_ c: NSPoint, _ r: CGFloat) {
+        let p = NSBezierPath()
+        let w = r * 0.28
+        p.move(to: NSPoint(x: c.x, y: c.y - r))
+        p.curve(to: NSPoint(x: c.x + r, y: c.y), controlPoint1: NSPoint(x: c.x + w, y: c.y - w), controlPoint2: NSPoint(x: c.x + w, y: c.y - w))
+        p.curve(to: NSPoint(x: c.x, y: c.y + r), controlPoint1: NSPoint(x: c.x + w, y: c.y + w), controlPoint2: NSPoint(x: c.x + w, y: c.y + w))
+        p.curve(to: NSPoint(x: c.x - r, y: c.y), controlPoint1: NSPoint(x: c.x - w, y: c.y + w), controlPoint2: NSPoint(x: c.x - w, y: c.y + w))
+        p.curve(to: NSPoint(x: c.x, y: c.y - r), controlPoint1: NSPoint(x: c.x - w, y: c.y - w), controlPoint2: NSPoint(x: c.x - w, y: c.y - w))
+        color(hex: "#F5C21B").setFill()
+        p.fill()
+    }
+
+    // 1. The fan: two scenes behind, the blue card in front.
+    let back = NSSize(width: 56, height: 80)
+    card(at(40, 76), back, -13) { scene("MBSL", $0) }
+    card(at(115, 72), back, 12) { scene("HBGO", $0) }
+    let front = NSRect(x: o.x + 42, y: o.y + 18, width: 68, height: 92)
+    ctx?.saveGraphicsState()
+    shadow(10, 4, 0.22)
+    AB.round(front, 9, .white)
+    ctx?.restoreGraphicsState()
+    let blue = front.insetBy(dx: 2.5, dy: 2.5)
+    ctx?.saveGraphicsState()
+    NSBezierPath(roundedRect: blue, xRadius: 7, yRadius: 7).addClip()
+    color(hex: "#3B7BF0").setFill()
+    blue.fill()
+    let stripes = NSBezierPath()
+    stripes.lineWidth = 5
+    var sx = blue.minX - blue.height
+    while sx < blue.maxX {
+        stripes.move(to: NSPoint(x: sx, y: blue.maxY))
+        stripes.line(to: NSPoint(x: sx + blue.height, y: blue.minY))
+        sx += 11
+    }
+    NSColor.white.withAlphaComponent(0.09).setStroke()
+    stripes.stroke()
+    ctx?.restoreGraphicsState()
+    let rim = NSBezierPath(roundedRect: blue.insetBy(dx: 4, dy: 4), xRadius: 4.5, yRadius: 4.5)
+    rim.lineWidth = 1.1
+    NSColor.white.withAlphaComponent(0.7).setStroke()
+    rim.stroke()
+    let dot = NSRect(x: blue.midX - 17, y: blue.midY - 17, width: 34, height: 34)
+    NSColor.white.setFill()
+    NSBezierPath(ovalIn: dot).fill()
+    let q = AB.sans("?", 22, .heavy, color(hex: "#3B7BF0"))
+    put(q, dot.midX - q.size().width / 2, dot.midY - q.size().height / 2)
+    sparkle(at(30, 25), 6.5)
+    sparkle(at(121, 31), 4.5)
+    sparkle(at(117, 114), 3)
+
+    // 2. Four "?" for the four letters.
+    let tiles = [("#3B7BF0", "#E3ECFE"), ("#C8650E", "#FDEBD7"), ("#1E8A47", "#DDF2E4"), ("#7A44E0", "#ECE5FD")]
+    for (k, (fg, bg)) in tiles.enumerated() {
+        let r = NSRect(x: o.x + 158 + CGFloat(k) * 32.5, y: o.y + 16, width: 25.5, height: 26)
+        AB.round(r, 7, V3.dark ? color(hex: fg).withAlphaComponent(0.24) : color(hex: bg))
+        let t = AB.sans("?", 13.5, .heavy, V3.dark ? color(hex: fg).blended(withFraction: 0.35, of: .white) ?? color(hex: fg) : color(hex: fg))
+        put(t, r.midX - t.size().width / 2, r.midY - t.size().height / 2)
+    }
+
+    // 3. The words, and the dot by the link.
+    let right = box.maxX - 14
+    let link = V3.mono("ABTI ›", 10, .regular, V3.secondary)
+    put(link, right, o.y + 13, align: 2)
+    let dotR = NSRect(x: right - link.size().width - 10, y: o.y + 13 + link.size().height / 2 - 3, width: 6, height: 6)
+    color(hex: "#E8790F").setFill()
+    NSBezierPath(ovalIn: dotR).fill()
+    let tx = o.x + 158
+    var size: CGFloat = 16
+    let title = { (s: CGFloat) in V3.sans(L("你的 ABTI 人格出炉了", "Your ABTI is ready"), s, .heavy) }
+    while title(size).size().width > right - tx && size > 12 { size -= 0.5 }
+    put(title(size), tx, o.y + 57 + (16 - size) * 0.6)
+    let pill = AB.pill(L("揭晓 →", "Reveal →"), tx, o.y + 91, dark: true, size: 12, padX: 15, padY: 6.5, fill: V3.ink, ink: V3.onInk)
+    let lx = pill.maxX + 10, lw = right - lx
+    var ls: CGFloat = 11.5
+    let line = { (s: CGFloat) in V3.sans(L("看看你是什么样的老板", "See what kind of boss you are"), s, .regular, V3.secondary) }
+    while AB.para(line(ls), lx, 0, lw, lineHeight: ls + 3, draw: false) > (ls + 3) * 2 + 1 && ls > 9.5 { ls -= 0.5 }
+    let lh = AB.para(line(ls), lx, 0, lw, lineHeight: ls + 3, draw: false)
+    AB.para(line(ls), lx, pill.midY - lh / 2, lw, lineHeight: ls + 3)
+}
+
 /// A role's 团子, accessory and all, fitted into `box` and centred.
 func drawFittedDango(_ box: NSRect, role: String?, status: String, pose: String? = nil) {
     let l = packLayout(role), e = l.extent
@@ -957,21 +1086,8 @@ extension DashboardView {
         //     a "ready to view" card that opens the story from its first page
         //     (2026-11-11, user: 「如果第一次进入abti的话应该是个准备查看abti」).
         if m.boss != nil, !abtiStorySeen {
-            let box = NSRect(x: padX, y: y, width: inner, height: 116)
-            if draw {
-                AB.round(box, 20, V3.tile)
-                let art = NSRect(x: box.minX + 10, y: box.minY + 12, width: 116, height: 92)
-                AB.round(art, 16, V3.raised)
-                drawFittedDango(art.insetBy(dx: 18, dy: 12), role: nil, status: "happy")
-                let tx = box.minX + 136, right = box.maxX - 14
-                let link = V3.mono("ABTI ›", 10, .regular, V3.secondary)
-                put(link, right, box.minY + 10, align: 2)
-                put(V3.sans(L("你的 ABTI 出来了", "Your ABTI is ready"), 16, .semibold), tx, box.minY + 14)
-                AB.pill(L("查看我的 ABTI →", "See my ABTI →"), tx, box.minY + 42, dark: true, size: 11, fill: V3.ink, ink: V3.onInk)
-                AB.para(V3.sans(L("团子们翻完了你的工作记录。点开，一页一页看你是哪一种老板。",
-                                  "Your dangos have been through your work. Open it and go page by page to see what kind of boss you are."),
-                                12, .regular, V3.secondary), tx, box.minY + 70, right - tx, lineHeight: 16)
-            }
+            let box = NSRect(x: padX, y: y, width: inner, height: 136)
+            if draw { drawRevealCard(box) }
             v3Hits.append(("boss", box))
             y += box.height + 14
         } else if let b = m.boss {
