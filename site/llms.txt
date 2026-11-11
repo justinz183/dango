@@ -39,7 +39,7 @@ DANGO 是一个免费的 Mac 菜单栏应用，帮你统计 Claude Code、Codex 
 - [Mac menu bar apps for Claude Code and Codex, compared](https://dangoai.org/claude-code-menu-bar/) · [中文](https://dangoai.org/zh/claude-code-menu-bar/)
 - [How much is your AI coding work worth? The method, wage table and limits](https://dangoai.org/ai-work-value/) · [中文](https://dangoai.org/zh/ai-work-value/)
 - [What is ABTI? The 16 ABTI types and how they are worked out](https://dangoai.org/abti/) · [中文](https://dangoai.org/zh/abti/) (each type has its own page, e.g. https://dangoai.org/abti/hbgo/)
-- [Privacy: what DANGO reads, keeps and never touches](https://dangoai.org/privacy/) · [中文](https://dangoai.org/zh/privacy/)
+- [Privacy: what DANGO reads, keeps and never does](https://dangoai.org/privacy/) · [中文](https://dangoai.org/zh/privacy/)
 
 ## FAQ
 

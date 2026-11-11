@@ -1,9 +1,9 @@
 <!--
-title: DANGO 隐私说明：读哪些文件、记哪些字段、不碰什么
+title: DANGO 隐私说明：读哪些文件、记哪些字段、从来不做什么
 description: DANGO 全部在你的电脑上运行。它读 Claude Code、Codex、DeepSeek Harness、WorkBuddy 本来就有的会话记录，只把数字存进本机数据库，什么都不上传。具体的文件、字段和边界。
 -->
-<h1>隐私说明：DANGO 读哪些文件、记哪些字段、不碰什么</h1>
-<p class="answer"><b>DANGO 全部在你的电脑上运行，什么都不上传。</b>它读 Claude Code、Codex、DeepSeek Harness、WorkBuddy 本来就写在你用户目录里的会话记录，换算成数字（分钟、回合、改了多少行、归哪个岗位、token 和花费），存进本机的数据库。你的 prompt、AI 的回复、代码和文件路径一概不存。App 里没有账号、没有遥测、没有统计。</p>
+<h1>隐私说明：DANGO 读哪些文件、记哪些字段、从来不做什么</h1>
+<p class="answer"><b>DANGO 全部在你的电脑上运行，什么都不上传。</b>它读 Claude Code、Codex、DeepSeek Harness、WorkBuddy 本来就写在你用户目录里的会话记录，换算成数字（分钟、回合、改了多少行、归哪个岗位、token 和花费），存进本机的数据库。App 里没有账号、没有遥测、没有统计。</p>
 
 <h2>读哪些文件</h2>
 <p>只读这些 AI 工具给自己留的记录，不往 Claude Code、Codex 里装任何东西。</p>
@@ -19,7 +19,6 @@ description: DANGO 全部在你的电脑上运行。它读 Claude Code、Codex�
 <tr><td>WorkBuddy</td><td><code>~/.workbuddy/projects/</code>、<code>~/.workbuddy-ai/projects/</code></td><td>会话记录</td></tr>
 </tbody></table></div>
 <p class="note">Windows 上是 <code>%USERPROFILE%</code> 下的同名文件夹。</p>
-<p>读的时候，prompt 在内存里看一眼，认出在聊什么（猫肚子不舒服归医生，问股票归金融分析师）；shell 命令看一眼，认出是哪类步骤（跑测试、提交、ffmpeg）。然后两者都丢掉，只留下认出来的岗位，比如 <code>doctor</code>。</p>
 
 <h2>记下哪些</h2>
 <p>一个 SQLite 数据库，在 <code>~/.dango/data.db</code>（Windows 是 <code>%USERPROFILE%\.dango</code>），只有你的用户账号能读：</p>
@@ -28,20 +27,18 @@ description: DANGO 全部在你的电脑上运行。它读 Claude Code、Codex�
 <li><b>每个会话：</b>开始和结束时间、活跃分钟，以及工作文件夹的 12 位 SHA-256 指纹（存指纹，不存路径）。</li>
 <li><b>会话标题和项目文件夹名：</b>从 AI 工具自己的记录里读，给你 Mac 上的报告窗口列出「做了哪些事」。只留在你的电脑上，分享卡上从来没有。</li>
 </ul>
-<p>除此之外存下的每一段文字都必须是短标记（ID、哈希、固定取值）。项目里带一个检查命令 <code>dango privacy-scan</code>：存下的东西里只要有像路径、代码、prompt 或自由文本的，就报错。</p>
+<p>除此之外存下的每一段文字都必须是短标记（ID、哈希、固定取值）。项目里带一个检查命令 <code>dango privacy-scan</code>：存下的东西里只要有数字和短标记以外的内容，就报错。</p>
 
-<h2>不碰什么</h2>
-<div class="tw"><table>
-<thead><tr><th>从来不存</th><th>从来不做</th></tr></thead>
-<tbody>
-<tr><td>prompt 和 AI 的回复</td><td>上传任何东西：后台服务没有联网代码，也不开网络端口</td></tr>
-<tr><td>代码和文件内容</td><td>账号、登录、遥测、统计、崩溃上报</td></tr>
-<tr><td>文件路径和 shell 命令</td><td>排行榜，或者拿你和别人比</td></tr>
-<tr><td>读过的网页和搜索词</td><td>改你的 Claude Code、Codex 设置</td></tr>
-</tbody></table></div>
+<h2>从来不做什么</h2>
+<ul>
+<li>上传任何东西：后台服务没有联网代码，也不开网络端口</li>
+<li>账号、登录、遥测、统计、崩溃上报</li>
+<li>排行榜，或者拿你和别人比</li>
+<li>改你的 Claude Code、Codex 设置</li>
+</ul>
 
 <h2>分享卡</h2>
-<p>分享卡（日报、周报、月报、年报、总计）上只有数字、岗位和你的 ABTI 人格，从来没有项目名、会话标题和代码。只有你自己点分享，卡片才会离开你的 Mac。</p>
+<p>分享卡（日报、周报、月报、年报、总计）上只有数字、岗位和你的 ABTI 人格，从来没有项目名和会话标题。只有你自己点分享，卡片才会离开你的 Mac。</p>
 
 <h2>彻底删掉</h2>
 <p>Mac 上先从右键菜单退出 DANGO，再在终端里运行：</p>
@@ -55,6 +52,6 @@ rm -rf /Applications/Dango.app ~/Applications/Dango.app ~/.dango</code></pre>
 <p>dangoai.org 不设 cookie，也不放统计代码。首页的字体从 Google Fonts 加载。下载量我们只看 GitHub 上每个版本公开显示的下载次数。</p>
 
 <h2>常见问题</h2>
-<details><summary>DANGO 会上传我的代码或对话吗？</summary><p>不会。全部在你的电脑上计算。prompt 只在内存里看一眼认出话题就丢掉；代码、文件路径和 AI 的回复从来不存，也不发到任何地方。</p></details>
+<details><summary>DANGO 会上传我的代码或对话吗？</summary><p>不会。全部在你的电脑上计算，什么都不发出去。</p></details>
 <details><summary>DANGO 需要账号或者联网吗？</summary><p>不需要。没有账号，断网也能用。后台服务里根本没有联网的代码。</p></details>
 <details><summary>我能自己核实吗？</summary><p>能。源代码在 GitHub（github.com/justinz183/dango），数据库就是 ~/.dango 里一个普通的 SQLite 文件，dango privacy-scan 会检查里面只有数字和短标记。</p></details>

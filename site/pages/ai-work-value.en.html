@@ -11,7 +11,7 @@ leverage        = value of the work ÷ model cost at API list prices</code></pre
 <p>A <em>turn</em> is one request you give the agent and everything it does until it hands back. DANGO reads the session logs Claude Code, Codex, DeepSeek Harness and WorkBuddy already keep on your computer, splits them into turns, and prices each step it can see.</p>
 
 <h2>How many minutes each step is worth</h2>
-<p>Steps are matched by what they do, not by guessing from your prompt:</p>
+<p>Steps are matched by what they do:</p>
 <div class="tw"><table>
 <thead><tr><th>Step the agent took</th><th>Job</th><th class="n">Minutes</th></tr></thead>
 <tbody>
@@ -32,7 +32,7 @@ leverage        = value of the work ÷ model cost at API list prices</code></pre
 <tr><td>Financial data or database connectors (MCP)</td><td>Financial / data analyst</td><td class="n">10</td></tr>
 </tbody></table></div>
 <p>On top of its steps, every turn gets <b>5 minutes</b> for reading the request and reporting back, plus <b>12 minutes per subagent</b>, shared across the turn’s jobs in proportion to their minutes. A turn with no steps (just a conversation) counts as a consult with whoever the topic calls for: 5 minutes of a researcher by default, 15 for a doctor, 20 for a lawyer, 30 for a counselor. Plumbing such as <code>ls</code>, <code>cd</code> or <code>cat</code> counts for nothing. Nothing is capped.</p>
-<p>The topic of a turn can move research to a specialist: web searches in a turn about your cat’s health are a doctor’s work, data scripts in a turn about stocks a financial analyst’s. The topic is found with a keyword list (about 2,700 words in English and Chinese); only the resulting job ID is kept, never the prompt.</p>
+<p>The topic of a turn can move research to a specialist: web searches in a turn about your cat’s health are a doctor’s work, data scripts in a turn about stocks a financial analyst’s. The topic is found with a keyword list of about 2,700 words in English and Chinese.</p>
 
 <h2>Wages: 20 jobs, U.S. median pay</h2>
 <p>Hourly wages are the U.S. national median from the Bureau of Labor Statistics’ Occupational Employment and Wage Statistics (OEWS), May 2025, by SOC code. Pay only: no benefits, no overhead, no markup.</p>
@@ -89,4 +89,3 @@ leverage        = value of the work ÷ model cost at API list prices</code></pre
 <details><summary>Is this how much money AI saved me?</summary><p>No. It estimates what the same work would cost if you paid people at U.S. median wages to do it. Whether that is money saved depends on whether you would have hired anyone.</p></details>
 <details><summary>I’m on a Claude Max or ChatGPT Pro subscription. How is “cost” worked out?</summary><p>At API list prices: what the same tokens would cost bought through the Anthropic, OpenAI or DeepSeek API. Your actual spend is your subscription price, so your real leverage is usually higher than the one shown.</p></details>
 <details><summary>Why U.S. Bureau of Labor Statistics wages?</summary><p>They are public, per occupation, updated every year and widely cited. Using the median and pay only (no benefits) keeps the estimate on the conservative side.</p></details>
-<details><summary>Does DANGO read my prompts or code to do this?</summary><p>It reads them in memory only to recognise the step and the topic, then keeps numbers: minutes, line counts, which job, tokens and cost. See the <a href="/privacy/">privacy notes</a>.</p></details>
