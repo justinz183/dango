@@ -72,7 +72,7 @@ description: DANGO 把 AI 的每一步按「请人来做要花多少」估价：
 <p>一整个回合：AI 改了一个 80 行的源文件和一个 30 行的测试，跑了测试，提交，中间派了一个子 agent。各步合计软件工程师 37.5 分钟（代码 17.5、提交 20），测试工程师 19.3 分钟（测试文件 9.3、跑测试 10）。5 分钟基础和 12 分钟子 agent 按比例分摊后是 48.7 和 25.1 分钟：<b>$53.07 + $20.99 = $74.06</b>，一个回合大约 74 分钟的活。</p>
 
 <h2>模型花了多少，杠杆怎么算</h2>
-<p>token 数来自 AI 工具自己的记录：Claude Code 每条回复都写着模型和用量（输入、写缓存、读缓存、输出），Codex 每次响应都写着 token 用量。DANGO 按 Anthropic、OpenAI 官网的 API 价格计价，长上下文有单独价格的照单独价格算。价格表里没有的模型，只记 token 不计钱。</p>
+<p>token 数来自 AI 工具自己的记录：Claude Code 每条回复都写着模型和用量（输入、写缓存、读缓存、输出），Codex 每次响应都写着 token 用量。DANGO 按 Anthropic、OpenAI、DeepSeek 官网的 API 价格计价，长上下文有单独价格的照单独价格算。价格表里没有的模型，只记 token 不计钱；比如 WorkBuddy 按它自己的 credit 计费、没有公开的 token 单价，所以不算它的花费。</p>
 <p><b>如果你是包月订阅</b>（Claude Pro / Max、ChatGPT Plus / Pro），不按 token 付费，DANGO 显示的花费是「这些 token 按 API 买要多少钱」。你实际花的是订阅费，一般更低，所以实际杠杆一般更高。</p>
 
 <h2>这个数字不是什么</h2>
@@ -87,6 +87,6 @@ description: DANGO 把 AI 的每一步按「请人来做要花多少」估价：
 
 <h2>常见问题</h2>
 <details><summary>这是 AI 帮我省了多少钱吗？</summary><p>不是。它估算的是按美国中位工资请人做同样的活要付多少。算不算省钱，要看你本来会不会请人。</p></details>
-<details><summary>我是包月订阅，不按 token 付费，「花了多少」怎么算？</summary><p>按 API 官方价格算：同样的 token 通过 Anthropic 或 OpenAI 的 API 买要多少钱。你实际花的是订阅费，所以实际杠杆一般比显示的更高。</p></details>
+<details><summary>我是包月订阅，不按 token 付费，「花了多少」怎么算？</summary><p>按 API 官方价格算：同样的 token 通过 Anthropic、OpenAI 或 DeepSeek 的 API 买要多少钱。你实际花的是订阅费，所以实际杠杆一般比显示的更高。</p></details>
 <details><summary>为什么用美国劳工统计局的工资？</summary><p>它公开、按职业细分、每年更新、引用广泛。用中位数、只算工资不算福利，让估算偏保守。</p></details>
 <details><summary>算这些要读我的 prompt 或代码吗？</summary><p>只在内存里看一眼，用来认出这一步是什么、话题是什么，然后只留下数字：分钟、行数、职业、token 和花费。详见<a href="/zh/privacy/">隐私说明</a>。</p></details>

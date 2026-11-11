@@ -256,9 +256,9 @@ const tiers = (lang) =>
 
 const ABTI_TXT = {
   en: {
-    title: 'ABTI: the 16 AI boss types, and how DANGO works out yours',
-    desc: 'ABTI is DANGO’s 16 AI boss types. No quiz: four letters worked out from your Claude Code and Codex work logs (hands-off or micro, build or fix, specialist or generalist, lark or owl).',
-    answer: `<b>ABTI is a four-letter “boss type” that DANGO works out from what your AI agents actually did</b>, not from a quiz. It looks at your Claude Code, Codex, DeepSeek and WorkBuddy work logs on your Mac and asks four questions: do you let the AI run (H) or step in (M), do you build new things (B) or fix existing ones (F), do you stick to one kind of work (S) or spread across many (G), and do you work by day (L) or by night (O). 2 × 2 × 2 × 2 = 16 types.`,
+    title: 'What is ABTI? The 16 ABTI types, and how DANGO works out yours',
+    desc: 'ABTI is four letters that say what kind of boss you are, one of 16 types. No quiz: DANGO works them out from your Claude Code and Codex work logs (hands-off or micro, build or fix, specialist or generalist, lark or owl).',
+    answer: `<b>ABTI is four letters that DANGO works out from what your AI agents actually did: what kind of boss you are</b>, without a quiz. It looks at your Claude Code, Codex, DeepSeek and WorkBuddy work logs on your Mac and asks four questions: do you let the AI run (H) or step in (M), do you build new things (B) or fix existing ones (F), do you stick to one kind of work (S) or spread across many (G), and do you work by day (L) or by night (O). 2 × 2 × 2 × 2 = 16 types.`,
     how: 'How each letter is worked out',
     howNote: 'Exactly half goes to the second letter (M, F, L): the rule says “more than half”. Between 45% and 55% the card shows the number as “≈” in grey, but the letter is still decided by the threshold. Only numbers are used: tool-call counts, line counts, minutes and value per role, never your prompts or code.',
     when: 'Which period it covers',
@@ -274,9 +274,9 @@ const ABTI_TXT = {
     ],
   },
   zh: {
-    title: 'ABTI：16 种 AI 老板人格，DANGO 怎么算出你是哪一种',
-    desc: 'ABTI 是 DANGO 的 16 种 AI 老板人格。不用答题：从你 Claude Code、Codex 的工作记录算出四个字母（放权还是微操、开荒还是修缮、专精还是跨界、早鸟还是夜猫）。',
-    answer: `<b>ABTI 是 DANGO 根据 AI 实际干的活算出来的四个字母的「老板人格」</b>，不用答题。它在你的 Mac 上看 Claude Code、Codex、DeepSeek、WorkBuddy 的工作记录，回答四个问题：你是放手让 AI 干（H）还是步步插手（M），在做新东西（B）还是修旧东西（F），专攻一种活（S）还是什么都干（G），白天干活（L）还是夜里干活（O）。2 × 2 × 2 × 2 = 16 种。`,
+    title: 'ABTI 是什么？16 种 ABTI 人格，DANGO 怎么算出你是哪一种',
+    desc: 'ABTI 是 DANGO 的 16 种 ABTI 人格，看你当老板是什么样子。不用答题：从你 Claude Code、Codex 的工作记录算出四个字母（放权还是微操、开荒还是修缮、专精还是跨界、早鸟还是夜猫）。',
+    answer: `<b>ABTI 是 DANGO 根据 AI 实际干的活算出来的四个字母，看你当老板是什么样子</b>，不用答题。它在你的 Mac 上看 Claude Code、Codex、DeepSeek、WorkBuddy 的工作记录，回答四个问题：你是放手让 AI 干（H）还是步步插手（M），在做新东西（B）还是修旧东西（F），专攻一种活（S）还是什么都干（G），白天干活（L）还是夜里干活（O）。2 × 2 × 2 × 2 = 16 种。`,
     how: '每个字母怎么算',
     howNote: '正好一半时判第二个字母（M、F、L），因为规则写的是「过半」。比例在 45% 到 55% 之间时，卡片上的数字前加「≈」并显示成灰色，字母仍按门槛判。只用数字：工具调用次数、行数、分钟数、各角色的金额，不看 prompt 和代码。',
     when: '算的是哪段时间',
@@ -328,8 +328,8 @@ for (const code of typeKeys) {
     const title = lang === 'en' ? `${code} · ${name}: an ABTI type` : `${code} ${name}：ABTI 人格`;
     const desc =
       lang === 'en'
-        ? `${code} (${letters.join(', ')}) is one of DANGO’s 16 ABTI AI boss types: ${t.portrait_en} Worked out from your Claude Code and Codex work logs, no quiz.`
-        : `${code}（${letters.join('、')}）是 DANGO 的 16 种 ABTI 老板人格之一：${t.portrait_zh}。从你 Claude Code、Codex 的工作记录算出来，不用答题。`;
+        ? `${code} (${letters.join(', ')}) is one of DANGO’s 16 ABTI types: ${t.portrait_en} Worked out from your Claude Code and Codex work logs, no quiz.`
+        : `${code}（${letters.join('、')}）是 DANGO 的 16 种 ABTI 人格之一：${t.portrait_zh}。从你 Claude Code、Codex 的工作记录算出来，不用答题。`;
     const answer =
       lang === 'en'
         ? `<b>${code} is ${/^The /.test(name) ? '' : 'the '}“${esc(name)}”</b>, one of the 16 ABTI types in DANGO: ${letters.map((w, i) => `${w} (${code[i]})`).join(', ')}. ${esc(t.portrait_en)}`

@@ -72,7 +72,7 @@ leverage        = value of the work ÷ model cost at API list prices</code></pre
 <p>A whole turn: the agent edits an 80-line source file and a 30-line test, runs the tests, commits, and uses one subagent. The steps come to 37.5 software-engineer minutes (17.5 for the code, 20 for the commit) and 19.3 QA minutes (9.3 for the test, 10 for the run). The 5-minute base and the 12-minute subagent are shared in proportion, giving 48.7 and 25.1 minutes: <b>$53.07 + $20.99 = $74.06</b> for one turn, about 74 minutes of work.</p>
 
 <h2>What the models cost, and leverage</h2>
-<p>Token counts come from the agents’ own logs: Claude Code writes the model and usage (input, cache writes, cache reads, output) on every reply; Codex writes token usage on every response. DANGO prices them at the official API list prices of Anthropic and OpenAI, including long-context prices where they apply. Models it has no price for are counted in tokens but not in dollars.</p>
+<p>Token counts come from the agents’ own logs: Claude Code writes the model and usage (input, cache writes, cache reads, output) on every reply; Codex writes token usage on every response. DANGO prices them at the official API list prices of Anthropic, OpenAI and DeepSeek, including long-context prices where they apply. Models it has no price for are counted in tokens but not in dollars; WorkBuddy, for one, bills in its own credits and publishes no token price, so its cost is left out.</p>
 <p><b>On a subscription</b> (Claude Pro or Max, ChatGPT Plus or Pro) you don’t pay per token, so the cost DANGO shows is what those tokens would cost if you bought them through the API. Your real spend is your plan’s price, which is usually lower, so your real leverage is usually higher.</p>
 
 <h2>What this number is not</h2>
@@ -87,6 +87,6 @@ leverage        = value of the work ÷ model cost at API list prices</code></pre
 
 <h2>Questions</h2>
 <details><summary>Is this how much money AI saved me?</summary><p>No. It estimates what the same work would cost if you paid people at U.S. median wages to do it. Whether that is money saved depends on whether you would have hired anyone.</p></details>
-<details><summary>I’m on a Claude Max or ChatGPT Pro subscription. How is “cost” worked out?</summary><p>At API list prices: what the same tokens would cost bought through the Anthropic or OpenAI API. Your actual spend is your subscription price, so your real leverage is usually higher than the one shown.</p></details>
+<details><summary>I’m on a Claude Max or ChatGPT Pro subscription. How is “cost” worked out?</summary><p>At API list prices: what the same tokens would cost bought through the Anthropic, OpenAI or DeepSeek API. Your actual spend is your subscription price, so your real leverage is usually higher than the one shown.</p></details>
 <details><summary>Why U.S. Bureau of Labor Statistics wages?</summary><p>They are public, per occupation, updated every year and widely cited. Using the median and pay only (no benefits) keeps the estimate on the conservative side.</p></details>
 <details><summary>Does DANGO read my prompts or code to do this?</summary><p>It reads them in memory only to recognise the step and the topic, then keeps numbers: minutes, line counts, which job, tokens and cost. See the <a href="/privacy/">privacy notes</a>.</p></details>
