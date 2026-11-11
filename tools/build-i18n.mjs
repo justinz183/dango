@@ -26,27 +26,25 @@ const HOME = 'en'; // the language at /, and hreflang x-default
 const HTML_LANG = { zh: 'zh-CN', en: 'en', ko: 'ko', ja: 'ja', fr: 'fr', es: 'es' };
 const OG_LOCALE = { zh: 'zh_CN', en: 'en_US', ko: 'ko_KR', ja: 'ja_JP', fr: 'fr_FR', es: 'es_ES' };
 
-// The same as document.title in the page's setLang().
+// The same as document.title in the page's setLang(): the product and its keywords (Mac, Claude Code,
+// Codex), per the launch plan's GEO handoff (2026-11-11).
 const TITLES = {
-  zh: 'DANGO 小办公室 · 把你的 AI，变成看得见的团队',
-  en: 'DANGO · Turn your AI into a team you can see',
-  ko: 'DANGO · 당신의 AI를 눈에 보이는 팀으로',
-  ja: 'DANGO · あなたの AI を、見えるチームに',
-  fr: 'DANGO · Votre IA devient une équipe visible',
-  es: 'DANGO · Tu IA, convertida en un equipo visible',
+  zh: "DANGO · 统计 Claude Code、Codex 干了多少活的 Mac 应用",
+  en: "DANGO · The Mac app that tallies your Claude Code & Codex work",
+  ko: "DANGO · Claude Code·Codex 작업량을 집계하는 Mac 앱",
+  ja: "DANGO · Claude Code・Codex の仕事量を集計する Mac アプリ",
+  fr: "DANGO · L’app Mac qui compte le travail de Claude Code et Codex",
+  es: "DANGO · La app para Mac que cuenta el trabajo de Claude Code y Codex",
 };
-
-// The description: the first screen's paragraph, translated through the page's own tables.
-const DESC_KEY = 'DANGO 是住在你 Mac 上的小办公室。写代码、查资料、做图表，你交给 AI 的工作，都有忙碌的团子来呈现。谁在干活、做了什么、完成了多少，抬眼就能看见。';
 
 // Alt text the page's tables do not hold: the key is the Chinese alt written in the page.
 const ALT = {
-  'DANGO 的面板：办公室、今天的产出、员工名册、工具和日报': {
-    en: "DANGO's panel: the office, today's output, the roster, tools and reports",
-    ko: 'DANGO 패널: 사무실, 오늘의 산출, 직원 명부, 도구와 리포트',
-    ja: 'DANGO のパネル：オフィス、今日の成果、スタッフ名簿、ツールとレポート',
-    fr: 'Le panneau DANGO : le bureau, la production du jour, l’équipe, outils et rapports',
-    es: 'El panel de DANGO: la oficina, la producción de hoy, el equipo, herramientas e informes',
+  'DANGO 的菜单栏面板：办公室、今天的产出、员工名册、工具和日报': {
+    en: "DANGO's menu bar panel: the office, today's output, the roster, tools and reports",
+    ko: "DANGO 메뉴 막대 패널: 사무실, 오늘의 산출, 직원 명부, 도구와 리포트",
+    ja: "DANGO のメニューバーパネル：オフィス、今日の成果、スタッフ名簿、ツールとレポート",
+    fr: "Le panneau de barre des menus de DANGO : le bureau, la production du jour, l’équipe, outils et rapports",
+    es: "El panel de la barra de menús de DANGO: la oficina, la producción de hoy, el equipo, herramientas e informes",
   },
   'DANGO 的屏幕角落小组件': {
     en: "DANGO's corner widget",
@@ -57,11 +55,15 @@ const ALT = {
   },
 };
 
-// The one-line introduction every channel uses (the launch plan's 统一口径 tab), for the
-// structured data; the other four languages keep the page's own description.
+// The one-line introduction every channel uses (the launch plan's 统一口径 tab): the description, og
+// description and structured data of every language (ko / ja / fr / es translated from it).
 const INTRO = {
   en: "DANGO is a free Mac menu bar app that tallies how much work Claude Code, Codex and other AI tools did for you, what it cost and what it's worth.",
-  zh: 'DANGO 是一个免费的 Mac 菜单栏应用，帮你统计 Claude Code、Codex 等 AI 工具替你干了多少活、花了多少钱、值多少钱。',
+  zh: "DANGO 是一个免费的 Mac 菜单栏应用，帮你统计 Claude Code、Codex 等 AI 工具替你干了多少活、花了多少钱、值多少钱。",
+  ko: "DANGO는 Claude Code, Codex 등 AI 도구가 나 대신 얼마나 일했는지, 얼마를 썼는지, 그 일이 얼마의 가치인지 집계해 주는 무료 Mac 메뉴 막대 앱이에요.",
+  ja: "DANGO は、Claude Code や Codex などの AI ツールがあなたの代わりにどれだけ働き、いくらかかり、どれだけの価値があったかを集計する無料の Mac メニューバーアプリです。",
+  fr: "DANGO est une app gratuite pour la barre des menus du Mac qui fait le compte du travail que Claude Code, Codex et d’autres outils d’IA ont fait pour vous, de ce qu’il a coûté et de ce qu’il vaut.",
+  es: "DANGO es una app gratuita para la barra de menús del Mac que cuenta cuánto trabajo hicieron por ti Claude Code, Codex y otras herramientas de IA, cuánto costó y cuánto vale.",
 };
 
 // The project's other homes.
@@ -152,7 +154,7 @@ function headBlock(html, lang, desc) {
     name: 'DANGO',
     alternateName: ['DANGO 小办公室', 'Dango AI'],
     url: pageUrl(lang),
-    description: INTRO[lang] || desc,
+    description: desc,
     applicationCategory: 'DeveloperApplication',
     operatingSystem: 'macOS 13+, Windows 10+',
     isAccessibleForFree: true,
@@ -190,7 +192,7 @@ function build(lang) {
     attrs = attrs.replace(/\s(lang|data-lang)="[^"]*"/g, '');
     return `<html lang="${HTML_LANG[lang]}" data-lang="${lang}"${attrs}>`;
   });
-  const desc = tr(lang, DESC_KEY);
+  const desc = INTRO[lang];
   html = html.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escText(TITLES[lang])}</title>`);
   html = setMeta(html, 'name', 'description', desc);
   html = setMeta(html, 'property', 'og:title', TITLES[lang]);

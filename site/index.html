@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>DANGO · Turn your AI into a team you can see</title>
-<meta name="description" content="DANGO is a little office that lives on your Mac. Code, research, charts: every job you hand to AI shows up as a busy dango. Who's working, what got done and how much, all at a glance.">
+<title>DANGO · The Mac app that tallies your Claude Code &amp; Codex work</title>
+<meta name="description" content="DANGO is a free Mac menu bar app that tallies how much work Claude Code, Codex and other AI tools did for you, what it cost and what it&#39;s worth.">
 <meta name="theme-color" content="#F2F3F5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0F1014" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="favicon.png?v=20261110" type="image/png">
@@ -15,8 +15,8 @@
 <!-- 分享卡片：完整网址，有些平台只认完整地址 -->
 <meta property="og:url" content="https://dangoai.org/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="DANGO · Turn your AI into a team you can see">
-<meta property="og:description" content="Your AI team's little office on your Mac. Who's working, what got done and how much, at a glance.">
+<meta property="og:title" content="DANGO · The Mac app that tallies your Claude Code &amp; Codex work">
+<meta property="og:description" content="DANGO is a free Mac menu bar app that tallies how much work Claude Code, Codex and other AI tools did for you, what it cost and what it&#39;s worth.">
 <meta property="og:image" content="https://dangoai.org/og.png?v=20261110">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -612,7 +612,7 @@ img{max-width:100%}
     </div>
     <div class="mac" id="mac" aria-hidden="true">
       <div class="mac-bar"><span class="mac-dots"><i></i><i></i><i></i></span><span class="mac-r"><span class="mac-ico"><img src="img/mark.webp" width="22" height="15" alt=""></span><span class="pn-mono">周日 9:41</span></span></div>
-      <div class="pn-view"><div class="pn" id="pn"><img id="pn-img" src="img/app/panel-zh.webp?v=20261110" width="440" height="1367" alt="DANGO 的面板：办公室、今天的产出、员工名册、工具和日报"><div class="pn-hl" id="pn-hl"></div></div></div>
+      <div class="pn-view"><div class="pn" id="pn"><img id="pn-img" src="img/app/panel-zh.webp?v=20261110" width="440" height="1367" alt="DANGO 的菜单栏面板：办公室、今天的产出、员工名册、工具和日报"><div class="pn-hl" id="pn-hl"></div></div></div>
       <div class="wg">
         <div class="wg-i"><img id="wg-img" src="img/app/pet-zh.webp?v=20261110" width="230" height="140" alt="DANGO 的屏幕角落小组件"></div>
       </div>
@@ -1159,9 +1159,7 @@ Windows 在 PowerShell 里运行：irm https://dangoai.org/install.ps1 | iex
   function setLang(l) {
     LANG = l;
     document.documentElement.setAttribute('lang', LANG === 'zh' ? 'zh-CN' : LANG);
-    document.title = pick({ zh: 'DANGO 小办公室 · 把你的 AI，变成看得见的团队', en: 'DANGO · Turn your AI into a team you can see',
-      ko: 'DANGO · 당신의 AI를 눈에 보이는 팀으로', ja: 'DANGO · あなたの AI を、見えるチームに',
-      fr: 'DANGO · Votre IA devient une équipe visible', es: 'DANGO · Tu IA, convertida en un equipo visible' });
+    document.title = pick({ zh: 'DANGO · 统计 Claude Code、Codex 干了多少活的 Mac 应用', en: 'DANGO · The Mac app that tallies your Claude Code & Codex work', ko: 'DANGO · Claude Code·Codex 작업량을 집계하는 Mac 앱', ja: 'DANGO · Claude Code・Codex の仕事量を集計する Mac アプリ', fr: 'DANGO · L’app Mac qui compte le travail de Claude Code et Codex', es: 'DANGO · La app para Mac que cuenta el trabajo de Claude Code y Codex' });
     $('pn-img').src = 'img/app/panel-' + LANG + '.webp?v=20261110'; $('jfri').src = 'img/j/' + (LANG === 'zh' ? 'fri' : 'fri-v8') + '.webp'; $('wg-img').src = 'img/app/pet-' + LANG + '.webp?v=20261110';
     tr(document.body);
     paintNow(); paintDex(); showType(cur, false); setStep(si0);
