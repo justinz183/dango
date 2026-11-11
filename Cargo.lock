@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "chrono",
  "daemon",
@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "daemon"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "chrono",
  "dango-core",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "dango-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "chrono",
  "serde",
