@@ -8,7 +8,7 @@
 # ~/Applications when /Applications is not writable) and opens it. Running
 # it again updates an installed copy. On first launch the app sets up its
 # background helper, reads your Claude Code and Codex history on this Mac
-# and opens the AI Boss Type test; nothing is uploaded.
+# and invites you to see your ABTI; nothing is uploaded.
 #
 # DANGO_APP_DIR=<folder> installs elsewhere; DANGO_NO_OPEN=1 does not open
 # the app afterwards; DANGO_URL=<base> downloads from another address.
@@ -63,6 +63,6 @@ say "已装好：$dest/Dango.app" "Installed: $dest/Dango.app"
 
 if [ "${DANGO_NO_OPEN:-}" != 1 ]; then
   open "$dest/Dango.app"
-  say "团子在屏幕右下角，先读一遍你的 Claude Code 和 Codex 历史，读完会自动打开老板人格测试。" \
-      "The dango is in the bottom-right corner. It reads your Claude Code and Codex history first, then opens the AI Boss Type test."
+  say "团子在屏幕右下角，先读一遍你的 Claude Code 和 Codex 历史，读完会邀请你看你的 ABTI 人格。" \
+      "The dango is in the bottom-right corner. It reads your Claude Code and Codex history first, then invites you to see your ABTI."
 fi
