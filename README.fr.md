@@ -109,14 +109,13 @@ Quatre axes, 16 types ABTI. La taille de votre entreprise suit le travail de vos
 
 ## Chaque rapport est une carte à partager.
 
-Jour, semaine, mois, année et total, **chacun avec l’ABTI de cette période**. Touchez « Partager » et choisissez où l’envoyer. Les cartes ne montrent jamais de noms de projets, de titres de session ni de code.
+Jour, semaine, mois, année et total, **chacun avec l’ABTI de cette période**. Touchez « Partager » et choisissez où l’envoyer. Les cartes ne montrent jamais de noms de projets ni de titres de session.
 
 <p align="center"><img src="docs/images/share-fr.jpg" width="420" alt="Une carte de la semaine"></p>
 
 ## Tout tourne sur votre Mac. Rien n’est envoyé.
 
 - **Que des chiffres** : à quels métiers chaque tour a été attribué, combien de minutes, ce que ça vaut et ce qu’ont coûté les modèles.
-- **Aucun contenu conservé** : un prompt est lu une fois en mémoire pour savoir de quoi il parle, puis oublié. Code, chemins et noms de dépôts ne sont jamais enregistrés.
 - **Rien d’envoyé** : aucun port réseau ouvert. Partager une carte, c’est vous qui décidez.
 
 ## Installer

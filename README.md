@@ -109,14 +109,13 @@ Four dimensions, 16 ABTI types. Your company size follows the work your dangos d
 
 ## Every report is a card you can share.
 
-Day, week, month, year and all-time, **each with that period’s own ABTI**. Hit share and pick where it goes. Cards never carry project names, session titles or code.
+Day, week, month, year and all-time, **each with that period’s own ABTI**. Hit share and pick where it goes. Cards never carry project names or session titles.
 
 <p align="center"><img src="docs/images/share-en.jpg" width="420" alt="A week’s share card"></p>
 
 ## It all runs on your Mac. Nothing is uploaded.
 
 - **Numbers only**: which jobs each turn went to, how many minutes, what it’s worth and what the models cost.
-- **No content kept**: a prompt is read once in memory to tell what it’s about, then dropped. Code, paths and repo names are never stored.
 - **Nothing uploaded**: no network ports. Sharing a card is up to you.
 
 ## Install

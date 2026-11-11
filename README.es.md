@@ -109,14 +109,13 @@ Cuatro dimensiones, 16 tipos ABTI. El tamaño de tu empresa depende del trabajo 
 
 ## Cada informe es una tarjeta para presumir.
 
-Día, semana, mes, año y total, **cada uno con el ABTI de ese periodo**. Toca «Compartir» y elige adónde va. Las tarjetas nunca llevan nombres de proyectos, títulos de sesión ni código.
+Día, semana, mes, año y total, **cada uno con el ABTI de ese periodo**. Toca «Compartir» y elige adónde va. Las tarjetas nunca llevan nombres de proyectos ni títulos de sesión.
 
 <p align="center"><img src="docs/images/share-es.jpg" width="420" alt="Una tarjeta de la semana"></p>
 
 ## Todo se calcula en tu Mac. No se sube nada.
 
 - **Solo números**: a qué oficios fue cada turno, cuántos minutos, cuánto vale y cuánto costaron los modelos.
-- **Sin guardar contenido**: un prompt se lee una vez en memoria para saber de qué trata y se descarta. Nunca se guardan código, rutas ni nombres de repositorios.
 - **Nada se sube**: no abre puertos de red. Compartir una tarjeta lo decides tú.
 
 ## Instalar
