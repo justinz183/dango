@@ -253,7 +253,6 @@
  "Researcher": "Investigador",
  "Result": "Resultado",
  "Runs on your Mac · BLS median wages · no project names": "Funciona en tu Mac · salarios medianos BLS · sin nombres de proyectos",
- "Runs on your Mac · never reads code or prompts · nothing uploaded": "Funciona en tu Mac · nunca lee código ni prompts · no se sube nada",
  "Ruthless Boss": "Jefe despiadado",
  "Same row = perfect match": "Misma fila = pareja ideal",
  "Saved and copied; paste it anywhere": "Guardado y copiado; pégalo donde quieras",
@@ -470,7 +469,6 @@
  "─ Output ": "─ Producción ",
  "★ Legend": "★ Leyenda",
  "✓ Healthy": "✓ Saludable",
- "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  Solo números: turnos, tiempo, líneas cambiadas, dinero gastado. Nunca lee tu código ni tus prompts. No se sube nada.",
  "Your ABTI is ready": "Tu ABTI está listo",
  "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "Tus dangos revisaron {} días de tu trabajo con la IA: {} de trabajo en total. ¿Quieres ver qué tipo de jefe eres?",
  "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "Tus dangos revisaron tu trabajo con la IA: {} de trabajo en total. ¿Quieres ver qué tipo de jefe eres?",
@@ -481,5 +479,7 @@
  "Copy this week's report": "Copiar el informe de la semana",
  "Copy this month's report": "Copiar el informe del mes",
  "Reveal →": "Revelar →",
- "See what kind of boss you are": "Descubre qué tipo de jefe eres"
+ "See what kind of boss you are": "Descubre qué tipo de jefe eres",
+ "Runs on your Mac · nothing uploaded": "Funciona en tu Mac · no se sube nada",
+ "🔒  Numbers only: turns, time, lines changed, money spent. All on your Mac. Nothing is uploaded.": "🔒  Solo números: turnos, tiempo, líneas cambiadas, dinero gastado. Todo en tu Mac. No se sube nada."
 }

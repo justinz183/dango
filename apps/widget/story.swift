@@ -200,7 +200,7 @@ final class StoryView: NSView {
         }
         let box = NSRect(x: x0, y: H - 24 - 40 - 22 - 58, width: W - 60, height: 58)
         AB.stroke(box, 12, NSColor.white.withAlphaComponent(0.22), 1)
-        AB.para(AB.sans(L("🔒  只看数字：回合数、时长、改了几行、花了多少钱。不读代码，不读 prompt，什么都不上传。", "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded."), 11.5, .regular, NSColor.white.withAlphaComponent(0.7)), box.minX + 16, box.minY + 12, box.width - 32, lineHeight: 17)
+        AB.para(AB.sans(L("🔒  只看数字：回合数、时长、改了几行、花了多少钱。全在本机算，什么都不上传。", "🔒  Numbers only: turns, time, lines changed, money spent. All on your Mac. Nothing is uploaded."), 11.5, .regular, NSColor.white.withAlphaComponent(0.7)), box.minX + 16, box.minY + 12, box.width - 32, lineHeight: 17)
         guard !bare else { return }
         let y2 = H - 24 - 40
         var rp = NSRect(x: x0, y: y2, width: 60, height: 40)

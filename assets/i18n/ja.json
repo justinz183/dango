@@ -253,7 +253,6 @@
  "Researcher": "リサーチャー",
  "Result": "結果",
  "Runs on your Mac · BLS median wages · no project names": "Mac で動作 · BLS 時給中央値 · プロジェクト名なし",
- "Runs on your Mac · never reads code or prompts · nothing uploaded": "Mac で動作 · コードもプロンプトも読まない · 何もアップロードしない",
  "Ruthless Boss": "ブラック社長",
  "Same row = perfect match": "同じ行 = 相性ぴったり",
  "Saved and copied; paste it anywhere": "保存してコピーしました。どこにでも貼り付けられます",
@@ -470,7 +469,6 @@
  "─ Output ": "─ 成果 ",
  "★ Legend": "★ 伝説",
  "✓ Healthy": "✓ 健康",
- "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  数字だけ：ターン、時間、変更した行、使ったお金。コードもプロンプトも読まず、何もアップロードしません。",
  "Your ABTI is ready": "あなたの ABTI が出ました",
  "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "だんごたちが、あなたと AI の {} 日分の仕事の記録を読み終えました。こなした仕事は全部で {} 分。あなたはどんな社長でしょう？",
  "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "だんごたちが、あなたと AI の仕事の記録を読み終えました。こなした仕事は全部で {} 分。あなたはどんな社長でしょう？",
@@ -481,5 +479,7 @@
  "Copy this week's report": "今週のレポートをコピー",
  "Copy this month's report": "今月のレポートをコピー",
  "Reveal →": "結果を見る →",
- "See what kind of boss you are": "あなたがどんな社長か見てみよう"
+ "See what kind of boss you are": "あなたがどんな社長か見てみよう",
+ "Runs on your Mac · nothing uploaded": "Mac で動作 · 何もアップロードしない",
+ "🔒  Numbers only: turns, time, lines changed, money spent. All on your Mac. Nothing is uploaded.": "🔒  数字だけ：ターン、時間、変更した行、使ったお金。計算はすべて Mac の中で、何もアップロードしません。"
 }

@@ -253,7 +253,6 @@
  "Researcher": "리서처",
  "Result": "결과",
  "Runs on your Mac · BLS median wages · no project names": "Mac에서 실행 · BLS 중위 시급 · 프로젝트 이름 없음",
- "Runs on your Mac · never reads code or prompts · nothing uploaded": "Mac에서 실행 · 코드와 프롬프트는 읽지 않음 · 업로드 없음",
  "Ruthless Boss": "악덕 사장",
  "Same row = perfect match": "같은 줄 = 찰떡궁합",
  "Saved and copied; paste it anywhere": "저장하고 복사했어요. 아무 데나 붙여 넣으세요",
@@ -470,7 +469,6 @@
  "─ Output ": "─ 산출 ",
  "★ Legend": "★ 전설",
  "✓ Healthy": "✓ 건강",
- "🔒  Numbers only: turns, time, lines changed, money spent. Never reads your code or prompts. Nothing is uploaded.": "🔒  숫자만: 턴, 시간, 바뀐 줄, 쓴 돈. 코드와 프롬프트는 절대 읽지 않고, 아무것도 업로드하지 않아요.",
  "Your ABTI is ready": "당신의 ABTI가 나왔어요",
  "Your dangos went through {} days of your work with AI: {} of work in all. Want to see what kind of boss you are?": "당고들이 AI와 함께한 {}일 치 작업 기록을 다 살펴봤어요. 모두 {}어치 일을 해냈어요. 당신은 어떤 사장일까요?",
  "Your dangos went through your work with AI: {} of work in all. Want to see what kind of boss you are?": "당고들이 AI와 함께한 작업 기록을 다 살펴봤어요. 모두 {}어치 일을 해냈어요. 당신은 어떤 사장일까요?",
@@ -481,5 +479,7 @@
  "Copy this week's report": "이번 주 리포트 복사",
  "Copy this month's report": "이번 달 리포트 복사",
  "Reveal →": "공개 →",
- "See what kind of boss you are": "어떤 사장인지 확인해 보세요"
+ "See what kind of boss you are": "어떤 사장인지 확인해 보세요",
+ "Runs on your Mac · nothing uploaded": "Mac에서 실행 · 업로드 없음",
+ "🔒  Numbers only: turns, time, lines changed, money spent. All on your Mac. Nothing is uploaded.": "🔒  숫자만: 턴, 시간, 바뀐 줄, 쓴 돈. 모두 내 Mac에서 계산하고, 아무것도 업로드하지 않아요."
 }

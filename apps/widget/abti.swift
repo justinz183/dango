@@ -582,7 +582,7 @@ final class BossCardView: ABPage {
         let fy = bounds.height - 72
         AB.line.setFill()
         NSRect(x: x0, y: fy, width: W, height: 1).fill()
-        let note = AB.sans(L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded"), 11, .regular, AB.gray)
+        let note = AB.sans(L("全在本机算 · 不上传", "Runs on your Mac · nothing uploaded"), 11, .regular, AB.gray)
         put(note, x0, fy + 26)
         AB.siteMark(x0, fy + 26, W, noteW: note.size().width)
     }
@@ -1127,7 +1127,7 @@ final class ShareView: ABPage {
         NSRect(x: 30, y: y, width: 480, height: 1).fill()
         // How it's counted, and the website (dangoai.org; 2026-11-07 the user
         // wanted no link because the address then was dango.app, not ours).
-        let note = AB.sans(total ? L("全在本机算 · 不读代码和 prompt · 不上传", "Runs on your Mac · never reads code or prompts · nothing uploaded")
+        let note = AB.sans(total ? L("全在本机算 · 不上传", "Runs on your Mac · nothing uploaded")
                                  : L("全在本机算 · 按 BLS 各职业中位时薪折算 · 不含项目名", "Runs on your Mac · BLS median wages · no project names"), 11, .regular, AB.gray)
         put(note, 30, y + 30)
         AB.siteMark(30, y + 30, 480, noteW: note.size().width)
